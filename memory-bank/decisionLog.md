@@ -4,6 +4,26 @@
      the decision, and the reason -- the reason is what makes this useful
      six months later. -->
 
+### 2026-08-18 -- SurrealMX in-memory engine with async AOL
+
+**Decision:** Use SurrealDB's SurrealMX in-memory engine with async
+append-only logging (`mem://srdb?aol=async&sync=5s&snapshot=60s`) instead
+of RocksDB or SurrealKV on-disk engines.
+
+**Why:** User preference -- RocksDB is "horrible" (performance/reliability
+issues reported). In-memory is fast and sufficient for dev. Async AOL
+with 5-second sync and 60-second snapshots provides durability across
+container restarts without the overhead of synchronous disk writes.
+
+**Alternatives considered:** RocksDB (rejected by user), SurrealKV
+(newer but less tested), pure `mem://` without AOL (no restart
+durability), SurrealDB Cloud (future option, hooks in `.env.example`).
+
+**Note:** SurrealDB 3.x runs as non-root in the container, but Docker
+named volumes are root-owned. The `docker-compose.yml` uses `user: "0:0"`
+to work around this in dev. Production deployments should use proper
+volume permissions or cloud storage.
+
 ### 2026-08-18 -- Use upstream OTel Collector Contrib, not Splunk distribution
 
 **Decision:** Use `otel/opentelemetry-collector-contrib` Docker image

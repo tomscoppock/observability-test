@@ -65,11 +65,22 @@ docker compose restart api
 
 ### SurrealDB won't start
 
-**Symptom:** SurrealDB container exits immediately.
+**Symptom:** SurrealDB container exits immediately or restarts in a loop.
 
-**Fix:** Check logs and try resetting the volume:
+**Common causes:**
+
+1. **Permission denied (AOL writes):** SurrealDB 3.x runs as a non-root
+   user, but Docker named volumes are created as root. The SurrealMX AOL
+   engine needs write access for append-only logs and snapshots. The
+   `docker-compose.yml` sets `user: "0:0"` to work around this in dev.
+
+2. **Corrupted AOL data:** If the container was killed mid-write, the AOL
+   files may be corrupt.
+
+**Fix:**
 
 ```bash
+# Check the actual error
 docker compose logs surrealdb
 
 # If data is corrupted, reset the volume
