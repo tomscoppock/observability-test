@@ -42,6 +42,20 @@ swappable LLM backend.
 
 All services run in Docker Compose. All configuration is in `.env`.
 
+## Documentation
+
+Full documentation is in the [`docs/`](docs/) folder:
+
+| Guide | Description |
+|---|---|
+| [Getting Started](docs/getting-started.md) | Prerequisites, initial setup, first run |
+| [Docker Commands](docs/docker-commands.md) | All Docker Compose commands for the stack |
+| [API Reference](docs/api-reference.md) | Endpoints, request/response formats |
+| [Configuration](docs/configuration.md) | Environment variables and how to swap providers |
+| [Architecture](docs/architecture.md) | System design, service topology, data flow |
+| [OpenTelemetry](docs/opentelemetry.md) | OTel SDK setup, collector config, instrumentation |
+| [Troubleshooting](docs/troubleshooting.md) | Common issues and fixes |
+
 ## Quick start
 
 ```bash
@@ -55,6 +69,8 @@ docker compose up -d --build
 # 3. Open the chat UI
 open http://localhost
 ```
+
+See [Getting Started](docs/getting-started.md) for the full walkthrough.
 
 ## Project tracking
 
@@ -106,7 +122,7 @@ python3 scripts/generate_board.py
 
 | # | Title | Status |
 |---|---|---|
-| 001 | Docker Compose RAG Agent Stack | not-started |
+| 001 | Docker Compose RAG Agent Stack | done |
 | 002 | OTel Collector Pipeline to Splunk | not-started |
 | 003 | Node.js OTel Instrumentation | not-started |
 | 004 | RAG Document Ingestion and Chat | not-started |
