@@ -45,7 +45,7 @@ services:
       otel-collector:
         condition: service_started
     healthcheck:
-      test: ["CMD", "wget", "-qO-", "http://localhost:3000/health"]
+      test: ["CMD", "wget", "-qO-", "http://127.0.0.1:3000/health"]
       interval: 10s
       timeout: 3s
       start_period: 10s
@@ -55,11 +55,9 @@ services:
   # ---------- SurrealDB ----------
   surrealdb:
     image: surrealdb/surrealdb:latest
-    command: start --user ${SURREAL_USER:-root} --pass ${SURREAL_PASS:-root} file:/data/srdb.db
+    command: start --user ${SURREAL_USER:-root} --pass ${SURREAL_PASS:-root}
     ports:
       - "8000:8000"
-    volumes:
-      - surreal-data:/data
     restart: unless-stopped
 
   # ---------- OpenTelemetry Collector ----------
@@ -73,5 +71,3 @@ services:
       - ./otel-collector-config.yaml:/etc/otelcol/config.yaml:ro
     restart: unless-stopped
 
-volumes:
-  surreal-data:

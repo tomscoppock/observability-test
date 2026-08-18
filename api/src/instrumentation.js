@@ -19,7 +19,7 @@ const { OTLPMetricExporter } = require('@opentelemetry/exporter-metrics-otlp-htt
 const { OTLPLogExporter } = require('@opentelemetry/exporter-logs-otlp-http');
 const { PeriodicExportingMetricReader } = require('@opentelemetry/sdk-metrics');
 const { BatchLogRecordProcessor } = require('@opentelemetry/sdk-logs');
-const { Resource } = require('@opentelemetry/resources');
+const { resourceFromAttributes } = require('@opentelemetry/resources');
 const {
   ATTR_SERVICE_NAME,
   ATTR_SERVICE_VERSION,
@@ -41,7 +41,7 @@ function parseResourceAttributes(raw) {
 
 const extraAttrs = parseResourceAttributes(process.env.OTEL_RESOURCE_ATTRIBUTES);
 
-const resource = new Resource({
+const resource = resourceFromAttributes({
   [ATTR_SERVICE_NAME]: serviceName,
   [ATTR_SERVICE_VERSION]: '0.1.0',
   ...extraAttrs,
