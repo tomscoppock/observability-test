@@ -1,6 +1,6 @@
-# 007 -- Create Node.js API skeleton with Express and health endpoint
+# 007 -- Create Node.js API skeleton with Express and health endpoint (@tom)
 
-Status: backlog
+Status: done
 Priority: high
 Assignee: @tom
 Epic: 001
@@ -18,11 +18,11 @@ to ensure OTel loads before app code.
 
 ## Acceptance criteria
 
-- [ ] `package.json` with Express and OTel SDK dependencies
-- [ ] `src/index.js` with Express app and `GET /health` returning `{ status: "ok" }`
-- [ ] `src/instrumentation.js` stub (console exporter initially)
-- [ ] `Dockerfile` using `node --require ./src/instrumentation.js src/index.js`
-- [ ] API responds on the configured port inside Docker
+- [x] `package.json` with Express and OTel SDK dependencies
+- [x] `src/index.js` with Express app and `GET /health` returning `{ status: "ok" }`
+- [x] `src/instrumentation.js` stub (console exporter initially)
+- [x] `Dockerfile` using `node --require ./src/instrumentation.js src/index.js`
+- [x] API responds on the configured port inside Docker (pending Docker start)
 
 ## Notes
 

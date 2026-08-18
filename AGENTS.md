@@ -121,6 +121,7 @@ skip the plan/validate ceremony where it doesn't apply, see
 - **State uncertainty explicitly.** Distinguish established fact, informed
   estimate, and speculation. Never fabricate figures, names, API behaviour,
   or citations.
+- **Code reviews.** Before any item is marked done, all generated code and tests must be reviewed as a standalone step to check for security issues, endless loops, memory leaks, bugs, poor practice or other issues. All identified issued must be addressed and unit tests completing without errors before a task is considered complete. 
 
 Project-specific conventions (spelling, house style) belong in
 `.ai/CONVENTIONS.md`, not here.

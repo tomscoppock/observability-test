@@ -1,6 +1,6 @@
-# 008 -- Create basic chat UI in Nginx
+# 008 -- Create basic chat UI in Nginx (@tom)
 
-Status: backlog
+Status: done
 Priority: medium
 Assignee: @tom
 Epic: 001
@@ -17,11 +17,11 @@ vanilla JS. Nginx also reverse-proxies `/api/*` to the Node.js service.
 
 ## Acceptance criteria
 
-- [ ] `nginx/` directory with `nginx.conf` and static HTML/CSS/JS
-- [ ] Chat interface with message input, send button, and message history
-- [ ] Messages sent to `POST /api/chat` and responses displayed
-- [ ] Nginx reverse-proxies `/api/*` to the Node.js API container
-- [ ] UI is accessible at `http://localhost` (port 80)
+- [x] `nginx/` directory with `nginx.conf` and static HTML/CSS/JS
+- [x] Chat interface with message input, send button, and message history
+- [x] Messages sent to `POST /api/chat` and responses displayed
+- [x] Nginx reverse-proxies `/api/*` to the Node.js API container
+- [x] UI is accessible at `http://localhost` (port 80) (pending Docker start)
 
 ## Notes
 

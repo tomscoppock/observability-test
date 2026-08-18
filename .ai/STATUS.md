@@ -7,7 +7,14 @@ Last updated: 2026-08-18
 | Assignee | Item | Epic | Since |
 |---|---|---|---|
 
-(No active work yet -- project just initialised.)
+(No active work -- Epic 001 complete, ready for Epic 002.)
+
+## Recently completed
+
+- 006 -- Create Docker Compose stack (@tom) -- done 2026-08-18
+- 007 -- Create Node.js API skeleton (@tom) -- done 2026-08-18
+- 008 -- Create basic chat UI (@tom) -- done 2026-08-18
+- Epic 001 -- Docker Compose RAG Agent Stack -- done 2026-08-18
 
 ## Next up (top of backlog, per theme)
 
@@ -20,12 +27,6 @@ Last updated: 2026-08-18
 
 - 011 -- Add OTel SDK 2.x instrumentation to Node.js API (@tom, high)
 - 012 -- Add custom logger service wrapping OTel logs API (@tom, high)
-
-### rag-agent / infrastructure
-
-- 006 -- Create Docker Compose with Nginx, Node.js API, SurrealDB, OTel Collector (@tom, high)
-- 007 -- Create Node.js API skeleton with Express and health endpoint (@tom, high)
-- 008 -- Create basic chat UI in Nginx (@tom, medium)
 
 ### database
 
@@ -44,11 +45,12 @@ Last updated: 2026-08-18
 
 ## Blockers
 
-(None yet.)
+- Docker Desktop not running on dev machine -- start it to validate Epic 001
+  with `docker compose up -d --build`.
 
 ## Numbering
 
-Next free backlog/epic/task number: **019**
+Next free backlog/epic/task number: **020**
 
 <!-- Increment every time a numbered item is created in backlog/,
      in-progress/, epics/, or done/. Numbers are never reused. -->

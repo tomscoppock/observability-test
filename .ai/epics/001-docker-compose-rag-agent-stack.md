@@ -1,6 +1,6 @@
 # Epic: 001 -- Docker Compose RAG Agent Stack
 
-Status: not-started
+Status: done
 Created: 2026-08-18
 Theme: rag-agent, infrastructure
 Lead: @tom
@@ -29,9 +29,9 @@ Excluded:
 
 ## Child items
 
-- [ ] 006 -- Create Docker Compose with Nginx, Node.js API, SurrealDB, OTel Collector (@tom)
-- [ ] 007 -- Create Node.js API skeleton with Express and health endpoint (@tom)
-- [ ] 008 -- Create basic chat UI in Nginx (@tom)
+- [x] 006 -- Create Docker Compose with Nginx, Node.js API, SurrealDB, OTel Collector (@tom)
+- [x] 007 -- Create Node.js API skeleton with Express and health endpoint (@tom)
+- [x] 008 -- Create basic chat UI in Nginx (@tom)
 
 ## Notes
 

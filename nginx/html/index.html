@@ -1,0 +1,36 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>RAG Chat</title>
+  <link rel="stylesheet" href="style.css">
+</head>
+<body>
+  <div id="app">
+    <header>
+      <h1>RAG Chat</h1>
+      <p class="subtitle">Observability Test Project</p>
+    </header>
+
+    <div id="messages" aria-live="polite" aria-label="Chat messages">
+      <div class="message system">
+        Welcome! Type a message below to chat. LLM integration coming in Epic 004.
+      </div>
+    </div>
+
+    <form id="chat-form" autocomplete="off">
+      <input
+        type="text"
+        id="message-input"
+        placeholder="Type a message..."
+        aria-label="Message input"
+        required
+      >
+      <button type="submit" id="send-btn">Send</button>
+    </form>
+  </div>
+
+  <script src="app.js"></script>
+</body>
+</html>

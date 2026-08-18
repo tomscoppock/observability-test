@@ -1,0 +1,33 @@
+{
+  "name": "rag-api",
+  "version": "0.1.0",
+  "private": true,
+  "description": "RAG agent API with OpenTelemetry instrumentation",
+  "main": "src/index.js",
+  "scripts": {
+    "start": "node --require ./src/instrumentation.js src/index.js",
+    "dev": "node --watch --require ./src/instrumentation.js src/index.js",
+    "test": "echo \"No tests yet\" && exit 0",
+    "lint": "echo \"No linter configured yet\" && exit 0"
+  },
+  "engines": {
+    "node": ">=20.6.0"
+  },
+  "dependencies": {
+    "@opentelemetry/api": "^1.9.0",
+    "@opentelemetry/auto-instrumentations-node": "^0.56.0",
+    "@opentelemetry/exporter-logs-otlp-http": "^0.200.0",
+    "@opentelemetry/exporter-metrics-otlp-http": "^0.200.0",
+    "@opentelemetry/exporter-trace-otlp-http": "^0.200.0",
+    "@opentelemetry/resources": "^2.0.0",
+    "@opentelemetry/sdk-logs": "^0.200.0",
+    "@opentelemetry/sdk-metrics": "^2.0.0",
+    "@opentelemetry/sdk-node": "^0.200.0",
+    "@opentelemetry/semantic-conventions": "^1.28.0",
+    "cors": "^2.8.5",
+    "express": "^4.21.0"
+  },
+  "devDependencies": {
+    "dotenv": "^16.4.0"
+  }
+}
