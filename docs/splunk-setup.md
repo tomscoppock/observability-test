@@ -150,61 +150,88 @@ group. You can rename it via **Actions (...) > Rename**.
 
 ## 6. Add application health charts
 
+> **UI terminology:** The Chart Builder uses a table layout with these
+> columns:
+>
+> | Column | Purpose |
+> |---|---|
+> | **Variable** | Plot label (A, B, C...) |
+> | **Data selection** | The metric to chart (type-ahead search) |
+> | **Filter** | Scope by dimensions (service, environment, etc.) |
+> | **Analytics** | Functions like Rate, Percentile, Sum |
+>
+> The right-hand **Configuration** panel controls chart title, visualisation
+> type, colour, and other settings. Tabs at the bottom of the builder area
+> switch between **Builder**, **SignalFlow**, and **JSON** views.
+
 ### 6.1 Request rate chart
 
 1. Select **Create (+) > Chart**.
-2. In the **Signal** field, search for the request rate metric (APM
-   auto-generates metrics from traces).
-3. Filter by:
+2. In the **Builder** tab, click the **Data selection** dropdown for
+   variable **A** and type `service.request` -- select it from the
+   type-ahead results.
+3. In the **Analytics** column, click **+ Add analytics** and select
+   **Rate** to convert the counter to a per-second rate.
+4. In the **Filter** column, click **Add filters** and add:
    - `service.name` = `rag-api`
    - `deployment.environment` = `dev`
-4. Select chart type: **Line** for trends, or **Single Value** for current
-   rate.
-5. Set the unit to `requests/sec`.
-6. Name the chart: `Request Rate`.
-7. **Save and close**.
+5. In the right-hand **Configuration** panel:
+   - Set **Visualization type** to **Single value** (for a headline number)
+     or **Line** (for a trend).
+   - Set **Chart title** to `Request Rate`.
+6. Click **Save**.
 
 ### 6.2 Error rate chart
 
 1. Select **Create (+) > Chart**.
-2. Search for the error rate metric.
-3. Apply the same service and environment filters.
-4. Select chart type: **Line**.
-5. Set the unit to `%`.
-6. Name the chart: `Error Rate`.
-7. Optionally add a static threshold line (e.g. 5%) via the **Axes** tab
-   using a **High watermark**.
-8. **Save and close**.
+2. In **Data selection**, search for `service.request` and select it.
+3. In **Filter**, click **Add filters** and add:
+   - `service.name` = `rag-api`
+   - `sf_error` = `true`
+4. In **Analytics**, add **Rate**.
+5. Optionally add a second plot (click **Add plot**) with the total
+   request rate (no `sf_error` filter) and use a formula plot
+   `(A / B * 100)` to compute error percentage.
+6. Set **Visualization type** to **Line**.
+7. Set **Chart title** to `Error Rate`.
+8. Optionally add a static threshold line (e.g. 5%) via the **Axes**
+   section using a **High watermark**.
+9. Click **Save**.
 
 ### 6.3 Latency percentile charts
 
 1. Select **Create (+) > Chart**.
-2. Search for the latency metric.
-3. Select **Add Analytics** and choose **Percentile**.
-4. Set the percentile value (e.g. `50` for P50).
-5. Filter by service and environment.
-6. Set the unit to `ms`.
-7. Name the chart: `Latency P50`.
-8. **Save and close**.
-9. Repeat for P90 and P99.
+2. In **Data selection**, search for `service.request.duration` (or the
+   histogram metric if available) and select it.
+3. In **Filter**, click **Add filters** and add:
+   - `service.name` = `rag-api`
+   - `deployment.environment` = `dev`
+4. In **Analytics**, click **+ Add analytics** and select **Percentile**.
+   Set the percentile value to `50` for P50.
+5. Set **Visualization type** to **Line**.
+6. Set **Chart title** to `Latency P50`.
+7. Click **Save**.
+8. Repeat for P90 and P99.
 
 **Alternative -- multiple percentiles on one chart:**
 
-1. Create a chart with the latency metric.
-2. Add three plot lines (A, B, C), each with a different percentile
-   analytic (50, 90, 99).
-3. Name each plot: `P50`, `P90`, `P99`.
-4. Use the left Y-axis for all three.
+1. Create a chart with the latency metric as plot **A** with Percentile
+   = 50.
+2. Click **Add plot** to add plot **B** with the same metric and
+   Percentile = 90.
+3. Click **Add plot** again for plot **C** with Percentile = 99.
+4. Name each plot in the **Variable** column: `P50`, `P90`, `P99`.
 
 ### 6.4 Top endpoints chart
 
 1. Select **Create (+) > Chart**.
-2. Search for the request rate metric.
-3. Select **Add Analytics > Top** and set N = 10.
+2. In **Data selection**, search for `service.request` and select it.
+3. In **Analytics**, click **+ Add analytics** and select **Top**, set
+   N = 10.
 4. Group by `sf_endpoint` or `http.route`.
-5. Select chart type: **List** or **Column**.
-6. Name the chart: `Top Endpoints`.
-7. **Save and close**.
+5. Set **Visualization type** to **List** or **Column**.
+6. Set **Chart title** to `Top Endpoints`.
+7. Click **Save**.
 
 ---
 
@@ -215,28 +242,31 @@ group. You can rename it via **Actions (...) > Rename**.
 The Chart Builder is the primary tool for creating charts:
 
 1. Select **Create (+) > Chart**.
-2. In the **Plot Editor** tab:
-   - Enter a metric name in the **Signal** field (type-ahead search helps).
-   - Or select **Browse** to use the metrics sidebar.
-3. Add **Filters** to scope the data (service, environment, etc.).
-4. Select **Add Analytics** for functions:
+2. In the **Builder** tab at the bottom of the chart editor:
+   - Click the **Data selection** dropdown for a variable and type a
+     metric name (type-ahead search helps).
+3. In the **Filter** column, click **Add filters** to scope the data
+   (service, environment, etc.).
+4. In the **Analytics** column, click **+ Add analytics** for functions:
    - **Sum**, **Count**, **Mean** -- basic aggregations
+   - **Rate** -- convert counters to per-second values
    - **Percentile** -- for latency analysis
    - **Timeshift** -- compare with historical data
    - **Top/Bottom** -- show highest/lowest N values
    - **Exclude** -- filter time series by value
-5. Configure chart type, axes, units, colours, and resolution.
-6. **Save and close**.
+5. In the right-hand **Configuration** panel, set visualisation type,
+   chart title, axes, units, colours, and resolution.
+6. Click **Save**.
 
 ### SignalFlow mode
 
-For advanced analytics, switch to SignalFlow:
+For advanced analytics, switch to the SignalFlow tab:
 
-1. Open a chart in Chart Builder.
-2. Select **View SignalFlow** on the Plot Editor tab.
+1. Open a chart in the Chart Builder.
+2. Select the **SignalFlow** tab (next to **Builder**).
 3. Edit the SignalFlow program directly.
-4. Select **View builder** to return to graphical mode (if the program is
-   convertible).
+4. Select the **Builder** tab to return to graphical mode (if the program
+   is convertible).
 
 **Example -- error percentage:**
 
