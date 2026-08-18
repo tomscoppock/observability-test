@@ -1,0 +1,58 @@
+# Illustrative Archon workflow -- validate node keys against your installed
+# Archon version's schema before running (see .archon/README.md).
+#
+# Encodes AGENTS.md Section 5: Plan -> Implement (loop) -> Validate ->
+# Review -> Ship, with each phase's artifact living under .ai/.
+
+name: observability-test-default
+description: >
+  Plan a change, implement it in a loop until all plan tasks are complete,
+  validate with the real test suite, review against the Golden Rules, then
+  ship by updating .ai/ tracking files.
+
+nodes:
+  - id: plan
+    type: ai
+    prompt: >
+      Read AGENTS.md and .ai/CONVENTIONS.md. Clarify ambiguity with the
+      user if needed, then write a plan to .ai/in-progress/ using
+      .ai/templates/plan-template.md: files to change, tests to add,
+      dependencies to touch. Stop and wait for approval before continuing.
+    artifact: .ai/in-progress/*.md
+
+  - id: implement
+    type: ai
+    dependsOn: [plan]
+    loop:
+      until: ALL_PLAN_TASKS_COMPLETE
+      prompt: >
+        Read the plan in .ai/in-progress/. Implement the next unchecked
+        task, following AGENTS.md Section 3 (Golden Rules) and Section 4
+        (Ponytail Ladder). Check the task off when done.
+      freshContextPerIteration: true
+
+  - id: validate
+    type: command
+    dependsOn: [implement]
+    run: "cd api && npm test && npm run lint"
+    failWorkflowOnError: true
+
+  - id: review
+    type: ai
+    dependsOn: [validate]
+    prompt: >
+      Review every file changed by this workflow run against AGENTS.md
+      Section 1 Step 5 (bugs, security, performance, UX, cost). Append
+      findings to the .ai/in-progress/ plan file. If findings require
+      changes, hand back to the implement node rather than shipping.
+    artifact: .ai/in-progress/*.md
+
+  - id: ship
+    type: ai
+    dependsOn: [review]
+    requiresApproval: true
+    prompt: >
+      Update docs, move the .ai/in-progress/ plan file to .ai/done/, and
+      update .ai/STATUS.md to reflect completion. Also refresh
+      memory-bank/activeContext.md and memory-bank/progress.md.
+    artifact: .ai/STATUS.md

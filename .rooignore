@@ -1,0 +1,35 @@
+﻿# .rooignore -- Zoo Code / Roo Code
+#
+# Zoo Code (and Roo Code) enforces this file at the tool level:
+# matched paths are blocked from read_file/write_to_file/apply_diff and
+# hidden from list_files / @directory context mentions. Same intent as
+# .claude/settings.json permissions.deny block for Claude Code -- keep
+# both lists in sync if you add a new secret pattern.
+#
+# Syntax is gitignore-style globs.
+
+# --- Secrets and credentials -- keep out of the agent context entirely ---
+.env
+.env.*
+!.env.example
+*.pem
+*.key
+*.p12
+*.pfx
+id_rsa
+id_rsa.*
+id_ed25519
+id_ed25519.*
+*credentials*.json
+*secrets*.json
+*token*.json
+.aws/
+.azure/
+.gcloud/
+**/secrets/
+
+# --- Per-machine local overrides ---
+*.local
+*.local.md
+
+.rooignore

@@ -1,0 +1,64 @@
+﻿# Custom modes for Zoo Code (and legacy Roo Code -- same config format).
+# These mirror the deterministic phases defined in AGENTS.md Section 5.
+# Docs: https://docs.zoocode.dev/features/custom-modes
+#
+# Built-in modes (code, architect, ask, debug, orchestrator) remain
+# available as usual. These custom modes are opt-in specialisations for
+# projects following the TLabs Agent Framework .ai/ workflow.
+
+customModes:
+  - slug: ai-planner
+    name: "AI Planner
+ roleDefinition: >
+ You turn a request into a written plan before any code is touched.
+ Follow AGENTS.md Section 1 (Steps 1-2) and Section 4 (the Ponytail
+ Ladder). Write the plan to .ai/in-progress/ using
+ .ai/templates/plan-template.md. Do not write or edit application
+ code in this mode -- planning only.
+ whenToUse: >
+ Use to clarify a request, size it, decide whether it needs an epic,
+ and write the plan or task file before any code is touched.
+ groups:
+ - read
+ - - edit
+ - fileRegex: \.ai/(in-progress|backlog|epics)/.*\.md$
+ description: Only .ai/ planning files
+ source: project
+
+ - slug: ai-implementer
+ name: AI Implementer
+ roleDefinition: >
+ You implement an already-approved plan from .ai/in-progress/.
+ Follow AGENTS.md Sections 3 (Golden Rules) and 4 (Ponytail Ladder).
+ Keep changes to the smallest diff that satisfies the plan. Check off
+ plan items in the .ai/in-progress/ file as you complete them. Do not
+ change the plans scope -- if the plan is wrong, stop and flag it
+ rather than silently expanding scope.
+ whenToUse: >
+ Use once a plan exists in .ai/in-progress/ and has been approved.
+ groups:
+ - read
+ - edit
+ - command
+ - mcp
+ source: project
+
+ - slug: ai-reviewer
+ name: AI Reviewer
+ roleDefinition: >
+ You review a completed change against AGENTS.md Section 1 Step 5:
+ bugs/logic errors, security (input validation, secrets, injection),
+ performance (N+1s, unnecessary re-renders, oversized payloads), UX
+ (errors, loading states, accessibility), and cost (API calls,
+ storage, compute). Append findings to the relevant
+ .ai/in-progress/*.md file. Do not fix issues yourself in this mode --
+ report them for the implementer.
+ whenToUse: >
+ Use after implementation and validation are complete, before an item
+ moves to .ai/done/.
+ groups:
+ - read
+ - - edit
+ - fileRegex: \.ai/(in-progress|done)/.*\.md$
+ description: Only .ai/ tracking files
+ source: project

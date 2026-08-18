@@ -1,0 +1,71 @@
+# .gitignore -- observability-test
+#
+# Goal: nothing that touches credentials, tokens, or per-machine local state
+# ever reaches a commit. The .ai/ tracker itself (backlog/epics/status/etc.),
+# .claude/, .roo/, .roomodes, and board.html ARE meant to be committed --
+# don't add broad excludes that would catch those.
+
+# --- Secrets & credentials -- never commit these ---
+.env
+.env.*
+!.env.example
+*.pem
+*.key
+*.p12
+*.pfx
+id_rsa
+id_rsa.*
+id_ed25519
+id_ed25519.*
+*credentials*.json
+*secrets*.json
+*token*.json
+.aws/
+.azure/
+.gcloud/
+**/secrets/**
+
+# --- Per-machine local overrides (not shared with the team) ---
+*.local
+*.local.md
+.env.local
+
+# --- OS cruft ---
+.DS_Store
+Thumbs.db
+ehthumbs.db
+Desktop.ini
+
+# --- Editor / IDE ---
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+
+# --- Python (scripts/generate_board.py is stdlib-only, but keep this clean) ---
+__pycache__/
+*.pyc
+
+# --- Node.js ---
+node_modules/
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+.npm
+.yarn/
+dist/
+build/
+coverage/
+*.tsbuildinfo
+
+# --- Docker ---
+docker-compose.override.yml
+
+# --- SurrealDB local data ---
+surreal-data/
+.surreal/
+
+# --- Local scratch / experiment output ---
+/scratch/
+/tmp/

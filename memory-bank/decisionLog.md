@@ -1,0 +1,58 @@
+# Decision Log
+
+<!-- One entry per non-obvious decision. Newest first. Include the date,
+     the decision, and the reason -- the reason is what makes this useful
+     six months later. -->
+
+### 2026-08-18 -- Use upstream OTel Collector Contrib, not Splunk distribution
+
+**Decision:** Use `otel/opentelemetry-collector-contrib` Docker image
+rather than the Splunk Distribution of the OpenTelemetry Collector.
+
+**Why:** The upstream contrib image includes the Splunk exporter and is
+more portable -- switching observability backends (Splunk -> Azure Monitor
+-> Grafana) only requires changing the collector config, not the collector
+image. This project's purpose is to test multiple backends.
+
+**Alternatives considered:** Splunk Distribution (recommended by Splunk,
+but locks you into their image and adds Splunk-specific components we
+don't need).
+
+### 2026-08-18 -- OTel JS SDK 2.x with --require instrumentation pattern
+
+**Decision:** Use OTel JS SDK 2.x (packages >= 2.0.0) and load
+`instrumentation.js` via `node --require` before any app code.
+
+**Why:** SDK 2.x is the current stable release (since 2025). The
+`--require` pattern ensures OTel patches libraries (Express, HTTP, etc.)
+before they're imported -- this is the #1 source of "I don't see traces"
+issues. Minimum Node.js: ^18.19.0 || >=20.6.0.
+
+**Alternatives considered:** SDK 1.x (outdated), ESM `--import` (more
+complex, less documented for OTel).
+
+### 2026-08-18 -- SurrealDB for document/embedding storage
+
+**Decision:** Use SurrealDB as the database for documents, chunks, and
+vector embeddings.
+
+**Why:** Multi-model (document + graph + relational), supports vector
+fields and vector search natively, runs as a single Docker container,
+has a Node.js SDK. Good fit for RAG where you need both document storage
+and vector similarity search.
+
+**Alternatives considered:** PostgreSQL + pgvector (more mature but
+heavier), ChromaDB (vector-only, no document storage), Qdrant
+(vector-only).
+
+### 2026-08-18 -- All configuration in .env
+
+**Decision:** Every configurable value (LLM endpoints, API keys, database
+credentials, collector endpoints, embedding config) lives in `.env`.
+
+**Why:** Enables swapping LLM providers, observability backends, and
+database settings without touching code. Docker Compose reads `.env`
+natively. Keeps secrets out of source control.
+
+**Alternatives considered:** Hardcoded config files (inflexible),
+environment-specific config directories (overkill for a learning project).
