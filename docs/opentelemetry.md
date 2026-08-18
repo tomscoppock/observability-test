@@ -52,65 +52,51 @@ The collector config lives at `otel-collector-config.yaml` in the
 project root. It is mounted into the container at
 `/etc/otelcol/config.yaml`.
 
-### Current config (Epic 001 -- debug only)
+### Current config (Epic 002 -- Splunk + debug)
 
-```yaml
-receivers:
-  otlp:
-    protocols:
-      grpc:
-        endpoint: 0.0.0.0:4317
-      http:
-        endpoint: 0.0.0.0:4318
+The collector uses three separate exporters for Splunk, one per signal
+type, plus the debug exporter for local troubleshooting:
 
-processors:
-  batch:
-    send_batch_size: 512
-    timeout: 5s
+| Signal | Exporter | Splunk destination |
+|---|---|---|
+| **Traces** | `otlp_http/splunk` | Splunk APM (`/v2/trace/otlp`) |
+| **Metrics** | `signalfx` | Splunk Infrastructure Monitoring |
+| **Logs** | `splunk_hec/logs` | Splunk HEC (`/v1/log`) |
+| **All** | `debug` | Collector stdout (always on) |
 
-exporters:
-  debug:
-    verbosity: detailed
+### Required environment variables
 
-service:
-  pipelines:
-    traces:
-      receivers: [otlp]
-      processors: [batch]
-      exporters: [debug]
-    metrics:
-      receivers: [otlp]
-      processors: [batch]
-      exporters: [debug]
-    logs:
-      receivers: [otlp]
-      processors: [batch]
-      exporters: [debug]
-```
+Set these in your `.env` file (see `.env.example`):
 
-### Viewing telemetry
+| Variable | Example | Description |
+|---|---|---|
+| `SPLUNK_ACCESS_TOKEN` | `abc123...` | Splunk Observability Cloud ingest token |
+| `SPLUNK_REALM` | `us1` | Your Splunk realm (us0, us1, eu0, etc.) |
 
-With the debug exporter, all telemetry is printed to the collector's
-stdout:
+The collector config derives all endpoints from `SPLUNK_REALM`:
+- Traces: `https://ingest.{realm}.signalfx.com/v2/trace/otlp`
+- Metrics: auto-derived by the signalfx exporter
+- Logs: `https://ingest.{realm}.signalfx.com`
+
+### Viewing telemetry locally
+
+The debug exporter prints all telemetry to the collector's stdout:
 
 ```bash
 docker compose logs -f otel-collector
 ```
 
-### Adding Splunk exporter (Epic 002)
+See [Docker Commands > Viewing OTel Telemetry](docker-commands.md#viewing-otel-telemetry)
+for filtering commands.
 
-Will add a `splunk_hec` exporter to the collector config:
+### Verifying Splunk export
 
-```yaml
-exporters:
-  debug:
-    verbosity: detailed
-  splunk_hec:
-    token: "${SPLUNK_ACCESS_TOKEN}"
-    endpoint: "${SPLUNK_INGEST_URL}"
-    source: "otel"
-    sourcetype: "otel"
-```
+After setting `SPLUNK_ACCESS_TOKEN` and `SPLUNK_REALM` in `.env`:
+
+1. Restart the collector: `docker compose up -d --force-recreate otel-collector`
+2. Check for export errors: `docker compose logs otel-collector | findstr "error"`
+3. Open Splunk Observability Cloud -> APM -> look for service `rag-api`
+4. Check Infrastructure Monitoring for metrics from `rag-api`
 
 ### Adding Azure Monitor exporter (future)
 

@@ -1,6 +1,6 @@
 # Epic: 002 -- OTel Collector Pipeline to Splunk
 
-Status: not-started
+Status: done
 Created: 2026-08-18
 Theme: otel-core, splunk-observability
 Lead: @tom
@@ -27,8 +27,8 @@ Excluded:
 
 ## Child items
 
-- [ ] 009 -- Configure OTel Collector with OTLP receiver and Splunk exporter (@tom)
-- [ ] 010 -- Sign up for Splunk Observability Cloud free edition and get realm/token (@tom)
+- [x] 009 -- Configure OTel Collector with OTLP receiver and Splunk exporter (@tom)
+- [x] 010 -- Sign up for Splunk Observability Cloud free edition and get realm/token (@tom)
 
 ## Notes
 

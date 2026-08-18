@@ -69,12 +69,18 @@ services:
     restart: unless-stopped
 
   # ---------- OpenTelemetry Collector ----------
+  # Exports traces, metrics, and logs to Splunk Observability Cloud
+  # when SPLUNK_ACCESS_TOKEN and SPLUNK_REALM are set in .env.
   otel-collector:
     image: otel/opentelemetry-collector-contrib:latest
     command: ["--config", "/etc/otelcol/config.yaml"]
     ports:
       - "4317:4317"   # OTLP gRPC
       - "4318:4318"   # OTLP HTTP
+    environment:
+      - SPLUNK_ACCESS_TOKEN=${SPLUNK_ACCESS_TOKEN:-}
+      - SPLUNK_REALM=${SPLUNK_REALM:-us1}
+      - OTEL_DEPLOYMENT_ENV=dev
     volumes:
       - ./otel-collector-config.yaml:/etc/otelcol/config.yaml:ro
     restart: unless-stopped

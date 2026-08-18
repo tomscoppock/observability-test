@@ -7,21 +7,19 @@ Last updated: 2026-08-18
 | Assignee | Item | Epic | Since |
 |---|---|---|---|
 
-(No active work -- Epic 001 complete, ready for Epic 002.)
+(No active work -- Epic 002 complete, ready for Epic 003.)
 
 ## Recently completed
 
+- 010 -- Splunk Observability Cloud signup (@tom) -- done 2026-08-18
+- 009 -- Configure OTel Collector with Splunk exporters (@tom) -- done 2026-08-18
+- Epic 002 -- OTel Collector Pipeline to Splunk -- done 2026-08-18
 - 006 -- Create Docker Compose stack (@tom) -- done 2026-08-18
 - 007 -- Create Node.js API skeleton (@tom) -- done 2026-08-18
 - 008 -- Create basic chat UI (@tom) -- done 2026-08-18
 - Epic 001 -- Docker Compose RAG Agent Stack -- done 2026-08-18
 
 ## Next up (top of backlog, per theme)
-
-### otel-core
-
-- 009 -- Configure OTel Collector with OTLP receiver and Splunk exporter (@tom, high)
-- 010 -- Sign up for Splunk Observability Cloud free edition and get realm/token (@tom, high)
 
 ### otel-instrumentation
 
@@ -45,12 +43,11 @@ Last updated: 2026-08-18
 
 ## Blockers
 
-- Docker Desktop not running on dev machine -- start it to validate Epic 001
-  with `docker compose up -d --build`.
+(None)
 
 ## Numbering
 
-Next free backlog/epic/task number: **020**
+Next free backlog/epic/task number: **021**
 
 <!-- Increment every time a numbered item is created in backlog/,
      in-progress/, epics/, or done/. Numbers are never reused. -->
