@@ -53,11 +53,19 @@ services:
     restart: unless-stopped
 
   # ---------- SurrealDB ----------
+  # SurrealMX: in-memory engine with async AOL + periodic snapshots.
+  # Data survives process restarts via the named volume.
   surrealdb:
     image: surrealdb/surrealdb:latest
-    command: start --user ${SURREAL_USER:-root} --pass ${SURREAL_PASS:-root}
+    # SurrealDB 3.x runs as non-root; the named volume is root-owned,
+    # so we override to root for this dev stack.
+    user: "0:0"
+    command: start --user ${SURREAL_USER:-root} --pass ${SURREAL_PASS:-root} "mem://srdb?aol=async&sync=5s&snapshot=60s"
+    working_dir: /data
     ports:
       - "8000:8000"
+    volumes:
+      - surreal-data:/data
     restart: unless-stopped
 
   # ---------- OpenTelemetry Collector ----------
@@ -70,4 +78,7 @@ services:
     volumes:
       - ./otel-collector-config.yaml:/etc/otelcol/config.yaml:ro
     restart: unless-stopped
+
+volumes:
+  surreal-data:
 
