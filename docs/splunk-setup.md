@@ -1,456 +1,472 @@
 # Splunk Observability Cloud -- Setup and Dashboard Guide
 
-This guide walks through setting up dashboards, alerts, and monitoring in
-Splunk Observability Cloud for the observability-test RAG Agent stack.
+Step-by-step guide for building dashboards and alerts in Splunk
+Observability Cloud for the observability-test RAG Agent stack.
 
-> **Prerequisite:** Data must already be flowing from the OTel Collector to
-> Splunk. Verify by checking **APM > Overview** -- you should see the
-> `rag-api` service listed. If not, see
-> [opentelemetry.md](opentelemetry.md) for collector configuration.
+> **Prerequisite:** The OTel Collector must be exporting data to Splunk.
+> Check **APM > Overview** for the `rag-api` service. If missing, see
+> [opentelemetry.md](opentelemetry.md).
 
 ---
 
 ## Table of Contents
 
-1. [Verify data is arriving](#1-verify-data-is-arriving)
-2. [Explore the APM service map](#2-explore-the-apm-service-map)
-3. [Use built-in APM dashboards](#3-use-built-in-apm-dashboards)
-4. [Create a dashboard group](#4-create-a-dashboard-group)
-5. [Create a custom dashboard](#5-create-a-custom-dashboard)
-6. [Add application health charts](#6-add-application-health-charts)
-7. [Use Chart Builder and SignalFlow](#7-use-chart-builder-and-signalflow)
-8. [Create detectors (alerts)](#8-create-detectors-alerts)
-9. [Dashboard best practices](#9-dashboard-best-practices)
-10. [Next steps](#10-next-steps)
+1. [How our data reaches Splunk](#1-how-our-data-reaches-splunk)
+2. [Verify data is arriving](#2-verify-data-is-arriving)
+3. [Explore the APM service map](#3-explore-the-apm-service-map)
+4. [Use built-in APM dashboards](#4-use-built-in-apm-dashboards)
+5. [Create a dashboard group and dashboard](#5-create-a-dashboard-group-and-dashboard)
+6. [Tutorial: Request rate chart](#6-tutorial-request-rate-chart)
+7. [Tutorial: Error rate chart](#7-tutorial-error-rate-chart)
+8. [Tutorial: Latency percentile chart](#8-tutorial-latency-percentile-chart)
+9. [Tutorial: Top endpoints chart](#9-tutorial-top-endpoints-chart)
+10. [Create detectors (alerts)](#10-create-detectors-alerts)
+11. [Dashboard best practices](#11-dashboard-best-practices)
+12. [Next steps](#12-next-steps)
+13. [Quick reference](#13-quick-reference)
 
 ---
 
-## 1. Verify data is arriving
+## 1. How our data reaches Splunk
 
-Before building dashboards, confirm telemetry is flowing:
+Understanding the data pipeline helps you know what metrics are available
+and where they come from.
+
+```
+Node.js API (rag-api)
+  |
+  |  OTel SDK auto-instrumentation creates:
+  |    - Traces (spans with timing, status, attributes)
+  |    - Metrics (http.server.duration histogram)
+  |    - Logs (when configured)
+  |
+  v
+OTel Collector (otel-collector container)
+  |
+  |  Three export pipelines:
+  |    Traces  --> otlp_http/splunk  --> Splunk APM
+  |    Metrics --> signalfx           --> Splunk IM
+  |    Logs    --> splunk_hec/logs    --> Splunk Log Observer
+  |
+  v
+Splunk Observability Cloud
+  |
+  |  APM derives Monitoring MetricSets (MMS) from traces:
+  |    service.request  -- histogram containing count + duration
+  |    spans            -- per-span histogram
+  |    traces           -- per-trace histogram
+  |
+  v
+Dashboards, Alerts, Service Map
+```
+
+**Key concept -- Monitoring MetricSets (MMS):**
+
+Splunk APM automatically creates histogram metrics from your trace data.
+The primary one is `service.request`. Because it is a histogram, a single
+metric contains both the request **count** and the request **duration**
+(latency). You extract different values by applying different functions:
+
+| What you want | Function to apply | Example SignalFlow |
+|---|---|---|
+| Request count | `count()` | `histogram('service.request').count()` |
+| Latency median | `median()` | `histogram('service.request').median()` |
+| Latency P90 | `percentile(pct=90)` | `histogram('service.request').percentile(pct=90)` |
+| Latency P99 | `percentile(pct=99)` | `histogram('service.request').percentile(pct=99)` |
+| Min latency | `min()` | `histogram('service.request').min()` |
+| Max latency | `max()` | `histogram('service.request').max()` |
+
+**Dimension names:** APM dimensions use the `sf_` prefix:
+
+| Dimension | Meaning |
+|---|---|
+| `sf_service` | Service name (e.g. `rag-api`) |
+| `sf_environment` | Deployment environment (e.g. `dev`) |
+| `sf_error` | `true` or `false` |
+| `sf_operation` | Endpoint/operation name |
+| `sf_httpMethod` | HTTP method (GET, POST, etc.) |
+
+---
+
+## 2. Verify data is arriving
 
 1. Sign in to [Splunk Observability Cloud](https://app.signalfx.com).
-2. Select **APM** from the left navigation menu.
+2. Select **APM** from the left navigation.
 3. On the **Overview** page, look for `rag-api` in the services table.
-4. If you see request rate, error rate, and latency data, you are ready.
+4. You should see request rate, error rate, and latency values.
 
-If the service does not appear:
+If the service does not appear, check:
 
-- Check the OTel Collector logs: `docker compose logs otel-collector`
-- Verify `SPLUNK_ACCESS_TOKEN` and `SPLUNK_REALM` are set in your `.env`
-- Ensure the API container is sending traces (see
-  [docker-commands.md](docker-commands.md#viewing-otel-telemetry))
+- Collector logs: `docker compose logs otel-collector`
+- Environment variables: `SPLUNK_ACCESS_TOKEN` and `SPLUNK_REALM` in `.env`
+- API telemetry: see [docker-commands.md](docker-commands.md#viewing-otel-telemetry)
 
 ---
 
-## 2. Explore the APM service map
+## 3. Explore the APM service map
 
-The service map shows dependencies between your instrumented services.
+> **What:** A real-time dependency graph of your instrumented services.
+> **Why:** Quickly see which services are healthy, which have errors, and
+> how they depend on each other.
+> **How:** Built automatically from trace span data -- every span's
+> parent-child relationship creates an edge in the graph.
 
 1. Navigate to **APM > Service map**.
-2. Set the **Environment** filter to `dev` (or your `OTEL_DEPLOYMENT_ENV`
-   value).
+2. Set **Environment** to `dev` (matches your `OTEL_DEPLOYMENT_ENV`).
 3. Set the **Time range** (e.g. last 15 minutes).
-4. You should see the `rag-api` service node. Select it to view:
-   - Request rate, error rate, and latency charts in the sidebar
-   - Downstream dependencies (SurrealDB, external APIs, etc.)
-5. Red indicators on nodes or edges signal elevated error rates.
-6. Use **Breakdown** to split a service by any indexed span tag (e.g.
-   `http.method`, `http.route`).
-7. Select any chart to view matching example traces.
-
-> **Tip:** From the service map sidebar, select **View Dashboard** to open
-> the built-in APM dashboard for that service with your current filters
-> preserved.
+4. You should see the `rag-api` node. Click it to open the sidebar with:
+   - Request rate, error rate, and latency charts
+   - Downstream dependencies
+5. **Red indicators** on nodes or edges = elevated error rates.
+6. Click **Breakdown** to split by span tag (e.g. `http.route`).
+7. Click any chart to see matching example traces.
+8. Click **View Dashboard** to open the built-in APM dashboard for that
+   service (preserves your current filters).
 
 ---
 
-## 3. Use built-in APM dashboards
+## 4. Use built-in APM dashboards
 
-Splunk provides pre-built dashboards that are automatically populated when
-APM data arrives. These are read-only templates.
+> **What:** Pre-built, read-only dashboards auto-populated from trace data.
+> **Why:** Instant visibility without creating anything -- request rate,
+> latency, latency distribution, and error rate are already charted.
+> **How:** Splunk generates these from the `service.request` MMS.
 
-### Access built-in dashboards
-
-1. Select **Dashboards** from the left navigation menu.
+1. Select **Dashboards** from the left navigation.
 2. Expand the **Built-in** section.
-3. Select **APM Services** for service/endpoint dashboards, or **APM
-   business transactions** for transaction dashboards.
-4. Use the filter bar to select:
+3. Select **APM Services**.
+4. Use the filter bar at the top:
    - **Service:** `rag-api`
    - **Environment:** `dev`
    - **Time range:** as needed
 
-### What you get out of the box
-
-The built-in APM dashboard includes:
+**What you see:**
 
 | Chart | Description |
 |---|---|
 | Request Rate | Requests per second over time |
-| Request Latency | Latency trend line |
+| Request Latency | Latency trend (median) |
 | Request Latency Distribution | Histogram of latency values |
-| Error Rate | Percentage of requests resulting in errors |
+| Error Rate | Percentage of errored requests |
 
-### Save a copy for customisation
-
-Built-in dashboards cannot be edited directly. To customise:
-
-1. Open the dashboard actions menu **(...)**.
-2. Select **Save as**.
-3. Choose or create a dashboard group (see next section).
-4. The saved copy is now fully editable.
+**To customise:** Built-in dashboards are read-only. Click **Actions
+(...) > Save as** to create an editable copy in your own dashboard group.
 
 ---
 
-## 4. Create a dashboard group
+## 5. Create a dashboard group and dashboard
 
-Dashboard groups organise dashboards by team, service, or environment.
+> **What:** A dashboard group is a folder that holds related dashboards.
+> A dashboard is a page of charts.
+> **Why:** Organise your monitoring by service, team, or environment.
+> **How:** Groups and dashboards are metadata in Splunk -- they don't
+> affect data collection.
 
-1. Select **Create (+)** in the top navigation bar.
+### Step 1: Create a dashboard group
+
+1. Click **Create (+)** in the top navigation bar.
 2. Select **Dashboard Group**.
-3. Enter a name, e.g. `RAG Agent -- Observability`.
-4. Optionally add a description.
-5. Select **Create**.
+3. Enter a name: `RAG Agent -- Observability`.
+4. Click **Create**.
 
-Splunk automatically creates a dashboard with the same name inside the
-group. You can rename it via **Actions (...) > Rename**.
+**What happens:** Splunk creates the group and drops you into a new,
+empty dashboard with the same name. This is your first dashboard inside
+the group.
 
-### Suggested group structure
+### Step 2: Rename the dashboard
 
-| Group Name | Purpose |
-|---|---|
-| `RAG Agent -- Observability` | Main operational dashboards |
-| `RAG Agent -- SLOs` | Service level objectives and error budgets |
-| `RAG Agent -- Infrastructure` | Docker, host, and collector health |
+1. Click **Dashboard actions (...) > Rename**.
+2. Enter a name: `Service Health`.
+3. Click **OK** / **Save**.
 
----
+You now have:
 
-## 5. Create a custom dashboard
+```
+RAG Agent -- Observability  (group)
+  |-- Service Health        (dashboard, currently empty)
+```
 
-1. Navigate to **Dashboards**.
-2. Select **Create (+) > Dashboard**.
-3. You land on an empty dashboard in edit mode.
-4. Add charts using one of:
-   - **Browse metrics sidebar** (simple charts)
-   - **Create (+) > Chart** (Chart Builder for advanced charts)
-5. Rename the dashboard: **Actions (...) > Rename**.
-6. Save to your dashboard group.
+### Step 3: Add charts
 
-### Recommended layout
+The dashboard is in edit mode. You can now add charts using the tutorials
+below. Each tutorial creates one chart. After adding charts:
 
-| Row | Charts |
-|---|---|
-| **Top** | Service status (single value), Request rate, Error rate |
-| **Second** | Latency P50, Latency P90, Latency P99 |
-| **Third** | Top endpoints by request count, Top endpoints by error rate |
-| **Bottom** | Text note with links, Detector status, Troubleshooting links |
+1. **Drag charts** by their top edge to reposition them.
+2. **Resize charts** by dragging their corners or edges.
+3. Click **Save** on the dashboard when done.
 
 ---
 
-## 6. Add application health charts
+## 6. Tutorial: Request rate chart
 
-> **UI terminology:** The Chart Builder uses a table layout with these
-> columns:
->
-> | Column | Purpose |
-> |---|---|
-> | **Variable** | Plot label (A, B, C...) |
-> | **Data selection** | The metric to chart (type-ahead search) |
-> | **Filter** | Scope by dimensions (service, environment, etc.) |
-> | **Analytics** | Functions like Rate, Percentile, Sum |
->
-> The right-hand **Configuration** panel controls chart title, visualisation
-> type, colour, and other settings. Tabs at the bottom of the builder area
-> switch between **Builder**, **SignalFlow**, and **JSON** views.
+> **What:** How many requests per second the `rag-api` service is handling.
+> **Why:** Baseline for capacity planning; a sudden drop to zero means the
+> service is down.
+> **How:** Uses the `service.request` histogram MMS with a `count()`
+> function, then applies a `Rate` analytic to convert to per-second.
 
-### 6.1 Request rate chart
+### Builder tab
 
-1. Select **Create (+) > Chart**.
-2. In the **Builder** tab, click the **Data selection** dropdown for
-   variable **A** and type `service.request` -- select it from the
-   type-ahead results.
-3. In the **Analytics** column, click **+ Add analytics** and select
-   **Rate** to convert the counter to a per-second rate.
-4. In the **Filter** column, click **Add filters** and add:
-   - `service.name` = `rag-api`
-   - `deployment.environment` = `dev`
-5. In the right-hand **Configuration** panel:
-   - Set **Visualization type** to **Single value** (for a headline number)
-     or **Line** (for a trend).
-   - Set **Chart title** to `Request Rate`.
-6. Click **Save**.
-
-### 6.2 Error rate chart
-
-1. Select **Create (+) > Chart**.
-2. In **Data selection**, search for `service.request` and select it.
-3. In **Filter**, click **Add filters** and add:
-   - `service.name` = `rag-api`
-   - `sf_error` = `true`
-4. In **Analytics**, add **Rate**.
-5. Optionally add a second plot (click **Add plot**) with the total
-   request rate (no `sf_error` filter) and use a formula plot
-   `(A / B * 100)` to compute error percentage.
-6. Set **Visualization type** to **Line**.
-7. Set **Chart title** to `Error Rate`.
-8. Optionally add a static threshold line (e.g. 5%) via the **Axes**
-   section using a **High watermark**.
-9. Click **Save**.
-
-### 6.3 Latency percentile charts
-
-> **Key concept:** In Splunk APM, `service.request` is a **histogram**
-> metric (a Monitoring MetricSet). It contains both count and duration
-> data. You get latency percentiles by applying **Percentile** or
-> **Median** analytics to the same `service.request` metric -- there is
-> no separate `service.request.duration` metric.
-
-**Using the Builder tab:**
-
-1. Select **Create (+) > Chart**.
-2. In **Data selection**, search for `service.request` and select it
-   (the same metric used for request rate).
-3. In **Filter**, click **Add filters** and add:
+1. Click **Create (+) > Chart** (or **New chart** on the dashboard).
+2. You are in the **Edit chart** view. At the bottom, ensure the
+   **Builder** tab is selected.
+3. In the **Data selection** column for variable **A**, type
+   `service.request` and select it from the dropdown.
+4. In the **Analytics** column, you should see a function selector
+   (since `service.request` is a histogram). Select **Count**.
+5. Still in **Analytics**, click **+ Add analytics** and select **Rate**
+   to convert the count to requests/second.
+6. In the **Filter** column, click **Add filters**:
    - `sf_service` = `rag-api`
    - `sf_environment` = `dev`
-4. In **Analytics**, click **+ Add analytics** and select **Percentile**.
-   Set the percentile value to `50` for P50.
-5. Set **Visualization type** to **Line**.
-6. Set **Chart title** to `Latency P50`.
-7. Click **Save**.
-8. Repeat for P90 (percentile = 90) and P99 (percentile = 99).
+7. In the right-hand **Configuration** panel:
+   - **Chart title:** `Request Rate`
+   - **Visualization type:** `Single value` (for a headline number) or
+     `Line` (for a trend over time)
+8. Click **Save**.
 
-**Using SignalFlow (recommended for multiple percentiles):**
+### SignalFlow tab
 
-1. Select **Create (+) > Chart**.
-2. Switch to the **SignalFlow** tab.
-3. Enter the following program:
+1. Click **Create (+) > Chart**.
+2. Select the **SignalFlow** tab at the bottom.
+3. Enter:
 
 ```signalflow
-A = data('service.request', filter=filter('sf_service', 'rag-api') and filter('sf_environment', 'dev')).percentile(pct=50).publish(label='P50')
-B = data('service.request', filter=filter('sf_service', 'rag-api') and filter('sf_environment', 'dev')).percentile(pct=90).publish(label='P90')
-C = data('service.request', filter=filter('sf_service', 'rag-api') and filter('sf_environment', 'dev')).percentile(pct=99).publish(label='P99')
+A = histogram('service.request', filter=filter('sf_service', 'rag-api') and filter('sf_environment', 'dev')).count().rate().publish(label='Request Rate')
 ```
 
-4. Set **Visualization type** to **Line**.
-5. Set **Chart title** to `Service Latency (P50 / P90 / P99)`.
-6. Click **Save**.
+4. Set **Chart title** to `Request Rate` in the Configuration panel.
+5. Click **Save**.
 
-**Alternative -- multiple percentiles via the Builder tab:**
+### JSON tab
 
-1. Create a chart with `service.request` as plot **A** with Percentile
-   = 50.
-2. Click **Add plot** to add plot **B** with the same metric and
-   Percentile = 90.
-3. Click **Add plot** again for plot **C** with Percentile = 99.
-4. Name each plot in the **Variable** column: `P50`, `P90`, `P99`.
-
-### 6.4 Top endpoints chart
-
-1. Select **Create (+) > Chart**.
-2. In **Data selection**, search for `service.request` and select it.
-3. In **Analytics**, click **+ Add analytics** and select **Top**, set
-   N = 10.
-4. Group by `sf_endpoint` or `http.route`.
-5. Set **Visualization type** to **List** or **Column**.
-6. Set **Chart title** to `Top Endpoints`.
-7. Click **Save**.
+The **JSON** tab shows the raw chart definition (Splunk Charts API
+format). You can paste a complete JSON definition here to create a chart
+programmatically. This is useful for version-controlling chart definitions
+or copying charts between orgs. The JSON is auto-generated from whatever
+you build in the Builder or SignalFlow tabs -- you rarely need to edit it
+directly.
 
 ---
 
-## 7. Use Chart Builder and SignalFlow
+## 7. Tutorial: Error rate chart
 
-### Graphical Chart Builder
+> **What:** The percentage of requests that result in an error.
+> **Why:** The primary indicator of service health -- a spike means
+> something is broken.
+> **How:** Compares errored request count to total request count from the
+> `service.request` MMS, using the `sf_error` dimension to filter.
 
-The Chart Builder is the primary tool for creating charts:
+### Builder tab
 
-1. Select **Create (+) > Chart**.
-2. In the **Builder** tab at the bottom of the chart editor:
-   - Click the **Data selection** dropdown for a variable and type a
-     metric name (type-ahead search helps).
-3. In the **Filter** column, click **Add filters** to scope the data
-   (service, environment, etc.).
-4. In the **Analytics** column, click **+ Add analytics** for functions:
-   - **Sum**, **Count**, **Mean** -- basic aggregations
-   - **Rate** -- convert counters to per-second values
-   - **Percentile** -- for latency analysis
-   - **Timeshift** -- compare with historical data
-   - **Top/Bottom** -- show highest/lowest N values
-   - **Exclude** -- filter time series by value
-5. In the right-hand **Configuration** panel, set visualisation type,
-   chart title, axes, units, colours, and resolution.
-6. Click **Save**.
+1. Click **Create (+) > Chart**.
+2. In **Data selection** for variable **A**, select `service.request`.
+3. In **Analytics**, select **Count**.
+4. In **Filter**, click **Add filters**:
+   - `sf_service` = `rag-api`
+   - `sf_environment` = `dev`
+   - `sf_error` = `true`
+5. Click **Add plot** to create variable **B**.
+6. In **Data selection** for **B**, select `service.request`.
+7. In **Analytics** for **B**, select **Count**.
+8. In **Filter** for **B**, add:
+   - `sf_service` = `rag-api`
+   - `sf_environment` = `dev`
+   (no `sf_error` filter -- this is the total)
+9. Click **Add plot** to create variable **C**.
+10. Click the **Data selection** for **C** and select **Enter formula**.
+    Type: `(A / B) * 100`
+11. Hide plots A and B (click the eye icon next to each) so only the
+    percentage line shows.
+12. In **Configuration**:
+    - **Chart title:** `Error Rate %`
+    - **Visualization type:** `Line`
+13. Click **Save**.
 
-### SignalFlow mode
-
-For advanced analytics, switch to the SignalFlow tab:
-
-1. Open a chart in the Chart Builder.
-2. Select the **SignalFlow** tab (next to **Builder**).
-3. Edit the SignalFlow program directly.
-4. Select the **Builder** tab to return to graphical mode (if the program
-   is convertible).
-
-**Example -- error percentage:**
+### SignalFlow tab
 
 ```signalflow
-A = data('service.request', filter=filter('sf_service', 'rag-api') and filter('sf_error', 'true')).count().publish(label='Errors')
-B = data('service.request', filter=filter('sf_service', 'rag-api')).count().publish(label='Total')
-C = (A / B * 100).publish(label='Error %')
+A = histogram('service.request', filter=filter('sf_service', 'rag-api') and filter('sf_environment', 'dev') and filter('sf_error', 'true')).count().publish(label='Errors', enable=False)
+B = histogram('service.request', filter=filter('sf_service', 'rag-api') and filter('sf_environment', 'dev')).count().publish(label='Total', enable=False)
+C = (A / B * 100).publish(label='Error Rate %')
 ```
-
-> **Note:** Splunk APM stores `service.request` as a histogram metric.
-> Apply functions like `.count()`, `.percentile(pct=N)`, `.median()`,
-> `.min()`, or `.max()` to extract the value you need. Use the Metric
-> Finder (**Navigation > Metric Finder**) to discover all available
-> metrics. APM dimension names use the `sf_` prefix (e.g. `sf_service`,
-> `sf_environment`, `sf_error`).
-
-### Useful SignalFlow patterns
-
-| Pattern | SignalFlow |
-|---|---|
-| Request count | `data('service.request').count().publish()` |
-| Latency P99 | `data('service.request').percentile(pct=99).publish()` |
-| Moving average (5 min) | `data('service.request').percentile(pct=50).mean(over='5m').publish()` |
-| Compare with yesterday | `data('service.request').percentile(pct=50).timeshift('1d').publish()` |
 
 ---
 
-## 8. Create detectors (alerts)
+## 8. Tutorial: Latency percentile chart
 
-Detectors monitor signals and trigger alerts when conditions are met.
+> **What:** How long requests take, shown as P50 (median), P90, and P99.
+> **Why:** P50 shows typical user experience; P99 shows worst-case. A
+> widening gap between P50 and P99 suggests inconsistent performance.
+> **How:** The `service.request` histogram MMS stores duration data.
+> Applying `percentile(pct=N)` extracts the Nth percentile latency.
 
-### 8.1 Service-down detector
+### Builder tab (single percentile)
 
-Detect when the `rag-api` service stops receiving requests:
+1. Click **Create (+) > Chart**.
+2. In **Data selection** for variable **A**, select `service.request`.
+3. In **Analytics**, select **Percentile** and set the value to `50`.
+4. In **Filter**, click **Add filters**:
+   - `sf_service` = `rag-api`
+   - `sf_environment` = `dev`
+5. In **Configuration**:
+   - **Chart title:** `Latency P50`
+   - **Visualization type:** `Line`
+6. Click **Save**.
+7. Repeat for P90 (percentile = 90) and P99 (percentile = 99).
+
+### Builder tab (all percentiles on one chart)
+
+1. Click **Create (+) > Chart**.
+2. Variable **A**: `service.request`, Analytics = **Percentile** (50),
+   Filter = `sf_service` = `rag-api`, `sf_environment` = `dev`.
+3. Click **Add plot** for variable **B**: same metric, same filters,
+   Analytics = **Percentile** (90).
+4. Click **Add plot** for variable **C**: same metric, same filters,
+   Analytics = **Percentile** (99).
+5. In **Configuration**:
+   - **Chart title:** `Service Latency (P50 / P90 / P99)`
+   - **Visualization type:** `Line`
+6. Click **Save**.
+
+### SignalFlow tab
+
+```signalflow
+filter_ = filter('sf_service', 'rag-api') and filter('sf_environment', 'dev')
+A = histogram('service.request', filter=filter_).percentile(pct=50).publish(label='P50')
+B = histogram('service.request', filter=filter_).percentile(pct=90).publish(label='P90')
+C = histogram('service.request', filter=filter_).percentile(pct=99).publish(label='P99')
+```
+
+---
+
+## 9. Tutorial: Top endpoints chart
+
+> **What:** Which API endpoints receive the most traffic.
+> **Why:** Identifies hot paths for optimisation and helps spot unexpected
+> traffic patterns.
+> **How:** Groups the `service.request` count by the `sf_operation`
+> dimension (which maps to the endpoint/route).
+
+### Builder tab
+
+1. Click **Create (+) > Chart**.
+2. In **Data selection** for variable **A**, select `service.request`.
+3. In **Analytics**, select **Count**, then click **+ Add analytics** and
+   select **Top** with N = 10.
+4. In **Filter**, add:
+   - `sf_service` = `rag-api`
+   - `sf_environment` = `dev`
+5. In **Configuration**:
+   - **Chart title:** `Top Endpoints`
+   - **Visualization type:** `List`
+6. Click **Save**.
+
+### SignalFlow tab
+
+```signalflow
+A = histogram('service.request', filter=filter('sf_service', 'rag-api') and filter('sf_environment', 'dev')).count().top(count=10).publish(label='Top Endpoints')
+```
+
+---
+
+## 10. Create detectors (alerts)
+
+> **What:** A detector monitors a signal and triggers alerts when a
+> condition is met.
+> **Why:** Get notified when the service is down, error rate spikes, or
+> latency degrades -- before users report it.
+> **How:** Detectors evaluate SignalFlow streams against conditions over
+> time and generate events/notifications.
+
+### 10.1 Service-down detector
 
 1. Navigate to **APM > Service map**.
-2. Select the `rag-api` service node.
-3. In the service panel, select **More (...) > Create Detector**.
-4. Name it: `rag-api -- No Requests`.
-5. Select metric: **Request rate**.
-6. Select condition: **Static threshold**.
-7. Configure: request rate **at or below 0** for **5 minutes**.
-8. Scope: environment = `dev`, service = `rag-api`.
-9. Set severity: **Critical**.
-10. Add notification (email, Slack, PagerDuty, etc.).
-11. Select **Activate**.
+2. Click the `rag-api` service node.
+3. In the sidebar, click **More (...) > Create Detector**.
+4. **Name:** `rag-api -- No Requests`
+5. **Metric:** Request rate
+6. **Condition:** Static threshold -- request rate at or below 0 for 5
+   minutes
+7. **Scope:** environment = `dev`, service = `rag-api`
+8. **Severity:** Critical
+9. Add a notification (email, Slack, PagerDuty, etc.)
+10. Click **Activate**.
 
-> **Tip:** For services with naturally idle periods, use a longer duration
-> window or consider a **Sudden change** condition instead.
+### 10.2 Error rate spike detector
 
-### 8.2 Error rate spike detector
-
-Detect when error rate exceeds a threshold:
-
-1. From the service map or an APM dashboard chart, select the bell icon
-   on the error rate chart.
+1. From the service map or a dashboard chart, click the **bell icon** on
+   the error rate chart.
 2. Select **New Detector From Chart**.
-3. Name it: `rag-api -- Error Rate Spike`.
-4. Select metric: **Error rate**.
-5. Choose one of:
+3. **Name:** `rag-api -- Error Rate Spike`
+4. **Metric:** Error rate
+5. **Condition:** Choose one:
    - **Static threshold** -- e.g. error rate above 5%
    - **Sudden change** -- detects abrupt spikes
    - **Historical anomaly** -- deviation from normal behaviour
-6. Scope: environment = `dev`, service = `rag-api`.
-7. Set severity: **Warning** or **Critical**.
-8. Add notification integration.
-9. Select **Activate**.
+6. **Scope:** environment = `dev`, service = `rag-api`
+7. **Severity:** Warning or Critical
+8. Add notification, click **Activate**.
 
-### 8.3 High latency detector
+### 10.3 High latency detector
 
-1. From an APM dashboard, select the bell icon on the latency chart.
+1. From a dashboard, click the **bell icon** on a latency chart.
 2. Select **New Detector From Chart**.
-3. Name it: `rag-api -- High Latency P99`.
-4. Select metric: **Latency** (P99).
-5. Select condition: **Static threshold** -- e.g. above 2000ms.
-6. Scope: environment = `dev`, service = `rag-api`.
-7. Set severity: **Warning**.
-8. Select **Activate**.
+3. **Name:** `rag-api -- High Latency P99`
+4. **Metric:** Latency (P99)
+5. **Condition:** Static threshold -- above 2000ms
+6. **Scope:** environment = `dev`, service = `rag-api`
+7. **Severity:** Warning
+8. Click **Activate**.
 
 ### Alert condition types
 
 | Condition | Use when |
 |---|---|
 | **Static threshold** | You know the acceptable range (e.g. error rate < 5%) |
-| **Sudden change** | You want to detect abrupt changes regardless of absolute value |
-| **Historical anomaly** | You want to detect deviation from normal historical patterns |
+| **Sudden change** | Detect abrupt changes regardless of absolute value |
+| **Historical anomaly** | Detect deviation from normal historical patterns |
 
 ### AutoDetect detectors
 
-Splunk provides default **AutoDetect** detectors for:
-
-- Service latency
-- Error rate
-- Request rate
-
-These are available by default and can supplement your custom detectors.
-Check **Alerts & Detectors > AutoDetect** to review and enable them.
+Splunk provides default detectors for service latency, error rate, and
+request rate. Check **Alerts & Detectors > AutoDetect** to review and
+enable them.
 
 ---
 
-## 9. Dashboard best practices
+## 11. Dashboard best practices
 
-### Organisation
-
-- **Group by team or service**, not by individual metric.
-- Use **dashboard variables** for environment/service selection instead of
-  duplicating dashboards per environment.
-- Keep draft dashboards in your **User** group; publish reviewed dashboards
-  to a shared **Custom** group.
-
-### Layout
-
-- **Wall displays:** 3-5 charts per row, 3-5 rows per dashboard.
-- **Laptop screens:** 2-4 charts per row.
-- Put **RED metrics** (Request rate, Error rate, Duration/latency) at the
-  top.
-- Add **text note** charts explaining scope, thresholds, ownership, and
-  runbook links.
-
-### Consistency
-
-- Use consistent titles and abbreviations across charts.
-- Use consistent units (ms for latency, % for rates, req/s for throughput).
-- Use consistent time ranges across related charts.
-- Use consistent colour schemes.
-
-### Filters
-
-- Apply consistent `service.name` and `deployment.environment` filters
-  across all charts on a dashboard.
-- Use dashboard-level filter overrides to avoid per-chart filter
-  duplication.
-
-### Linking
-
-- Link detectors to the charts they monitor so alert state is visible on
-  the dashboard.
-- Use **Actions (...) > Troubleshoot from this Time Window** to jump from
-  a dashboard chart to the APM troubleshooting view.
-
----
-
-## 10. Next steps
-
-With dashboards and basic alerts in place, consider:
-
-| Task | Description |
+| Area | Guidance |
 |---|---|
-| **Add OTel SDK instrumentation** | Add custom spans and metrics for business-specific signals (backlog item 011) |
-| **Add custom logger** | Route application logs through OTel to Splunk (backlog item 012) |
-| **Tag Spotlight** | Use APM > Tag Spotlight to analyse request/error rate by span tag |
-| **Trace Analyzer** | Use APM > Trace Analyzer to inspect individual trace waterfalls |
-| **SLO tracking** | Define service level objectives using Splunk's SLO features |
-| **gen_ai instrumentation** | Add LLM-specific spans and token metrics (backlog items 017-018) |
+| **Organisation** | Group dashboards by team or service, not by metric |
+| **Variables** | Use dashboard variables for environment/service instead of duplicating dashboards |
+| **Layout** | Wall displays: 3-5 charts/row, 3-5 rows. Laptops: 2-4 charts/row |
+| **RED metrics** | Put Request rate, Error rate, Duration (latency) at the top |
+| **Text notes** | Add a text chart explaining scope, thresholds, and runbook links |
+| **Consistency** | Same units (ms for latency, % for rates, req/s for throughput) across charts |
+| **Filters** | Apply consistent `sf_service` and `sf_environment` filters across all charts |
+| **Linking** | Link detectors to charts so alert state is visible on the dashboard |
+| **Troubleshooting** | Use **Actions (...) > Troubleshoot from this Time Window** to jump to APM |
 
 ---
 
-## Quick reference
+## 12. Next steps
 
-| Action | Navigation |
+| Task | Description | Backlog |
+|---|---|---|
+| Add OTel SDK instrumentation | Custom spans and business metrics | 011 |
+| Add custom logger | Route app logs through OTel to Splunk | 012 |
+| Tag Spotlight | Analyse request/error rate by span tag | -- |
+| Trace Analyzer | Inspect individual trace waterfalls | -- |
+| SLO tracking | Define service level objectives | -- |
+| gen_ai instrumentation | LLM-specific spans and token metrics | 017-018 |
+
+---
+
+## 13. Quick reference
+
+| Action | Where |
 |---|---|
 | View service map | APM > Service map |
 | View built-in dashboards | Dashboards > Built-in > APM Services |
@@ -464,4 +480,4 @@ With dashboards and basic alerts in place, consider:
 
 ---
 
-*Last updated: 2026-08-18*
+*Last updated: 2026-08-19*
