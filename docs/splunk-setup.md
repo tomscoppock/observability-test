@@ -200,22 +200,46 @@ group. You can rename it via **Actions (...) > Rename**.
 
 ### 6.3 Latency percentile charts
 
+> **Key concept:** In Splunk APM, `service.request` is a **histogram**
+> metric (a Monitoring MetricSet). It contains both count and duration
+> data. You get latency percentiles by applying **Percentile** or
+> **Median** analytics to the same `service.request` metric -- there is
+> no separate `service.request.duration` metric.
+
+**Using the Builder tab:**
+
 1. Select **Create (+) > Chart**.
-2. In **Data selection**, search for `service.request.duration` (or the
-   histogram metric if available) and select it.
+2. In **Data selection**, search for `service.request` and select it
+   (the same metric used for request rate).
 3. In **Filter**, click **Add filters** and add:
-   - `service.name` = `rag-api`
-   - `deployment.environment` = `dev`
+   - `sf_service` = `rag-api`
+   - `sf_environment` = `dev`
 4. In **Analytics**, click **+ Add analytics** and select **Percentile**.
    Set the percentile value to `50` for P50.
 5. Set **Visualization type** to **Line**.
 6. Set **Chart title** to `Latency P50`.
 7. Click **Save**.
-8. Repeat for P90 and P99.
+8. Repeat for P90 (percentile = 90) and P99 (percentile = 99).
 
-**Alternative -- multiple percentiles on one chart:**
+**Using SignalFlow (recommended for multiple percentiles):**
 
-1. Create a chart with the latency metric as plot **A** with Percentile
+1. Select **Create (+) > Chart**.
+2. Switch to the **SignalFlow** tab.
+3. Enter the following program:
+
+```signalflow
+A = data('service.request', filter=filter('sf_service', 'rag-api') and filter('sf_environment', 'dev')).percentile(pct=50).publish(label='P50')
+B = data('service.request', filter=filter('sf_service', 'rag-api') and filter('sf_environment', 'dev')).percentile(pct=90).publish(label='P90')
+C = data('service.request', filter=filter('sf_service', 'rag-api') and filter('sf_environment', 'dev')).percentile(pct=99).publish(label='P99')
+```
+
+4. Set **Visualization type** to **Line**.
+5. Set **Chart title** to `Service Latency (P50 / P90 / P99)`.
+6. Click **Save**.
+
+**Alternative -- multiple percentiles via the Builder tab:**
+
+1. Create a chart with `service.request` as plot **A** with Percentile
    = 50.
 2. Click **Add plot** to add plot **B** with the same metric and
    Percentile = 90.
@@ -271,22 +295,26 @@ For advanced analytics, switch to the SignalFlow tab:
 **Example -- error percentage:**
 
 ```signalflow
-A = data('service.request.count', filter=filter('service.name', 'rag-api') and filter('sf_error', 'true'))
-B = data('service.request.count', filter=filter('service.name', 'rag-api'))
+A = data('service.request', filter=filter('sf_service', 'rag-api') and filter('sf_error', 'true')).count().publish(label='Errors')
+B = data('service.request', filter=filter('sf_service', 'rag-api')).count().publish(label='Total')
 C = (A / B * 100).publish(label='Error %')
 ```
 
-> **Note:** Use the actual metric names from your environment. APM
-> auto-generates metrics from trace data -- check the Metric Finder
-> (**Navigation > Metric Finder**) to discover available metrics.
+> **Note:** Splunk APM stores `service.request` as a histogram metric.
+> Apply functions like `.count()`, `.percentile(pct=N)`, `.median()`,
+> `.min()`, or `.max()` to extract the value you need. Use the Metric
+> Finder (**Navigation > Metric Finder**) to discover all available
+> metrics. APM dimension names use the `sf_` prefix (e.g. `sf_service`,
+> `sf_environment`, `sf_error`).
 
 ### Useful SignalFlow patterns
 
 | Pattern | SignalFlow |
 |---|---|
-| Moving average (5 min) | `data('metric').mean(over='5m').publish()` |
-| Compare with yesterday | `data('metric').timeshift('1d').publish()` |
-| Rate of change | `data('metric').delta().publish()` |
+| Request count | `data('service.request').count().publish()` |
+| Latency P99 | `data('service.request').percentile(pct=99).publish()` |
+| Moving average (5 min) | `data('service.request').percentile(pct=50).mean(over='5m').publish()` |
+| Compare with yesterday | `data('service.request').percentile(pct=50).timeshift('1d').publish()` |
 
 ---
 
