@@ -4,6 +4,31 @@
      the decision, and the reason -- the reason is what makes this useful
      six months later. -->
 
+### 2026-08-25 -- Upgrade SurrealDB to 3.2.4 for native OTLP telemetry
+
+**Decision:** Upgrade SurrealDB from 3.0.5 to 3.2.4 (latest) and enable
+native OTLP telemetry via `SURREAL_TELEMETRY_PROVIDER=otlp`.
+
+**Why:** SurrealDB 3.1+ introduced a unified OTel pipeline that pushes
+metrics, traces, and logs over OTLP. Version 3.0.5 silently ignored the
+telemetry env vars -- no `/metrics` endpoint, no OTLP export. Upgrading
+to 3.2.4 enables infrastructure monitoring (CPU, memory, transaction
+throughput, HTTP activity, network I/O) without any sidecar or scraper.
+
+**Metrics confirmed flowing:** `surrealdb.process.*`,
+`surrealdb.transaction.*`, `surrealdb.http.*`, `surrealdb.rpc.*`,
+`surrealdb.network.*` -- all arriving at the OTel Collector and forwarded
+to Splunk via the existing signalfx/otlp_http/splunk_hec pipelines.
+
+**Risk:** Major version jump (3.0 -> 3.2). SurrealDB 3.x is pre-1.0
+semantically, so breaking changes are possible. Acceptable for a dev/test
+stack; pin to a specific tag (e.g. `surrealdb/surrealdb:v3.2.4`) before
+production use.
+
+**Alternatives considered:** Prometheus scraping via `/metrics` endpoint
+(not available in 3.0.5, and OTLP push is simpler than adding a scraper),
+StatsD sidecar (unnecessary complexity).
+
 ### 2026-08-18 -- SurrealMX in-memory engine with async AOL
 
 **Decision:** Use SurrealDB's SurrealMX in-memory engine with async

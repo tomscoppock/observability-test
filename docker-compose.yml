@@ -55,6 +55,8 @@ services:
   # ---------- SurrealDB ----------
   # SurrealMX: in-memory engine with async AOL + periodic snapshots.
   # Data survives process restarts via the named volume.
+  # Telemetry: pushes surrealdb.* metrics, traces, and logs to the
+  # OTel Collector via OTLP gRPC (SURREAL_TELEMETRY_PROVIDER=otlp).
   surrealdb:
     image: surrealdb/surrealdb:latest
     # SurrealDB 3.x runs as non-root; the named volume is root-owned,
@@ -64,8 +66,17 @@ services:
     working_dir: /data
     ports:
       - "8000:8000"
+    environment:
+      # Enable built-in OTel telemetry (metrics + traces + logs)
+      - SURREAL_TELEMETRY_PROVIDER=otlp
+      - OTEL_EXPORTER_OTLP_ENDPOINT=http://otel-collector:4317
+      - OTEL_SERVICE_NAME=surrealdb
+      - OTEL_RESOURCE_ATTRIBUTES=deployment.environment=dev
     volumes:
       - surreal-data:/data
+    depends_on:
+      otel-collector:
+        condition: service_started
     restart: unless-stopped
 
   # ---------- OpenTelemetry Collector ----------

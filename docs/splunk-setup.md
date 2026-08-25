@@ -11,6 +11,8 @@ Observability Cloud for the observability-test RAG Agent stack.
 
 ## Table of Contents
 
+### APM (rag-api service)
+
 1. [How our data reaches Splunk](#1-how-our-data-reaches-splunk)
 2. [Verify data is arriving](#2-verify-data-is-arriving)
 3. [Explore the APM service map](#3-explore-the-apm-service-map)
@@ -20,10 +22,20 @@ Observability Cloud for the observability-test RAG Agent stack.
 7. [Tutorial: Error rate chart](#7-tutorial-error-rate-chart)
 8. [Tutorial: Latency percentile chart](#8-tutorial-latency-percentile-chart)
 9. [Tutorial: Top endpoints chart](#9-tutorial-top-endpoints-chart)
-10. [Create detectors (alerts)](#10-create-detectors-alerts)
-11. [Dashboard best practices](#11-dashboard-best-practices)
-12. [Next steps](#12-next-steps)
-13. [Quick reference](#13-quick-reference)
+
+### Infrastructure Monitoring (SurrealDB)
+
+10. [SurrealDB telemetry pipeline](#10-surrealdb-telemetry-pipeline)
+11. [Tutorial: SurrealDB process health chart](#11-tutorial-surrealdb-process-health-chart)
+12. [Tutorial: SurrealDB transaction performance chart](#12-tutorial-surrealdb-transaction-performance-chart)
+13. [Tutorial: SurrealDB HTTP and network chart](#13-tutorial-surrealdb-http-and-network-chart)
+
+### Alerts and Operations
+
+14. [Create detectors (alerts)](#14-create-detectors-alerts)
+15. [Dashboard best practices](#15-dashboard-best-practices)
+16. [Next steps](#16-next-steps)
+17. [Quick reference](#17-quick-reference)
 
 ---
 
@@ -33,31 +45,36 @@ Understanding the data pipeline helps you know what metrics are available
 and where they come from.
 
 ```
-Node.js API (rag-api)
-  |
-  |  OTel SDK auto-instrumentation creates:
-  |    - Traces (spans with timing, status, attributes)
-  |    - Metrics (http.server.duration histogram)
-  |    - Logs (when configured)
-  |
-  v
-OTel Collector (otel-collector container)
-  |
-  |  Three export pipelines:
-  |    Traces  --> otlp_http/splunk  --> Splunk APM
-  |    Metrics --> signalfx           --> Splunk IM
-  |    Logs    --> splunk_hec/logs    --> Splunk Log Observer
-  |
-  v
-Splunk Observability Cloud
-  |
-  |  APM derives Monitoring MetricSets (MMS) from traces:
-  |    service.request  -- histogram containing count + duration
-  |    spans            -- per-span histogram
-  |    traces           -- per-trace histogram
-  |
-  v
-Dashboards, Alerts, Service Map
+Node.js API (rag-api)               SurrealDB 3.2+ (surrealdb)
+  |                                    |
+  |  OTel SDK auto-instrumentation:    |  Native OTLP telemetry:
+  |    - Traces (spans)                |    - Metrics (surrealdb.*)
+  |    - Metrics (histograms)          |    - Traces (tx, rpc, http)
+  |    - Logs (when configured)        |    - Logs (structured)
+  |                                    |
+  v                                    v
+  +------------------------------------+
+                    |
+            OTel Collector (otel-collector container)
+                    |
+                    |  Three export pipelines:
+                    |    Traces  --> otlp_http/splunk  --> Splunk APM
+                    |    Metrics --> signalfx           --> Splunk IM
+                    |    Logs    --> splunk_hec/logs    --> Splunk Log Observer
+                    |
+                    v
+            Splunk Observability Cloud
+                    |
+                    |  APM derives Monitoring MetricSets (MMS) from traces:
+                    |    service.request  -- histogram containing count + duration
+                    |    spans            -- per-span histogram
+                    |    traces           -- per-trace histogram
+                    |
+                    |  Infrastructure Monitoring receives direct metrics:
+                    |    surrealdb.*      -- gauges, counters, histograms
+                    |
+                    v
+            Dashboards, Alerts, Service Map
 ```
 
 **Key concept -- Monitoring MetricSets (MMS):**
@@ -370,7 +387,222 @@ A = histogram('service.request', filter=filter('sf_service', 'rag-api') and filt
 
 ---
 
-## 10. Create detectors (alerts)
+## 10. SurrealDB telemetry pipeline
+
+SurrealDB 3.1+ includes a unified OpenTelemetry pipeline that pushes
+metrics, traces, and logs over OTLP when `SURREAL_TELEMETRY_PROVIDER=otlp`
+is set. Our stack upgraded from 3.0.5 (no OTel support) to 3.2.4.
+
+```
+SurrealDB 3.2.4 (surrealdb container)
+  |
+  |  SURREAL_TELEMETRY_PROVIDER=otlp enables:
+  |    - Metrics (surrealdb.* gauges, counters, histograms)
+  |    - Traces  (transaction + RPC + HTTP spans)
+  |    - Logs    (structured log records)
+  |
+  |  OTEL_EXPORTER_OTLP_ENDPOINT=http://otel-collector:4317
+  |
+  v
+OTel Collector (same instance as rag-api)
+  |
+  |  Same three export pipelines:
+  |    Metrics --> signalfx          --> Splunk IM
+  |    Traces  --> otlp_http/splunk  --> Splunk APM
+  |    Logs    --> splunk_hec/logs   --> Splunk Log Observer
+  |
+  v
+Splunk Observability Cloud
+```
+
+**Key difference from rag-api:** These are **infrastructure metrics** --
+direct gauge/counter/histogram values pushed by SurrealDB itself, not
+derived from traces. You use `data('metric.name')` in SignalFlow (not
+`histogram('service.request')`).
+
+### Available metrics
+
+| Scope | Metric | Type | Description |
+|---|---|---|---|
+| `surrealdb.process` | `surrealdb.process.cpu_percent` | Gauge | CPU usage percentage |
+| | `surrealdb.process.memory` | Gauge | Memory usage (bytes) |
+| | `surrealdb.process.uptime` | Gauge | Seconds since start |
+| | `surrealdb.build.info` | Gauge | Always 1; version in attributes |
+| `surrealdb.transaction` | `surrealdb.transaction` | Counter | Transaction count |
+| | `surrealdb.transaction.duration` | Histogram | Transaction duration |
+| | `surrealdb.transaction.kv_ops` | Counter | Key-value operations |
+| | `surrealdb.transaction.keys_read` | Counter | Keys read |
+| | `surrealdb.transaction.keys_written` | Counter | Keys written |
+| | `surrealdb.transaction.key_bytes_read` | Counter | Bytes read (keys) |
+| | `surrealdb.transaction.value_bytes_read` | Counter | Bytes read (values) |
+| | `surrealdb.transaction.key_bytes_written` | Counter | Bytes written (keys) |
+| | `surrealdb.transaction.value_bytes_written` | Counter | Bytes written (values) |
+| `surrealdb.http` | `surrealdb.http.request` | Counter | HTTP request count |
+| | `surrealdb.http.request.duration` | Histogram | HTTP request duration |
+| | `surrealdb.http.request.size` | Histogram | Request body size |
+| | `surrealdb.http.response.size` | Histogram | Response body size |
+| | `surrealdb.http.active_requests` | Gauge | In-flight HTTP requests |
+| `surrealdb.rpc` | `surrealdb.rpc` | Counter | RPC call count |
+| | `surrealdb.rpc.duration` | Histogram | RPC call duration |
+| `surrealdb.network` | `surrealdb.network.received` | Counter | Bytes received |
+| | `surrealdb.network.sent` | Counter | Bytes sent |
+
+### Verify SurrealDB data in Splunk
+
+1. Navigate to **Metric Finder** (left nav > **Metrics**).
+2. Search for `surrealdb`.
+3. You should see the metrics listed above. If not, check:
+   - `docker compose logs otel-collector` for export errors
+   - `docker compose logs surrealdb` for telemetry init messages
+   - Ensure `SURREAL_TELEMETRY_PROVIDER=otlp` is set in `docker-compose.yml`
+
+---
+
+## 11. Tutorial: SurrealDB process health chart
+
+> **What:** CPU usage, memory consumption, and uptime of the SurrealDB
+> instance.
+> **Why:** Detect resource exhaustion before it causes query failures or
+> OOM kills.
+> **How:** SurrealDB pushes `surrealdb.process.*` gauge metrics via OTLP.
+> These are direct measurements, not derived from traces.
+
+### Builder tab
+
+1. Click **Create (+) > Chart**.
+2. In **Data selection** for variable **A**, type
+   `surrealdb.process.cpu_percent` and select it.
+3. In **Filter**, click **Add filters**:
+   - `service.name` = `surrealdb`
+4. Click **Add plot** for variable **B**.
+5. In **Data selection** for **B**, select
+   `surrealdb.process.memory`.
+6. In **Filter** for **B**, add `service.name` = `surrealdb`.
+7. In **Configuration**:
+   - **Chart title:** `SurrealDB Process Health`
+   - **Visualization type:** `Line`
+   - Optionally set **B** to a secondary Y-axis (click the plot
+     settings gear icon for B > **Y-axis** > **Right**) since CPU (%)
+     and memory (bytes) have different scales.
+8. Click **Save**.
+
+### SignalFlow tab
+
+```signalflow
+A = data('surrealdb.process.cpu_percent', filter=filter('service.name', 'surrealdb')).publish(label='CPU %')
+B = data('surrealdb.process.memory', filter=filter('service.name', 'surrealdb')).publish(label='Memory (bytes)')
+```
+
+### JSON tab
+
+As with APM charts, the JSON tab shows the raw chart definition. Use it
+to version-control or copy SurrealDB charts between environments.
+
+---
+
+## 12. Tutorial: SurrealDB transaction performance chart
+
+> **What:** Transaction throughput, duration, and data volume flowing
+> through SurrealDB.
+> **Why:** Transactions are the core unit of work in SurrealDB. Monitoring
+> throughput and duration reveals query performance degradation, lock
+> contention, or data growth issues.
+> **How:** SurrealDB pushes `surrealdb.transaction.*` counters and
+> histograms. Use `rate()` on counters to get per-second throughput.
+
+### Builder tab (transaction rate)
+
+1. Click **Create (+) > Chart**.
+2. In **Data selection** for variable **A**, select
+   `surrealdb.transaction`.
+3. In **Analytics**, click **+ Add analytics** and select **Rate** to
+   convert the counter to transactions/second.
+4. In **Filter**, add `service.name` = `surrealdb`.
+5. In **Configuration**:
+   - **Chart title:** `SurrealDB Transaction Rate`
+   - **Visualization type:** `Line`
+6. Click **Save**.
+
+### Builder tab (KV throughput)
+
+1. Click **Create (+) > Chart**.
+2. Variable **A**: `surrealdb.transaction.keys_read`, Analytics = **Rate**,
+   Filter = `service.name` = `surrealdb`.
+3. Click **Add plot** for variable **B**:
+   `surrealdb.transaction.keys_written`, Analytics = **Rate**,
+   same filter.
+4. In **Configuration**:
+   - **Chart title:** `SurrealDB KV Throughput (keys/s)`
+   - **Visualization type:** `Line`
+5. Click **Save**.
+
+### SignalFlow tab
+
+```signalflow
+# Transaction rate
+A = data('surrealdb.transaction', filter=filter('service.name', 'surrealdb')).rate().publish(label='Tx/s')
+
+# KV read/write throughput
+B = data('surrealdb.transaction.keys_read', filter=filter('service.name', 'surrealdb')).rate().publish(label='Keys Read/s')
+C = data('surrealdb.transaction.keys_written', filter=filter('service.name', 'surrealdb')).rate().publish(label='Keys Written/s')
+
+# Data volume
+D = data('surrealdb.transaction.value_bytes_read', filter=filter('service.name', 'surrealdb')).rate().publish(label='Bytes Read/s')
+E = data('surrealdb.transaction.value_bytes_written', filter=filter('service.name', 'surrealdb')).rate().publish(label='Bytes Written/s')
+```
+
+---
+
+## 13. Tutorial: SurrealDB HTTP and network chart
+
+> **What:** HTTP request rate, active connections, and network I/O for the
+> SurrealDB HTTP API.
+> **Why:** The rag-api communicates with SurrealDB over HTTP. Monitoring
+> HTTP metrics shows whether the database API layer is a bottleneck.
+> **How:** SurrealDB pushes `surrealdb.http.*` and `surrealdb.network.*`
+> metrics. Active requests is a gauge; the rest are counters/histograms.
+
+### Builder tab
+
+1. Click **Create (+) > Chart**.
+2. Variable **A**: `surrealdb.http.request`, Analytics = **Rate**,
+   Filter = `service.name` = `surrealdb`.
+3. Click **Add plot** for variable **B**:
+   `surrealdb.http.active_requests`, no analytics needed (it is a gauge),
+   same filter.
+4. In **Configuration**:
+   - **Chart title:** `SurrealDB HTTP Activity`
+   - **Visualization type:** `Line`
+   - Set **B** to secondary Y-axis if scales differ.
+5. Click **Save**.
+
+### Builder tab (network I/O)
+
+1. Click **Create (+) > Chart**.
+2. Variable **A**: `surrealdb.network.received`, Analytics = **Rate**,
+   Filter = `service.name` = `surrealdb`.
+3. Click **Add plot** for variable **B**:
+   `surrealdb.network.sent`, Analytics = **Rate**, same filter.
+4. In **Configuration**:
+   - **Chart title:** `SurrealDB Network I/O (bytes/s)`
+   - **Visualization type:** `Area`
+5. Click **Save**.
+
+### SignalFlow tab
+
+```signalflow
+# HTTP activity
+A = data('surrealdb.http.request', filter=filter('service.name', 'surrealdb')).rate().publish(label='HTTP Req/s')
+B = data('surrealdb.http.active_requests', filter=filter('service.name', 'surrealdb')).publish(label='Active Requests')
+
+# Network I/O
+C = data('surrealdb.network.received', filter=filter('service.name', 'surrealdb')).rate().publish(label='Received bytes/s')
+D = data('surrealdb.network.sent', filter=filter('service.name', 'surrealdb')).rate().publish(label='Sent bytes/s')
+```
+
+---
+
+## 14. Create detectors (alerts)
 
 > **What:** A detector monitors a signal and triggers alerts when a
 > condition is met.
@@ -379,7 +611,7 @@ A = histogram('service.request', filter=filter('sf_service', 'rag-api') and filt
 > **How:** Detectors evaluate SignalFlow streams against conditions over
 > time and generate events/notifications.
 
-### 10.1 Service-down detector
+### 14.1 Service-down detector
 
 1. Navigate to **APM > Service map**.
 2. Click the `rag-api` service node.
@@ -393,7 +625,7 @@ A = histogram('service.request', filter=filter('sf_service', 'rag-api') and filt
 9. Add a notification (email, Slack, PagerDuty, etc.)
 10. Click **Activate**.
 
-### 10.2 Error rate spike detector
+### 14.2 Error rate spike detector
 
 1. From the service map or a dashboard chart, click the **bell icon** on
    the error rate chart.
@@ -408,7 +640,7 @@ A = histogram('service.request', filter=filter('sf_service', 'rag-api') and filt
 7. **Severity:** Warning or Critical
 8. Add notification, click **Activate**.
 
-### 10.3 High latency detector
+### 14.3 High latency detector
 
 1. From a dashboard, click the **bell icon** on a latency chart.
 2. Select **New Detector From Chart**.
@@ -427,6 +659,19 @@ A = histogram('service.request', filter=filter('sf_service', 'rag-api') and filt
 | **Sudden change** | Detect abrupt changes regardless of absolute value |
 | **Historical anomaly** | Detect deviation from normal historical patterns |
 
+### 14.4 SurrealDB high memory detector
+
+1. Click **Create (+) > Detector**.
+2. **Name:** `SurrealDB -- High Memory`
+3. **Signal:** Enter SignalFlow:
+   ```signalflow
+   data('surrealdb.process.memory', filter=filter('service.name', 'surrealdb'))
+   ```
+4. **Condition:** Static threshold -- above your container memory limit
+   (e.g. 512MB = 536870912 bytes)
+5. **Severity:** Warning
+6. Add notification, click **Activate**.
+
 ### AutoDetect detectors
 
 Splunk provides default detectors for service latency, error rate, and
@@ -435,7 +680,7 @@ enable them.
 
 ---
 
-## 11. Dashboard best practices
+## 15. Dashboard best practices
 
 | Area | Guidance |
 |---|---|
@@ -451,7 +696,7 @@ enable them.
 
 ---
 
-## 12. Next steps
+## 16. Next steps
 
 | Task | Description | Backlog |
 |---|---|---|
@@ -464,7 +709,7 @@ enable them.
 
 ---
 
-## 13. Quick reference
+## 17. Quick reference
 
 | Action | Where |
 |---|---|
@@ -477,7 +722,10 @@ enable them.
 | View/manage alerts | Alerts & Detectors |
 | View traces | APM > Trace Analyzer |
 | Tag analysis | APM > Tag Spotlight |
+| Find SurrealDB metrics | Metric Finder > search `surrealdb` |
+| SurrealDB infra metrics | `data('surrealdb.*')` in SignalFlow |
+| APM histogram metrics | `histogram('service.request')` in SignalFlow |
 
 ---
 
-*Last updated: 2026-08-19*
+*Last updated: 2026-08-25*
