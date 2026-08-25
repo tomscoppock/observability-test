@@ -47,7 +47,7 @@ Last updated: 2026-08-25
 
 ## Numbering
 
-Next free backlog/epic/task number: **021**
+Next free backlog/epic/task number: **022**
 
 <!-- Increment every time a numbered item is created in backlog/,
      in-progress/, epics/, or done/. Numbers are never reused. -->
