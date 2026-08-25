@@ -2,6 +2,7 @@
 
 const express = require('express');
 const cors = require('cors');
+const logger = require('./logger');
 
 const app = express();
 const PORT = process.env.PORT || 3000;
@@ -30,8 +31,11 @@ app.post('/api/chat', (req, res) => {
   const { message } = req.body;
 
   if (!message || typeof message !== 'string') {
+    logger.warn('Invalid chat request', { reason: 'missing or non-string message' });
     return res.status(400).json({ error: 'message is required and must be a string' });
   }
+
+  logger.info('Chat request received', { messageLength: message.length });
 
   // Stub response -- will be replaced by LLM call in Epic 004.
   res.json({
@@ -43,5 +47,5 @@ app.post('/api/chat', (req, res) => {
 // Start
 // ---------------------------------------------------------------------------
 app.listen(PORT, '0.0.0.0', () => {
-  console.log(`[api] Listening on port ${PORT}`);
+  logger.info('Listening on port', { port: PORT });
 });

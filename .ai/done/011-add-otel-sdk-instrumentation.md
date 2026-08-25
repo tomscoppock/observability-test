@@ -1,6 +1,6 @@
-# 011 -- Add OTel SDK 2.x instrumentation to Node.js API
+# 011 -- Add OTel SDK 2.x instrumentation to Node.js API (@tom)
 
-Status: backlog
+Status: done
 Priority: high
 Assignee: @tom
 Epic: 003
@@ -18,11 +18,11 @@ OTel Collector output.
 
 ## Acceptance criteria
 
-- [ ] `src/instrumentation.js` configures `NodeSDK` with auto-instrumentations
-- [ ] OTLP HTTP exporters point to `OTEL_EXPORTER_OTLP_ENDPOINT` from `.env`
-- [ ] Service name set from `OTEL_SERVICE_NAME` env var
-- [ ] HTTP request spans appear in collector logs
-- [ ] Express route spans appear with correct operation names
+- [x] `src/instrumentation.js` configures `NodeSDK` with auto-instrumentations
+- [x] OTLP HTTP exporters point to `OTEL_EXPORTER_OTLP_ENDPOINT` from `.env`
+- [x] Service name set from `OTEL_SERVICE_NAME` env var
+- [x] HTTP request spans appear in collector logs
+- [x] Express route spans appear with correct operation names
 
 ## Notes
 

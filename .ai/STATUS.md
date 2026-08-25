@@ -1,16 +1,17 @@
 # Project Status
 
-Last updated: 2026-08-18
+Last updated: 2026-08-25
 
 ## Active work (per person)
 
 | Assignee | Item | Epic | Since |
 |---|---|---|---|
-
-(No active work -- Epic 002 complete, ready for Epic 003.)
+| @tom | 012 -- Add custom logger service (in-review) | 003 | 2026-08-25 |
 
 ## Recently completed
 
+- 012 -- Add custom logger service wrapping OTel logs API (@tom) -- in-review 2026-08-25
+- 011 -- Add OTel SDK 2.x instrumentation (@tom) -- done 2026-08-25 (was already complete from Epic 002)
 - 010 -- Splunk Observability Cloud signup (@tom) -- done 2026-08-18
 - 009 -- Configure OTel Collector with Splunk exporters (@tom) -- done 2026-08-18
 - Epic 002 -- OTel Collector Pipeline to Splunk -- done 2026-08-18
@@ -23,8 +24,7 @@ Last updated: 2026-08-18
 
 ### otel-instrumentation
 
-- 011 -- Add OTel SDK 2.x instrumentation to Node.js API (@tom, high)
-- 012 -- Add custom logger service wrapping OTel logs API (@tom, high)
+(012 in review)
 
 ### database
 
