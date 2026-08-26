@@ -1,0 +1,53 @@
+Data Protection and Privacy Policy
+Effective Date: 1 February 2025
+Version: 2.0
+
+1. Introduction
+
+The company is committed to protecting the privacy and personal data of its employees, clients, and business partners. This policy sets out how we collect, use, store, and dispose of personal data in compliance with the UK General Data Protection Regulation (UK GDPR) and the Data Protection Act 2018.
+
+2. Data Protection Principles
+
+We adhere to the following principles when processing personal data:
+
+Lawfulness, fairness, and transparency: Data is processed lawfully and in a transparent manner. Purpose limitation: Data is collected for specified, explicit, and legitimate purposes. Data minimisation: Only data that is necessary for the stated purpose is collected. Accuracy: Data is kept accurate and up to date. Storage limitation: Data is retained only for as long as necessary. Integrity and confidentiality: Data is processed securely with appropriate technical and organisational measures.
+
+3. Types of Personal Data We Process
+
+Employee data: name, address, date of birth, National Insurance number, bank details, emergency contacts, performance records, and health information (where relevant to employment). Client data: contact details, transaction history, and communication records. Recruitment data: CVs, application forms, interview notes, and references.
+
+4. Legal Basis for Processing
+
+We process personal data under the following legal bases: performance of a contract (employment contracts, client agreements), legal obligation (tax, employment law), legitimate interests (business operations, security), and consent (marketing communications, optional surveys).
+
+5. Data Retention
+
+Employee records are retained for 6 years after the end of employment, in line with HMRC requirements and limitation periods for legal claims. Recruitment data for unsuccessful candidates is retained for 12 months after the recruitment process ends. Client data is retained for 6 years after the last transaction.
+
+Data that is no longer required is securely deleted or anonymised. Paper records are shredded using cross-cut shredders. Electronic records are permanently deleted using approved data destruction methods.
+
+6. Data Subject Rights
+
+Individuals have the following rights under UK GDPR: right of access (subject access request), right to rectification, right to erasure (right to be forgotten), right to restrict processing, right to data portability, right to object, and rights related to automated decision-making.
+
+Subject access requests must be responded to within one calendar month. Requests should be directed to the Data Protection Officer at dpo@company.example.com.
+
+7. Data Breaches
+
+A personal data breach is any event that leads to the accidental or unlawful destruction, loss, alteration, or unauthorised disclosure of personal data. All suspected breaches must be reported to the Data Protection Officer immediately.
+
+The company will assess each breach and, where required, notify the Information Commissioner's Office (ICO) within 72 hours. Affected individuals will be notified without undue delay where the breach is likely to result in a high risk to their rights and freedoms.
+
+8. International Data Transfers
+
+Personal data must not be transferred outside the United Kingdom unless adequate safeguards are in place. Approved transfer mechanisms include adequacy decisions, standard contractual clauses, and binding corporate rules.
+
+Cloud service providers used by the company must demonstrate compliance with UK GDPR and maintain appropriate certifications (e.g. ISO 27001, SOC 2).
+
+9. Training and Awareness
+
+All employees must complete mandatory data protection training within their first month of employment and annually thereafter. Additional training is provided for employees who handle sensitive personal data or have data protection responsibilities.
+
+10. Data Protection Officer
+
+The company has appointed a Data Protection Officer (DPO) who can be contacted at dpo@company.example.com. The DPO is responsible for monitoring compliance, advising on data protection matters, and acting as the point of contact for the ICO.

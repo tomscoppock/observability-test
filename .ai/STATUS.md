@@ -6,7 +6,7 @@ Last updated: 2026-08-26
 
 | Assignee | Item | Epic | Since |
 |---|---|---|---|
-| (none) | | | |
+| @tom | 013+015+016 -- RAG Pipeline (implementing) | 004 | 2026-08-26 |
 
 ## Recently completed
 
@@ -30,13 +30,14 @@ Last updated: 2026-08-26
 
 ### database
 
-- 013 -- Set up SurrealDB schema for documents and embeddings (@tom, medium)
+- 013 -- Set up SurrealDB schema (in-progress, part of RAG pipeline)
+- 023 -- Add SurrealDB import/export for embeddings (@tom, medium) -- after RAG pipeline
 
 ### rag-agent / mcp-services
 
-- 014 -- Implement web scrape endpoint using Playwright MCP (@tom, medium)
-- 015 -- Implement file upload endpoint for HTML, TXT, MD, PDF (@tom, medium)
-- 016 -- Implement RAG chat endpoint with swappable LLM backend (@tom, high)
+- 014 -- Implement web scrape endpoint using Playwright MCP (@tom, medium) -- deferred
+- 015 -- File upload endpoint for TXT/MD (in-progress, part of RAG pipeline)
+- 016 -- RAG chat endpoint with swappable LLM (in-progress, part of RAG pipeline)
 
 ### llm-observability
 
@@ -49,7 +50,7 @@ Last updated: 2026-08-26
 
 ## Numbering
 
-Next free backlog/epic/task number: **023**
+Next free backlog/epic/task number: **024**
 
 <!-- Increment every time a numbered item is created in backlog/,
      in-progress/, epics/, or done/. Numbers are never reused. -->

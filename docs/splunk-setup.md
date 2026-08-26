@@ -30,12 +30,19 @@ Observability Cloud for the observability-test RAG Agent stack.
 12. [Tutorial: SurrealDB transaction performance chart](#12-tutorial-surrealdb-transaction-performance-chart)
 13. [Tutorial: SurrealDB HTTP and network chart](#13-tutorial-surrealdb-http-and-network-chart)
 
+### RAG Pipeline Observability
+
+14. [Tutorial: RAG upload pipeline chart](#14-tutorial-rag-upload-pipeline-chart)
+15. [Tutorial: RAG chat pipeline chart](#15-tutorial-rag-chat-pipeline-chart)
+16. [Tutorial: Embedding and LLM token usage chart](#16-tutorial-embedding-and-llm-token-usage-chart)
+17. [Tutorial: RAG error rate detector](#17-tutorial-rag-error-rate-detector)
+
 ### Alerts and Operations
 
-14. [Create detectors (alerts)](#14-create-detectors-alerts)
-15. [Dashboard best practices](#15-dashboard-best-practices)
-16. [Next steps](#16-next-steps)
-17. [Quick reference](#17-quick-reference)
+18. [Create detectors (alerts)](#18-create-detectors-alerts)
+19. [Dashboard best practices](#19-dashboard-best-practices)
+20. [Next steps](#20-next-steps)
+21. [Quick reference](#21-quick-reference)
 
 ---
 
@@ -602,7 +609,174 @@ D = data('surrealdb.network.sent', filter=filter('service.name', 'surrealdb')).r
 
 ---
 
-## 14. Create detectors (alerts)
+## 14. Tutorial: RAG upload pipeline chart
+
+> **What:** Duration breakdown of the file upload pipeline -- how long
+> chunking, embedding, and database insertion take for each upload.
+> **Why:** Identifies which step is the bottleneck (usually embedding).
+> **How:** Uses custom spans from the upload route: `upload.pipeline`,
+> `upload.chunk`, `embeddings.embedTexts`, `db.insertDocument`,
+> `db.insertChunks`.
+
+### Finding upload traces
+
+1. Navigate to **APM > Traces**.
+2. Filter by `sf_service` = `rag-api` and `sf_operation` contains `upload`.
+3. Click a trace to see the waterfall view.
+
+### Builder tab (upload latency by step)
+
+1. Click **Create (+) > Chart**.
+2. In **Data selection** for variable **A**, select `spans`.
+3. In **Analytics**, select **Median**.
+4. In **Filter**, add:
+   - `sf_service` = `rag-api`
+   - `sf_operation` = `upload.pipeline`
+5. Click **Add plot** for variable **B**: same metric, filter
+   `sf_operation` = `embeddings.embedTexts`.
+6. Click **Add plot** for variable **C**: same metric, filter
+   `sf_operation` = `db.insertChunks`.
+7. In **Configuration**:
+   - **Chart title:** `RAG Upload Pipeline Latency`
+   - **Visualization type:** `Line`
+8. Click **Save**.
+
+### SignalFlow tab
+
+```signalflow
+filter_ = filter('sf_service', 'rag-api') and filter('sf_environment', 'dev')
+A = histogram('spans', filter=filter_ and filter('sf_operation', 'upload.pipeline')).median().publish(label='Total Upload')
+B = histogram('spans', filter=filter_ and filter('sf_operation', 'embeddings.embedTexts')).median().publish(label='Embedding')
+C = histogram('spans', filter=filter_ and filter('sf_operation', 'db.insertChunks')).median().publish(label='DB Insert')
+```
+
+---
+
+## 15. Tutorial: RAG chat pipeline chart
+
+> **What:** Duration breakdown of the chat pipeline -- query embedding,
+> vector search, document fetch, and LLM completion.
+> **Why:** Shows where chat latency comes from. LLM completion is usually
+> the slowest step; vector search should be fast.
+> **How:** Uses custom spans from the chat route: `chat.pipeline`,
+> `embeddings.embedTexts`, `db.vectorSearch`, `llm.chatCompletion`.
+
+### Builder tab (chat latency by step)
+
+1. Click **Create (+) > Chart**.
+2. Variable **A**: `spans`, Analytics = **Median**, Filter =
+   `sf_service` = `rag-api`, `sf_operation` = `chat.pipeline`.
+3. Variable **B**: same, `sf_operation` = `embeddings.embedTexts`.
+4. Variable **C**: same, `sf_operation` = `db.vectorSearch`.
+5. Variable **D**: same, `sf_operation` = `llm.chatCompletion`.
+6. In **Configuration**:
+   - **Chart title:** `RAG Chat Pipeline Latency`
+   - **Visualization type:** `Line`
+7. Click **Save**.
+
+### SignalFlow tab
+
+```signalflow
+filter_ = filter('sf_service', 'rag-api') and filter('sf_environment', 'dev')
+A = histogram('spans', filter=filter_ and filter('sf_operation', 'chat.pipeline')).median().publish(label='Total Chat')
+B = histogram('spans', filter=filter_ and filter('sf_operation', 'embeddings.embedTexts')).median().publish(label='Query Embedding')
+C = histogram('spans', filter=filter_ and filter('sf_operation', 'db.vectorSearch')).median().publish(label='Vector Search')
+D = histogram('spans', filter=filter_ and filter('sf_operation', 'llm.chatCompletion')).median().publish(label='LLM Completion')
+```
+
+---
+
+## 16. Tutorial: Embedding and LLM token usage chart
+
+> **What:** Track token consumption for embedding and LLM API calls.
+> **Why:** Tokens directly translate to API cost. Monitoring usage helps
+> control spending and detect anomalies (e.g. unexpectedly large prompts).
+> **How:** Custom span attributes `gen_ai.usage.prompt_tokens` and
+> `gen_ai.usage.completion_tokens` are set on embedding and LLM spans.
+> These appear as span tags in Splunk APM.
+
+### Using Tag Spotlight
+
+1. Navigate to **APM > Tag Spotlight**.
+2. Set **Service** = `rag-api`, **Environment** = `dev`.
+3. Search for tag `gen_ai.usage.prompt_tokens`.
+4. This shows the distribution of token counts across requests.
+
+### Using Trace Analyzer
+
+1. Navigate to **APM > Traces**.
+2. Filter by `sf_service` = `rag-api`.
+3. Click any chat trace.
+4. In the waterfall, click the `llm.chatCompletion` span.
+5. In the span details panel, look for:
+   - `gen_ai.usage.prompt_tokens`
+   - `gen_ai.usage.completion_tokens`
+   - `gen_ai.request.model`
+   - `gen_ai.response.finish_reason`
+
+### Custom chart (requires Troubleshooting MetricSets)
+
+To chart token usage over time, you need to index the `gen_ai.*` span
+tags as Troubleshooting MetricSets (TMS):
+
+1. Navigate to **APM > APM Configuration > Troubleshooting MetricSets**.
+2. Click **+ New MetricSet Rule**.
+3. **Service:** `rag-api`
+4. **Span tags to index:** `gen_ai.usage.prompt_tokens`,
+   `gen_ai.usage.completion_tokens`
+5. Click **Save**.
+
+Once indexed (takes a few minutes), you can create charts using:
+
+```signalflow
+A = histogram('spans', filter=filter('sf_service', 'rag-api') and filter('sf_operation', 'llm.chatCompletion')).sum(by=['gen_ai.usage.prompt_tokens']).publish(label='Prompt Tokens')
+```
+
+---
+
+## 17. Tutorial: RAG error rate detector
+
+> **What:** Alert when the RAG pipeline has elevated error rates,
+> specifically for embedding API or LLM API failures.
+> **Why:** External API failures (rate limits, auth issues, outages)
+> directly break the RAG pipeline. Early detection prevents user impact.
+> **How:** Monitor error rate on the upload and chat endpoints.
+
+### Upload error detector
+
+1. Click **Create (+) > Detector**.
+2. **Name:** `RAG Upload -- Error Rate`
+3. **Signal:** Use SignalFlow:
+
+```signalflow
+errors = histogram('service.request', filter=filter('sf_service', 'rag-api') and filter('sf_operation', 'POST /api/upload') and filter('sf_error', 'true')).count()
+total = histogram('service.request', filter=filter('sf_service', 'rag-api') and filter('sf_operation', 'POST /api/upload')).count()
+(errors / total * 100).publish(label='Upload Error Rate %')
+```
+
+4. **Condition:** Static threshold -- above 10% for 5 minutes
+5. **Severity:** Warning
+6. Add notification, click **Activate**.
+
+### Chat error detector
+
+1. Click **Create (+) > Detector**.
+2. **Name:** `RAG Chat -- Error Rate`
+3. **Signal:** Use SignalFlow:
+
+```signalflow
+errors = histogram('service.request', filter=filter('sf_service', 'rag-api') and filter('sf_operation', 'POST /api/chat') and filter('sf_error', 'true')).count()
+total = histogram('service.request', filter=filter('sf_service', 'rag-api') and filter('sf_operation', 'POST /api/chat')).count()
+(errors / total * 100).publish(label='Chat Error Rate %')
+```
+
+4. **Condition:** Static threshold -- above 10% for 5 minutes
+5. **Severity:** Warning
+6. Add notification, click **Activate**.
+
+---
+
+## 18. Create detectors (alerts)
 
 > **What:** A detector monitors a signal and triggers alerts when a
 > condition is met.
@@ -611,7 +785,7 @@ D = data('surrealdb.network.sent', filter=filter('service.name', 'surrealdb')).r
 > **How:** Detectors evaluate SignalFlow streams against conditions over
 > time and generate events/notifications.
 
-### 14.1 Service-down detector
+### 18.1 Service-down detector
 
 1. Navigate to **APM > Service map**.
 2. Click the `rag-api` service node.
@@ -625,7 +799,7 @@ D = data('surrealdb.network.sent', filter=filter('service.name', 'surrealdb')).r
 9. Add a notification (email, Slack, PagerDuty, etc.)
 10. Click **Activate**.
 
-### 14.2 Error rate spike detector
+### 18.2 Error rate spike detector
 
 1. From the service map or a dashboard chart, click the **bell icon** on
    the error rate chart.
@@ -640,7 +814,7 @@ D = data('surrealdb.network.sent', filter=filter('service.name', 'surrealdb')).r
 7. **Severity:** Warning or Critical
 8. Add notification, click **Activate**.
 
-### 14.3 High latency detector
+### 18.3 High latency detector
 
 1. From a dashboard, click the **bell icon** on a latency chart.
 2. Select **New Detector From Chart**.
@@ -659,7 +833,7 @@ D = data('surrealdb.network.sent', filter=filter('service.name', 'surrealdb')).r
 | **Sudden change** | Detect abrupt changes regardless of absolute value |
 | **Historical anomaly** | Detect deviation from normal historical patterns |
 
-### 14.4 SurrealDB high memory detector
+### 18.4 SurrealDB high memory detector
 
 1. Click **Create (+) > Detector**.
 2. **Name:** `SurrealDB -- High Memory`
@@ -680,7 +854,7 @@ enable them.
 
 ---
 
-## 15. Dashboard best practices
+## 19. Dashboard best practices
 
 | Area | Guidance |
 |---|---|
@@ -696,7 +870,7 @@ enable them.
 
 ---
 
-## 16. Next steps
+## 20. Next steps
 
 | Task | Description | Backlog |
 |---|---|---|
@@ -709,7 +883,7 @@ enable them.
 
 ---
 
-## 17. Quick reference
+## 21. Quick reference
 
 | Action | Where |
 |---|---|
@@ -728,4 +902,4 @@ enable them.
 
 ---
 
-*Last updated: 2026-08-25*
+*Last updated: 2026-08-26*

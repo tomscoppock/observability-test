@@ -3,6 +3,8 @@
 const express = require('express');
 const cors = require('cors');
 const logger = require('./logger');
+const uploadRouter = require('./routes/upload');
+const chatRouter = require('./routes/chat');
 
 const app = express();
 const PORT = process.env.PORT || 3000;
@@ -22,26 +24,11 @@ app.get('/health', (_req, res) => {
   res.json({ status: 'ok' });
 });
 
-/**
- * Stub chat endpoint.
- * Accepts { message: string } and returns a placeholder response.
- * The real RAG implementation comes in task 016.
- */
-app.post('/api/chat', (req, res) => {
-  const { message } = req.body;
+// File upload (multipart/form-data) -- chunking, embedding, storage
+app.use(uploadRouter);
 
-  if (!message || typeof message !== 'string') {
-    logger.warn('Invalid chat request', { reason: 'missing or non-string message' });
-    return res.status(400).json({ error: 'message is required and must be a string' });
-  }
-
-  logger.info('Chat request received', { messageLength: message.length });
-
-  // Stub response -- will be replaced by LLM call in Epic 004.
-  res.json({
-    reply: `[stub] You said: "${message}". LLM integration coming in Epic 004.`,
-  });
-});
+// RAG chat -- embed query, vector search, LLM completion
+app.use(chatRouter);
 
 // ---------------------------------------------------------------------------
 // Error-handling middleware (must be registered AFTER all routes)
@@ -60,6 +47,12 @@ app.use((err, req, res, _next) => {
       path: req.originalUrl,
     });
     return res.status(400).json({ error: 'Invalid JSON in request body' });
+  }
+
+  // Multer file size limit
+  if (err.code === 'LIMIT_FILE_SIZE') {
+    logger.warn('File too large', { method: req.method, path: req.originalUrl });
+    return res.status(413).json({ error: 'File too large. Maximum size is 5 MB.' });
   }
 
   // All other unhandled errors

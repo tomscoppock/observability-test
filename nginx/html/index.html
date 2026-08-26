@@ -9,21 +9,27 @@
 <body>
   <div id="app">
     <header>
-      <h1>RAG Chat</h1>
+      <h1>HR Policy Chat</h1>
       <p class="subtitle">Observability Test Project</p>
     </header>
 
     <div id="messages" aria-live="polite" aria-label="Chat messages">
       <div class="message system">
-        Welcome! Type a message below to chat. LLM integration coming in Epic 004.
+        Welcome! Drag and drop HR policy files (.txt, .md) into this area to upload them, then ask questions about company policies.
       </div>
+    </div>
+
+    <div id="drop-zone" class="drop-zone" aria-label="File drop zone">
+      <p>Drag files here to upload, or <label for="file-input" class="file-label">browse</label></p>
+      <input type="file" id="file-input" multiple accept=".txt,.md" hidden>
+      <p class="drop-hint">Accepted: .txt, .md (max 5 MB each)</p>
     </div>
 
     <form id="chat-form" autocomplete="off">
       <input
         type="text"
         id="message-input"
-        placeholder="Type a message..."
+        placeholder="Ask about company policies..."
         aria-label="Message input"
         required
       >

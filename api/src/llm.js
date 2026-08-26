@@ -1,0 +1,97 @@
+'use strict';
+
+/**
+ * LLM completions API client.
+ *
+ * Calls an OpenAI-compatible chat completions endpoint.  Each call is
+ * wrapped in an OTel span with gen_ai.* attributes for observability.
+ *
+ * Configuration (env vars):
+ *   LLM_API_BASE_URL  -- e.g. https://api.openai.com/v1
+ *   LLM_API_KEY       -- API key (Bearer token)
+ *   LLM_MODEL         -- e.g. gpt-4o-mini
+ */
+
+const { trace } = require('@opentelemetry/api');
+const logger = require('./logger');
+
+const tracer = trace.getTracer('rag-api.llm', '0.1.0');
+
+/**
+ * Send a chat completion request to the LLM.
+ *
+ * @param {{ role: string, content: string }[]} messages  Chat messages array.
+ * @returns {Promise<{ content: string, promptTokens: number, completionTokens: number }>}
+ */
+async function chatCompletion(messages) {
+  return tracer.startActiveSpan('llm.chatCompletion', async (span) => {
+    const baseUrl = process.env.LLM_API_BASE_URL || 'https://api.openai.com/v1';
+    const apiKey = process.env.LLM_API_KEY || '';
+    const model = process.env.LLM_MODEL || 'gpt-4o-mini';
+
+    span.setAttributes({
+      'gen_ai.system': 'openai',
+      'gen_ai.request.model': model,
+      'gen_ai.operation.name': 'chat',
+      'gen_ai.request.message_count': messages.length,
+    });
+
+    try {
+      const url = `${baseUrl}/chat/completions`;
+      const body = JSON.stringify({
+        model,
+        messages,
+        temperature: 0.3,
+      });
+
+      logger.debug('Calling LLM API', { url, model, messageCount: messages.length });
+
+      const res = await fetch(url, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          ...(apiKey && { Authorization: `Bearer ${apiKey}` }),
+        },
+        body,
+      });
+
+      if (!res.ok) {
+        const errBody = await res.text();
+        throw new Error(`LLM API returned ${res.status}: ${errBody}`);
+      }
+
+      const data = await res.json();
+      const choice = data.choices?.[0];
+      const content = choice?.message?.content || '';
+
+      const promptTokens = data.usage?.prompt_tokens ?? 0;
+      const completionTokens = data.usage?.completion_tokens ?? 0;
+
+      span.setAttributes({
+        'gen_ai.response.model': data.model || model,
+        'gen_ai.usage.prompt_tokens': promptTokens,
+        'gen_ai.usage.completion_tokens': completionTokens,
+        'gen_ai.response.finish_reason': choice?.finish_reason || 'unknown',
+      });
+      span.setStatus({ code: 1 });
+
+      logger.info('LLM completion received', {
+        model: data.model || model,
+        promptTokens,
+        completionTokens,
+        finishReason: choice?.finish_reason,
+      });
+
+      return { content, promptTokens, completionTokens };
+    } catch (err) {
+      span.setStatus({ code: 2, message: err.message });
+      span.recordException(err);
+      logger.error('LLM API call failed', { error: err.message });
+      throw err;
+    } finally {
+      span.end();
+    }
+  });
+}
+
+module.exports = { chatCompletion };

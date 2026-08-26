@@ -21,8 +21,8 @@ body {
 
 #app {
   width: 100%;
-  max-width: 640px;
-  height: 90vh;
+  max-width: 720px;
+  height: 95vh;
   display: flex;
   flex-direction: column;
   background: #fff;
@@ -61,10 +61,11 @@ header .subtitle {
 .message {
   padding: 10px 14px;
   border-radius: 8px;
-  max-width: 80%;
+  max-width: 85%;
   word-wrap: break-word;
   line-height: 1.4;
   font-size: 0.9rem;
+  white-space: pre-wrap;
 }
 
 .message.user {
@@ -93,6 +94,66 @@ header .subtitle {
   background: #fce8e6;
   color: #c5221f;
   font-size: 0.85rem;
+}
+
+.message.upload {
+  align-self: center;
+  background: #e8f5e9;
+  color: #2e7d32;
+  font-size: 0.85rem;
+  font-style: italic;
+}
+
+/* Source citations in assistant messages */
+.sources {
+  margin-top: 10px;
+  padding-top: 8px;
+  border-top: 1px solid #ccc;
+  font-size: 0.8rem;
+  color: #666;
+}
+
+.sources ul {
+  margin: 4px 0 0 16px;
+  padding: 0;
+}
+
+.sources li {
+  margin-bottom: 2px;
+}
+
+/* Drop zone */
+.drop-zone {
+  padding: 12px;
+  text-align: center;
+  background: #f8f9fa;
+  border: 2px dashed #ccc;
+  border-radius: 6px;
+  margin: 0 12px;
+  transition: background 0.2s, border-color 0.2s;
+  cursor: pointer;
+}
+
+.drop-zone.drag-over {
+  background: #e3f2fd;
+  border-color: #1a73e8;
+}
+
+.drop-zone p {
+  font-size: 0.85rem;
+  color: #666;
+  margin: 2px 0;
+}
+
+.drop-zone .drop-hint {
+  font-size: 0.75rem;
+  color: #999;
+}
+
+.drop-zone .file-label {
+  color: #1a73e8;
+  cursor: pointer;
+  text-decoration: underline;
 }
 
 #chat-form {
