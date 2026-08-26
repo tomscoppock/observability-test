@@ -180,7 +180,7 @@ Epic 002 by adding exporters to `otel-collector-config.yaml`.
 ### API health
 
 ```bash
-curl http://localhost/api/health
+curl http://localhost/health
 # {"status":"ok"}
 ```
 

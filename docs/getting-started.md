@@ -54,7 +54,7 @@ This pulls/builds all images and starts 4 services:
 docker compose ps
 
 # Test the health endpoint
-curl http://localhost/api/health
+curl http://localhost/health
 # Expected: {"status":"ok"}
 
 # Test the stub chat endpoint
@@ -72,7 +72,7 @@ curl -X POST http://localhost/api/chat \
 docker compose ps
 
 # Test the health endpoint
-curl.exe http://localhost/api/health
+curl.exe http://localhost/health
 
 # Test the stub chat endpoint
 curl.exe -X POST http://localhost/api/chat `
