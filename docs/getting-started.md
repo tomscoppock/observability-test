@@ -22,8 +22,10 @@ cd observability-test
 cp .env.example .env
 ```
 
-Edit `.env` with your actual values. At minimum, for the stub phase you
-only need the defaults -- no API keys required until Epic 004 (RAG chat).
+Edit `.env` with your actual values. You need at minimum:
+- `EMBEDDING_API_KEY` and `LLM_API_KEY` for the RAG chat pipeline.
+- For Azure OpenAI, set the base URLs to include your deployment name.
+  See [Configuration](configuration.md#azure-openai) for details.
 
 ### 3. Start Docker Desktop
 

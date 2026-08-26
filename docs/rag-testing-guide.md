@@ -14,8 +14,11 @@ end-to-end, including file upload, chat, and observability verification.
    ```
 
 2. **API keys configured** in `.env`:
-   - `EMBEDDING_API_KEY` -- for the embedding model (e.g. OpenAI)
-   - `LLM_API_KEY` -- for the chat completion model (e.g. OpenAI)
+   - `EMBEDDING_API_KEY` -- for the embedding model (OpenAI or Azure OpenAI)
+   - `LLM_API_KEY` -- for the chat completion model (OpenAI or Azure OpenAI)
+   - For Azure OpenAI, also set `EMBEDDING_API_BASE_URL` and
+     `LLM_API_BASE_URL` to include `/openai/deployments/{name}`.
+     See [Configuration](configuration.md#azure-openai) for details.
 
 3. **Splunk Observability Cloud** configured (optional, for trace
    verification):

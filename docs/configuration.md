@@ -9,7 +9,7 @@ Copy `.env.example` to `.env` and fill in your values.
 
 | Variable | Default | Description |
 |---|---|---|
-| `LLM_PROVIDER` | `openai` | Provider name: `openai`, `gemma`, `qwen` |
+| `LLM_PROVIDER` | `openai` | Provider name: `openai`, `azure`, `gemma`, `qwen` |
 | `LLM_API_BASE_URL` | `https://api.openai.com/v1` | Base URL for the OpenAI-compatible API |
 | `LLM_API_KEY` | (empty) | API key for the LLM provider |
 | `LLM_MODEL` | `gpt-4o-mini` | Model name to use |
@@ -21,6 +21,19 @@ Copy `.env.example` to `.env` and fill in your values.
 | `EMBEDDING_API_BASE_URL` | `https://api.openai.com/v1` | Base URL for embedding API |
 | `EMBEDDING_API_KEY` | (empty) | API key for embedding provider |
 | `EMBEDDING_MODEL` | `text-embedding-3-small` | Embedding model name |
+
+### Azure OpenAI
+
+| Variable | Default | Description |
+|---|---|---|
+| `AZURE_API_VERSION` | `2024-10-21` | Azure OpenAI API version (appended as `?api-version=`) |
+
+Azure endpoints are **auto-detected** by URL pattern: if the base URL
+contains `.openai.azure.com` or `.cognitiveservices.azure.com`, the code
+automatically uses the `api-key` header (instead of `Authorization:
+Bearer`) and appends the `api-version` query parameter. No code changes
+are needed -- just set the correct base URL format (see
+[Swapping LLM providers](#azure-openai) below).
 
 ### SurrealDB
 
@@ -101,12 +114,43 @@ LLM_MODEL=qwen2.5:7b
 
 ### Azure OpenAI
 
+Azure OpenAI uses a different URL format and auth header. The code
+auto-detects Azure endpoints by URL pattern -- no `LLM_PROVIDER` change
+is needed, but setting it to `azure` is recommended for clarity.
+
+The base URL must include `/openai/deployments/{deployment-name}`. The
+code appends `/chat/completions` or `/embeddings` and the `?api-version=`
+query parameter automatically.
+
 ```env
-LLM_PROVIDER=openai
-LLM_API_BASE_URL=https://YOUR-RESOURCE.openai.azure.com/openai/deployments/YOUR-DEPLOYMENT
-LLM_API_KEY=your-azure-key
+# --- LLM ---
+LLM_PROVIDER=azure
+LLM_API_BASE_URL=https://YOUR-RESOURCE.openai.azure.com/openai/deployments/YOUR-LLM-DEPLOYMENT
+LLM_API_KEY=your-azure-api-key
 LLM_MODEL=gpt-4o-mini
+
+# --- Embeddings ---
+EMBEDDING_API_BASE_URL=https://YOUR-RESOURCE.openai.azure.com/openai/deployments/YOUR-EMBEDDING-DEPLOYMENT
+EMBEDDING_API_KEY=your-azure-api-key
+EMBEDDING_MODEL=text-embedding-3-large
+
+# --- Azure API version (optional, defaults to 2024-10-21) ---
+# AZURE_API_VERSION=2024-10-21
 ```
+
+> **Important:** Do NOT include `/embeddings`, `/chat/completions`, or
+> `?api-version=` in the base URL -- the code adds these automatically.
+> For example, use:
+>
+> ```
+> https://ai-core-llms.openai.azure.com/openai/deployments/text-embedding-3-large
+> ```
+>
+> Not:
+>
+> ```
+> https://ai-core-llms.openai.azure.com/openai/deployments/text-embedding-3-large/embeddings?api-version=2024-10-21
+> ```
 
 After changing `.env`, restart the API:
 
