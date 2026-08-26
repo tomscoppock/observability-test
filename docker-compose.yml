@@ -31,6 +31,7 @@ services:
       - EMBEDDING_API_BASE_URL=${EMBEDDING_API_BASE_URL:-https://api.openai.com/v1}
       - EMBEDDING_API_KEY=${EMBEDDING_API_KEY:-}
       - EMBEDDING_MODEL=${EMBEDDING_MODEL:-text-embedding-3-small}
+      - AZURE_API_VERSION=${AZURE_API_VERSION:-2024-10-21}
       - SURREAL_URL=${SURREAL_URL:-http://surrealdb:8000}
       - SURREAL_USER=${SURREAL_USER:-root}
       - SURREAL_PASS=${SURREAL_PASS:-root}

@@ -3,17 +3,21 @@
 /**
  * LLM completions API client.
  *
- * Calls an OpenAI-compatible chat completions endpoint.  Each call is
- * wrapped in an OTel span with gen_ai.* attributes for observability.
+ * Calls an OpenAI-compatible or Azure OpenAI chat completions endpoint.
+ * Each call is wrapped in an OTel span with gen_ai.* attributes for
+ * observability.
  *
  * Configuration (env vars):
- *   LLM_API_BASE_URL  -- e.g. https://api.openai.com/v1
- *   LLM_API_KEY       -- API key (Bearer token)
- *   LLM_MODEL         -- e.g. gpt-4o-mini
+ *   LLM_API_BASE_URL   -- e.g. https://api.openai.com/v1
+ *                         or https://{resource}.openai.azure.com/openai/deployments/{deployment}
+ *   LLM_API_KEY        -- API key (Bearer token or Azure api-key)
+ *   LLM_MODEL          -- e.g. gpt-4o-mini
+ *   AZURE_API_VERSION   -- Azure OpenAI API version (default: 2024-10-21)
  */
 
 const { trace } = require('@opentelemetry/api');
 const logger = require('./logger');
+const { buildUrl, buildHeaders } = require('./api-client');
 
 const tracer = trace.getTracer('rag-api.llm', '0.1.0');
 
@@ -37,7 +41,8 @@ async function chatCompletion(messages) {
     });
 
     try {
-      const url = `${baseUrl}/chat/completions`;
+      const url = buildUrl(baseUrl, 'chat/completions');
+      const headers = buildHeaders(baseUrl, apiKey);
       const body = JSON.stringify({
         model,
         messages,
@@ -48,10 +53,7 @@ async function chatCompletion(messages) {
 
       const res = await fetch(url, {
         method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          ...(apiKey && { Authorization: `Bearer ${apiKey}` }),
-        },
+        headers,
         body,
       });
 

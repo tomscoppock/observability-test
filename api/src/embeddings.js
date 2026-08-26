@@ -3,18 +3,21 @@
 /**
  * Embedding API client.
  *
- * Calls an OpenAI-compatible embeddings endpoint to generate vector
- * representations of text.  Each call is wrapped in an OTel span with
- * gen_ai.* attributes for observability.
+ * Calls an OpenAI-compatible or Azure OpenAI embeddings endpoint to
+ * generate vector representations of text.  Each call is wrapped in an
+ * OTel span with gen_ai.* attributes for observability.
  *
  * Configuration (env vars):
  *   EMBEDDING_API_BASE_URL  -- e.g. https://api.openai.com/v1
- *   EMBEDDING_API_KEY       -- API key (Bearer token)
+ *                              or https://{resource}.openai.azure.com/openai/deployments/{deployment}
+ *   EMBEDDING_API_KEY       -- API key (Bearer token or Azure api-key)
  *   EMBEDDING_MODEL         -- e.g. text-embedding-3-small
+ *   AZURE_API_VERSION       -- Azure OpenAI API version (default: 2024-10-21)
  */
 
 const { trace } = require('@opentelemetry/api');
 const logger = require('./logger');
+const { buildUrl, buildHeaders } = require('./api-client');
 
 const tracer = trace.getTracer('rag-api.embeddings', '0.1.0');
 
@@ -38,7 +41,8 @@ async function embedTexts(texts) {
     });
 
     try {
-      const url = `${baseUrl}/embeddings`;
+      const url = buildUrl(baseUrl, 'embeddings');
+      const headers = buildHeaders(baseUrl, apiKey);
       const body = JSON.stringify({
         model,
         input: texts,
@@ -53,10 +57,7 @@ async function embedTexts(texts) {
 
       const res = await fetch(url, {
         method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          ...(apiKey && { Authorization: `Bearer ${apiKey}` }),
-        },
+        headers,
         body,
       });
 
