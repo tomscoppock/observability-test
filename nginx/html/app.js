@@ -32,6 +32,19 @@ function appendMessage(text, role, isHtml) {
   }
   messagesEl.appendChild(div);
   messagesEl.scrollTop = messagesEl.scrollHeight;
+  return div;
+}
+
+/**
+ * Show a "thinking..." indicator and return a function to remove it.
+ * @param {string} [text='Thinking...']
+ * @returns {function} Call to remove the indicator.
+ */
+function showThinking(text) {
+  var div = appendMessage(text || 'Thinking...', 'thinking');
+  return function () {
+    if (div.parentNode) div.parentNode.removeChild(div);
+  };
 }
 
 /**
@@ -83,6 +96,7 @@ async function sendMessage(message) {
   appendMessage(message, 'user');
   input.value = '';
   sendBtn.disabled = true;
+  var hideThinking = showThinking('Thinking...');
 
   try {
     var res = await fetch('/api/chat', {
@@ -102,6 +116,7 @@ async function sendMessage(message) {
   } catch (err) {
     appendMessage('Error: ' + err.message, 'error');
   } finally {
+    hideThinking();
     sendBtn.disabled = false;
     input.focus();
   }
@@ -123,6 +138,7 @@ async function uploadFiles(files) {
     names.push(files[i].name);
   }
   appendMessage('Uploading ' + files.length + ' file(s): ' + names.join(', '), 'upload');
+  var hideThinking = showThinking('Processing files...');
 
   try {
     var formData = new FormData();
@@ -159,6 +175,8 @@ async function uploadFiles(files) {
     appendMessage(summary + '\n' + messages.join('\n'), 'system');
   } catch (err) {
     appendMessage('Upload error: ' + err.message, 'error');
+  } finally {
+    hideThinking();
   }
 }
 
