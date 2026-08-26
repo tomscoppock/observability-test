@@ -31,6 +31,7 @@ services:
       - EMBEDDING_API_BASE_URL=${EMBEDDING_API_BASE_URL:-https://api.openai.com/v1}
       - EMBEDDING_API_KEY=${EMBEDDING_API_KEY:-}
       - EMBEDDING_MODEL=${EMBEDDING_MODEL:-text-embedding-3-small}
+      - EMBEDDING_DIMENSIONS=${EMBEDDING_DIMENSIONS:-3072}
       - AZURE_API_VERSION=${AZURE_API_VERSION:-2024-10-21}
       - SURREAL_URL=${SURREAL_URL:-http://surrealdb:8000}
       - SURREAL_USER=${SURREAL_USER:-root}
@@ -45,6 +46,8 @@ services:
         condition: service_started
       otel-collector:
         condition: service_started
+    volumes:
+      - ./db:/app/db:ro
     healthcheck:
       test: ["CMD", "wget", "-qO-", "http://127.0.0.1:3000/health"]
       interval: 10s

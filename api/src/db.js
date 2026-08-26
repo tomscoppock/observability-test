@@ -1,11 +1,17 @@
 'use strict';
 
 /**
- * SurrealDB client module.
+ * SurrealDB client module (SDK v2).
  *
- * Provides a singleton connection to SurrealDB with lazy initialisation.
- * On first connect the schema from db/schema.surql is applied (idempotent
- * IF NOT EXISTS statements).
+ * Provides a singleton WebSocket connection to SurrealDB with lazy
+ * initialisation.  On first connect the schema from db/schema.surql is
+ * applied (idempotent IF NOT EXISTS statements).
+ *
+ * SDK v2 API:
+ *   - Surreal is a named export (not default)
+ *   - connect() requires ws:// (WebSocket), not http://
+ *   - CRUD goes through a session: surreal.newSession()
+ *   - session.query() is the most reliable method (returns [[rows]])
  *
  * All public functions are wrapped in OTel spans so every DB operation
  * appears in Splunk APM traces.
@@ -22,8 +28,10 @@ const tracer = trace.getTracer('rag-api.db', '0.1.0');
 // Singleton state
 // ---------------------------------------------------------------------------
 
-/** @type {import('surrealdb').default | null} */
-let _db = null;
+/** @type {object | null} Surreal instance */
+let _surreal = null;
+/** @type {object | null} SurrealSession (has query/create/select) */
+let _session = null;
 let _ready = false;
 
 // ---------------------------------------------------------------------------
@@ -32,19 +40,21 @@ let _ready = false;
 
 /**
  * Connect to SurrealDB (singleton).  On first call the schema is applied.
- * Subsequent calls return the cached client.
+ * Subsequent calls return the cached session.
  *
- * @returns {Promise<import('surrealdb').default>}
+ * @returns {Promise<object>} The SurrealDB session with query/create/select.
  */
 async function connect() {
-  if (_db && _ready) return _db;
+  if (_session && _ready) return _session;
 
   return tracer.startActiveSpan('db.connect', async (span) => {
     try {
-      // Dynamic import -- surrealdb is ESM-only in v2
-      const { default: Surreal } = await import('surrealdb');
+      // Dynamic import -- surrealdb is ESM-only in v2 (named export)
+      const { Surreal } = await import('surrealdb');
 
-      const url = process.env.SURREAL_URL || 'http://surrealdb:8000';
+      // Convert http:// to ws:// for WebSocket connection (SDK v2 requirement)
+      const rawUrl = process.env.SURREAL_URL || 'http://surrealdb:8000';
+      const url = rawUrl.replace(/^http:\/\//, 'ws://').replace(/^https:\/\//, 'wss://');
       const user = process.env.SURREAL_USER || 'root';
       const pass = process.env.SURREAL_PASS || 'root';
       const ns = process.env.SURREAL_NS || 'observability';
@@ -57,23 +67,27 @@ async function connect() {
         'db.name': db,
       });
 
-      _db = new Surreal();
-      await _db.connect(url);
-      await _db.signin({ username: user, password: pass });
-      await _db.use({ namespace: ns, database: db });
+      _surreal = new Surreal();
+      await _surreal.connect(url);
+
+      // Create a session for CRUD operations
+      _session = await _surreal.newSession();
+      await _session.signin({ username: user, password: pass });
+      await _session.use({ namespace: ns, database: db });
 
       logger.info('Connected to SurrealDB', { url, namespace: ns, database: db });
 
-      await applySchema(_db);
+      await applySchema();
       _ready = true;
 
       span.setStatus({ code: 1 }); // OK
-      return _db;
+      return _session;
     } catch (err) {
       span.setStatus({ code: 2, message: err.message }); // ERROR
       span.recordException(err);
       logger.error('SurrealDB connection failed', { error: err.message });
-      _db = null;
+      _surreal = null;
+      _session = null;
       _ready = false;
       throw err;
     } finally {
@@ -85,16 +99,25 @@ async function connect() {
 /**
  * Apply the schema file to the database.  All statements use
  * IF NOT EXISTS so this is safe to run on every startup.
- *
- * @param {import('surrealdb').default} db
  */
-async function applySchema(db) {
+async function applySchema() {
   return tracer.startActiveSpan('db.applySchema', async (span) => {
     try {
-      const schemaPath = path.resolve(__dirname, '../../db/schema.surql');
-      const sql = fs.readFileSync(schemaPath, 'utf-8');
-      await db.query(sql);
-      logger.info('SurrealDB schema applied');
+      // In Docker: /app/src -> /app/db/schema.surql (../db/schema.surql)
+      // Locally:   api/src  -> db/schema.surql (../../db/schema.surql)
+      let schemaPath = path.resolve(__dirname, '../db/schema.surql');
+      if (!fs.existsSync(schemaPath)) {
+        schemaPath = path.resolve(__dirname, '../../db/schema.surql');
+      }
+      let sql = fs.readFileSync(schemaPath, 'utf-8');
+
+      // Replace the dimension placeholder with the configured value
+      const dimensions = process.env.EMBEDDING_DIMENSIONS || '3072';
+      sql = sql.replace(/__EMBEDDING_DIMENSIONS__/g, dimensions);
+      span.setAttribute('db.embedding_dimensions', parseInt(dimensions, 10));
+
+      await _session.query(sql);
+      logger.info('SurrealDB schema applied', { embeddingDimensions: dimensions });
       span.setStatus({ code: 1 });
     } catch (err) {
       span.setStatus({ code: 2, message: err.message });
@@ -108,7 +131,7 @@ async function applySchema(db) {
 }
 
 // ---------------------------------------------------------------------------
-// CRUD helpers
+// CRUD helpers -- all use session.query() for reliable serialization
 // ---------------------------------------------------------------------------
 
 /**
@@ -120,8 +143,24 @@ async function applySchema(db) {
 async function insertDocument(doc) {
   return tracer.startActiveSpan('db.insertDocument', async (span) => {
     try {
-      const db = await connect();
-      const [result] = await db.create('documents', doc);
+      const session = await connect();
+      const [rows] = await session.query(
+        `CREATE documents SET
+           title = $title,
+           filename = $filename,
+           source_type = $source_type,
+           content_length = $content_length,
+           chunk_count = $chunk_count,
+           created_at = time::now()`,
+        {
+          title: doc.title,
+          filename: doc.filename,
+          source_type: doc.source_type || 'upload',
+          content_length: doc.content_length,
+          chunk_count: doc.chunk_count,
+        }
+      );
+      const result = rows[0];
       span.setAttribute('db.document.id', String(result.id));
       span.setStatus({ code: 1 });
       return result;
@@ -145,18 +184,26 @@ async function insertDocument(doc) {
 async function insertChunks(documentId, chunks) {
   return tracer.startActiveSpan('db.insertChunks', async (span) => {
     try {
-      const db = await connect();
+      const session = await connect();
       span.setAttribute('db.chunk_count', chunks.length);
 
       const results = [];
       for (const chunk of chunks) {
-        const [record] = await db.create('chunks', {
-          document: documentId,
-          text: chunk.text,
-          embedding: chunk.embedding,
-          chunk_index: chunk.chunkIndex,
-        });
-        results.push(record);
+        const [rows] = await session.query(
+          `CREATE chunks SET
+             document = $doc_id,
+             text = $text,
+             embedding = $embedding,
+             chunk_index = $chunk_index,
+             created_at = time::now()`,
+          {
+            doc_id: documentId,
+            text: chunk.text,
+            embedding: chunk.embedding,
+            chunk_index: chunk.chunkIndex,
+          }
+        );
+        results.push(rows[0]);
       }
 
       span.setStatus({ code: 1 });
@@ -177,24 +224,27 @@ async function insertChunks(documentId, chunks) {
  * Uses SurrealDB's vector search functions to find the top-K most
  * similar chunks to the query embedding.
  *
- * @param {number[]} queryEmbedding  The query vector (1536 dimensions).
+ * @param {number[]} queryEmbedding  The query vector.
  * @param {number} [topK=5]         Number of results to return.
  * @returns {Promise<object[]>}     Chunks with similarity scores.
  */
 async function vectorSearch(queryEmbedding, topK = 5) {
   return tracer.startActiveSpan('db.vectorSearch', async (span) => {
     try {
-      const db = await connect();
+      const session = await connect();
       span.setAttributes({
         'db.vector.dimensions': queryEmbedding.length,
         'db.vector.top_k': topK,
       });
 
-      // SurrealDB vector search using the MTREE index
-      const [results] = await db.query(
+      // SurrealDB 3.x HNSW vector search.
+      // Syntax: <|K, EF|> where EF is the search expansion factor
+      // (higher = more accurate but slower; default 150 is a good balance).
+      const ef = 150;
+      const [results] = await session.query(
         `SELECT *, vector::similarity::cosine(embedding, $query_vec) AS score
          FROM chunks
-         WHERE embedding <|${topK}|> $query_vec
+         WHERE embedding <|${topK},${ef}|> $query_vec
          ORDER BY score DESC`,
         { query_vec: queryEmbedding }
       );
@@ -221,10 +271,13 @@ async function vectorSearch(queryEmbedding, topK = 5) {
 async function getDocumentById(id) {
   return tracer.startActiveSpan('db.getDocumentById', async (span) => {
     try {
-      const db = await connect();
-      const result = await db.select(id);
+      const session = await connect();
+      const [rows] = await session.query(
+        'SELECT * FROM $id',
+        { id }
+      );
       span.setStatus({ code: 1 });
-      return result || null;
+      return rows[0] || null;
     } catch (err) {
       span.setStatus({ code: 2, message: err.message });
       span.recordException(err);
@@ -243,8 +296,10 @@ async function getDocumentById(id) {
 async function hasDocuments() {
   return tracer.startActiveSpan('db.hasDocuments', async (span) => {
     try {
-      const db = await connect();
-      const [results] = await db.query('SELECT count() AS total FROM documents GROUP ALL');
+      const session = await connect();
+      const [results] = await session.query(
+        'SELECT count() AS total FROM documents GROUP ALL'
+      );
       const total = results?.[0]?.total ?? 0;
       span.setAttribute('db.document_count', total);
       span.setStatus({ code: 1 });
@@ -261,7 +316,8 @@ async function hasDocuments() {
 
 // Expose for testing -- allows resetting the singleton
 function _reset() {
-  _db = null;
+  _surreal = null;
+  _session = null;
   _ready = false;
 }
 

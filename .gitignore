@@ -69,3 +69,6 @@ surreal-data/
 # --- Local scratch / experiment output ---
 /scratch/
 /tmp/
+
+# --- PowerShell artifacts ---
+$null

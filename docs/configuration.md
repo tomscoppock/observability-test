@@ -21,6 +21,7 @@ Copy `.env.example` to `.env` and fill in your values.
 | `EMBEDDING_API_BASE_URL` | `https://api.openai.com/v1` | Base URL for embedding API |
 | `EMBEDDING_API_KEY` | (empty) | API key for embedding provider |
 | `EMBEDDING_MODEL` | `text-embedding-3-small` | Embedding model name |
+| `EMBEDDING_DIMENSIONS` | `3072` | Output dimensions (must match MTREE index in `db/schema.surql`) |
 
 ### Azure OpenAI
 

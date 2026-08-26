@@ -31,10 +31,12 @@ DEFINE FIELD IF NOT EXISTS embedding  ON chunks TYPE array<float>;
 DEFINE FIELD IF NOT EXISTS chunk_index ON chunks TYPE int;
 DEFINE FIELD IF NOT EXISTS created_at ON chunks TYPE datetime DEFAULT time::now();
 
--- MTREE vector index for cosine similarity search
--- text-embedding-3-small produces 1536-dimensional vectors
+-- HNSW vector index for cosine similarity search (SurrealDB 3.x).
+-- The DIMENSION must match EMBEDDING_DIMENSIONS (env var).
+-- Common values: 1536 (text-embedding-3-small), 3072 (text-embedding-3-large).
+-- This file is a template: db.js replaces __EMBEDDING_DIMENSIONS__ at runtime.
 DEFINE INDEX IF NOT EXISTS idx_chunks_embedding
   ON chunks
   FIELDS embedding
-  MTREE DIMENSION 1536
+  HNSW DIMENSION __EMBEDDING_DIMENSIONS__
   DIST COSINE;

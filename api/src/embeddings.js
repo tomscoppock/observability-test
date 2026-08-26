@@ -12,6 +12,7 @@
  *                              or https://{resource}.openai.azure.com/openai/deployments/{deployment}
  *   EMBEDDING_API_KEY       -- API key (Bearer token or Azure api-key)
  *   EMBEDDING_MODEL         -- e.g. text-embedding-3-small
+ *   EMBEDDING_DIMENSIONS    -- output dimensions (e.g. 1536, 3072); omit to use model default
  *   AZURE_API_VERSION       -- Azure OpenAI API version (default: 2024-10-21)
  */
 
@@ -32,6 +33,9 @@ async function embedTexts(texts) {
     const baseUrl = process.env.EMBEDDING_API_BASE_URL || 'https://api.openai.com/v1';
     const apiKey = process.env.EMBEDDING_API_KEY || '';
     const model = process.env.EMBEDDING_MODEL || 'text-embedding-3-small';
+    const dimensions = process.env.EMBEDDING_DIMENSIONS
+      ? parseInt(process.env.EMBEDDING_DIMENSIONS, 10)
+      : undefined;
 
     span.setAttributes({
       'gen_ai.system': 'openai',
@@ -43,10 +47,9 @@ async function embedTexts(texts) {
     try {
       const url = buildUrl(baseUrl, 'embeddings');
       const headers = buildHeaders(baseUrl, apiKey);
-      const body = JSON.stringify({
-        model,
-        input: texts,
-      });
+      const requestBody = { model, input: texts };
+      if (dimensions) requestBody.dimensions = dimensions;
+      const body = JSON.stringify(requestBody);
 
       logger.debug('Calling embedding API', {
         url,
