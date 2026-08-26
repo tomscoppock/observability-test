@@ -77,10 +77,7 @@ curl -X POST http://localhost/api/chat \
 **Example with PowerShell:**
 
 ```powershell
-Invoke-RestMethod -Uri http://localhost/api/chat `
-  -Method POST `
-  -ContentType "application/json" `
-  -Body '{"message":"hello"}'
+Invoke-RestMethod -Uri http://localhost/api/chat -Method POST -ContentType "application/json" -Body '{"message":"hello"}'
 ```
 
 ---
