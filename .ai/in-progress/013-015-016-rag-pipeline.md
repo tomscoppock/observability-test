@@ -324,7 +324,7 @@ Add a new section to `docs/splunk-setup.md` covering:
 - [x] Add RAG observability sections to `docs/splunk-setup.md` (sections 14-17)
 - [x] Update `.env.example` if any new env vars added (none needed -- all vars already in docker-compose.yml)
 - [x] Run all tests (unit: 21 tests, 5 suites, 0 failures)
-- [ ] Rebuild Docker image and verify end-to-end flow (manual step after commit)
+- [x] Rebuild Docker image and verify end-to-end flow (upload + chat working, bbdd568)
 - [ ] Verify traces appear in Splunk APM with correct span hierarchy (manual step after deploy)
 
 ## Review notes
