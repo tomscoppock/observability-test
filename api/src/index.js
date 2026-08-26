@@ -44,6 +44,39 @@ app.post('/api/chat', (req, res) => {
 });
 
 // ---------------------------------------------------------------------------
+// Error-handling middleware (must be registered AFTER all routes)
+// ---------------------------------------------------------------------------
+
+/**
+ * Catch JSON parse errors from body-parser and other unhandled errors.
+ * Returns a JSON response instead of Express's default HTML stack trace.
+ */
+// eslint-disable-next-line no-unused-vars -- Express requires 4 args for error middleware
+app.use((err, req, res, _next) => {
+  // body-parser SyntaxError on malformed JSON
+  if (err.type === 'entity.parse.failed' && err.status === 400) {
+    logger.warn('Invalid JSON in request body', {
+      method: req.method,
+      path: req.originalUrl,
+    });
+    return res.status(400).json({ error: 'Invalid JSON in request body' });
+  }
+
+  // All other unhandled errors
+  logger.error('Unhandled error', {
+    method: req.method,
+    path: req.originalUrl,
+    message: err.message,
+  });
+
+  const isDev = process.env.NODE_ENV !== 'production';
+  res.status(err.status || 500).json({
+    error: 'Internal server error',
+    ...(isDev && { detail: err.message }),
+  });
+});
+
+// ---------------------------------------------------------------------------
 // Start
 // ---------------------------------------------------------------------------
 app.listen(PORT, '0.0.0.0', () => {

@@ -4,9 +4,9 @@
 #   2. Splunk Observability Cloud -- when SPLUNK_ACCESS_TOKEN is set
 #
 # Exporters:
-#   Traces  -> otlphttp/splunk  (OTLP/HTTP to Splunk APM)
-#   Metrics -> signalfx         (native Splunk metrics format)
-#   Logs    -> splunk_hec       (Splunk HTTP Event Collector)
+#   Traces  -> otlphttp/splunk       (OTLP/HTTP to Splunk APM)
+#   Metrics -> signalfx              (native Splunk metrics format)
+#   Logs    -> otlp_http/splunk_logs (OTLP/HTTP to Splunk Log Observer)
 
 receivers:
   otlp:
@@ -45,13 +45,13 @@ exporters:
     access_token: "${SPLUNK_ACCESS_TOKEN}"
     realm: "${SPLUNK_REALM}"
 
-  # Logs -> Splunk via HTTP Event Collector
-  splunk_hec/logs:
-    token: "${SPLUNK_ACCESS_TOKEN}"
-    endpoint: "https://ingest.${SPLUNK_REALM}.signalfx.com"
-    source: "otel"
-    sourcetype: "otel"
-    log_data_enabled: true
+  # Logs -> Splunk Log Observer via OTLP/HTTP
+  # (splunk_hec was returning 404 -- Observability Cloud does not expose
+  #  the /services/collector HEC path; use OTLP/HTTP instead)
+  otlp_http/splunk_logs:
+    logs_endpoint: "https://ingest.${SPLUNK_REALM}.signalfx.com/v2/log/otlp"
+    headers:
+      X-SF-Token: "${SPLUNK_ACCESS_TOKEN}"
 
 service:
   pipelines:
@@ -66,4 +66,4 @@ service:
     logs:
       receivers: [otlp]
       processors: [batch, resource/splunk]
-      exporters: [debug, splunk_hec/logs]
+      exporters: [debug, otlp_http/splunk_logs]

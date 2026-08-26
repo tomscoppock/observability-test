@@ -1,16 +1,18 @@
 # Project Status
 
-Last updated: 2026-08-25
+Last updated: 2026-08-26
 
 ## Active work (per person)
 
 | Assignee | Item | Epic | Since |
 |---|---|---|---|
-| @tom | 012 -- Add custom logger service (in-review) | 003 | 2026-08-25 |
+| (none) | | | |
 
 ## Recently completed
 
-- 012 -- Add custom logger service wrapping OTel logs API (@tom) -- in-review 2026-08-25
+- 022 -- Add Express error-handling middleware (@tom) -- done 2026-08-26
+- 021 -- Fix Splunk HEC logs exporter 404 (@tom) -- done 2026-08-26
+- 012 -- Add custom logger service wrapping OTel logs API (@tom) -- done 2026-08-26
 - 011 -- Add OTel SDK 2.x instrumentation (@tom) -- done 2026-08-25 (was already complete from Epic 002)
 - 010 -- Splunk Observability Cloud signup (@tom) -- done 2026-08-18
 - 009 -- Configure OTel Collector with Splunk exporters (@tom) -- done 2026-08-18
@@ -24,7 +26,7 @@ Last updated: 2026-08-25
 
 ### otel-instrumentation
 
-(012 in review)
+(none -- 012 done, 021/022 done)
 
 ### database
 
@@ -47,7 +49,7 @@ Last updated: 2026-08-25
 
 ## Numbering
 
-Next free backlog/epic/task number: **022**
+Next free backlog/epic/task number: **023**
 
 <!-- Increment every time a numbered item is created in backlog/,
      in-progress/, epics/, or done/. Numbers are never reused. -->

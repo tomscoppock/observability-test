@@ -60,7 +60,7 @@ Node.js API (rag-api)               SurrealDB 3.2+ (surrealdb)
                     |  Three export pipelines:
                     |    Traces  --> otlp_http/splunk  --> Splunk APM
                     |    Metrics --> signalfx           --> Splunk IM
-                    |    Logs    --> splunk_hec/logs    --> Splunk Log Observer
+                    |    Logs    --> otlp_http/splunk_logs --> Splunk Log Observer
                     |
                     v
             Splunk Observability Cloud
@@ -409,7 +409,7 @@ OTel Collector (same instance as rag-api)
   |  Same three export pipelines:
   |    Metrics --> signalfx          --> Splunk IM
   |    Traces  --> otlp_http/splunk  --> Splunk APM
-  |    Logs    --> splunk_hec/logs   --> Splunk Log Observer
+  |    Logs    --> otlp_http/splunk_logs --> Splunk Log Observer
   |
   v
 Splunk Observability Cloud

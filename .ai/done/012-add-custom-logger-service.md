@@ -1,6 +1,6 @@
 # Plan: 012 -- Add custom logger service wrapping OTel logs API
 
-Status: **in-review** <!-- planning | in-progress | in-review | done -->
+Status: **done** <!-- planning | in-progress | in-review | done -->
 Created: 2026-08-25
 Owner: @tom
 
@@ -144,9 +144,88 @@ which can be set to a test provider with an in-memory exporter.
 ## Review notes
 
 <!-- Filled in during the Review phase (AGENTS.md Section 3, Step 5). -->
+<!-- Reviewed 2026-08-25 by ai-reviewer -->
 
 - Bugs / logic:
+  - **B1 (Info):** Cached `_logger` in `logger.js:30` is never invalidated.
+    If `logs.setGlobalLoggerProvider()` is called after the first
+    `getOtelLogger()` invocation, the cached instance still points to the
+    old provider. No production impact (provider is set once in
+    `instrumentation.js`), but could cause subtle test-isolation issues if
+    tests are split across files in future. No fix needed now.
+  - **B4 (Low):** User input is echoed in the stub response at
+    `index.js:42` (`"[stub] You said: \"${message}\""`). `res.json()`
+    serialises safely (no XSS), but the pattern should be removed when the
+    real LLM integration replaces the stub in Epic 004.
+  - **B5 (Low):** `process.stdout.write` monkey-patching in
+    `logger.test.js:47` is fragile -- if a test throws before `afterEach`,
+    stdout stays silenced. Acceptable for a small suite; consider
+    `node:test`'s built-in `mock.method()` if the test file grows.
+  - No blocking bugs found. All severity levels, attribute handling, and
+    trace-context attachment are correct.
+
 - Security:
+  - No secrets in code. No injection vectors. ✅
+  - Logger attributes are structured data passed to OTel, not interpolated
+    into queries or commands.
+  - Current usage logs `messageLength` (integer), not raw user input --
+    good practice.
+  - `express.json()` default 100 KB body limit is in effect.
+  - No issues found.
+
 - Performance:
+  - `JSON.stringify(attributes)` in `formatStdout()` and double
+    `Object.keys(attributes).length` check are negligible for current
+    usage (1-2 key attribute objects). Not worth optimising.
+  - `BatchLogRecordProcessor` (instrumentation.js:74) and collector batch
+    processor (512 / 5s) keep export costs bounded. No per-record network
+    calls.
+  - No N+1 patterns, no unnecessary work.
+  - No issues found.
+
 - UX:
+  - `instrumentation.js` lines 82-84 still use `console.log` -- correctly
+    marked out of scope in the plan (runs before SDK is ready). Only
+    remaining `console.log` calls in the API; note for future cleanup.
+  - Startup and error messages are clear and structured.
+  - 400 response for invalid chat input is appropriate.
+  - No issues found.
+
 - Cost:
+  - No new API calls or external dependencies added.
+  - Dual output (stdout + OTel) is by design. Log volume to Splunk will
+    grow as more endpoints are instrumented -- monitor via the signalfx
+    metrics exporter. No action needed now.
+  - `@opentelemetry/api-logs` is a transitive dependency (zero new
+    install).
+  - No issues found.
+
+### Documentation finding (2026-08-26)
+
+- **D1 (Low): `docs/getting-started.md` only shows bash curl syntax.**
+  The verification commands at lines 52-65 use bash code blocks with
+  single-quoted JSON (`-d '{"message":"hello"}'`). This works in
+  bash/zsh but fails in PowerShell (the default shell on this Windows
+  project). `docs/api-reference.md` already has a PowerShell section
+  (lines 77-84 using `Invoke-RestMethod`) -- the getting-started guide
+  should add a similar PowerShell alternative or a note pointing users
+  to the api-reference doc. Recommend the implementer add a PowerShell
+  tab/section to `docs/getting-started.md` when shipping task 012.
+
+### Post-review manual testing (2026-08-26)
+
+- **S5 (Medium -- separate backlog item recommended): Express leaks full
+  stack traces on malformed JSON.** When `body-parser` receives invalid
+  JSON (e.g. `{message:hello}` without quotes), Express returns an HTML
+  error page containing the full `SyntaxError` stack trace including
+  internal file paths (`/app/node_modules/body-parser/...`). This is
+  **information disclosure** (security) and a **poor UX** (HTML instead of
+  JSON for an API). This is a pre-existing issue not introduced by task
+  012, but it was exposed during testing. Recommend a new backlog item to
+  add Express error-handling middleware that catches `SyntaxError` from
+  `body-parser` and returns `{ "error": "Invalid JSON" }` with HTTP 400.
+
+**Verdict: PASS -- no blocking issues introduced by task 012.** The stack
+trace leak (S5) is pre-existing and should be tracked as a separate
+backlog item. Three informational/low items plus one medium pre-existing
+item noted for future work. Task is ready to ship.

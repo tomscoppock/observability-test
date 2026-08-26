@@ -64,6 +64,22 @@ curl -X POST http://localhost/api/chat \
 # Expected: {"reply":"[stub] You said: \"hello\". LLM integration coming in Epic 004."}
 ```
 
+**PowerShell alternative** (Windows -- use `curl.exe` to avoid the
+`Invoke-WebRequest` alias):
+
+```powershell
+# Check all containers are up
+docker compose ps
+
+# Test the health endpoint
+curl.exe http://localhost/api/health
+
+# Test the stub chat endpoint
+curl.exe -X POST http://localhost/api/chat `
+  -H "Content-Type: application/json" `
+  -d '{"message":"hello"}'
+```
+
 ### 6. Open the chat UI
 
 Navigate to [http://localhost](http://localhost) in your browser.

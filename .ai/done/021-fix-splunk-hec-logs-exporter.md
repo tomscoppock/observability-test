@@ -1,6 +1,6 @@
 # 021 -- Fix Splunk HEC logs exporter 404 error
 
-Status: backlog
+Status: done
 Priority: medium
 Assignee: @tom
 Epic: 002
