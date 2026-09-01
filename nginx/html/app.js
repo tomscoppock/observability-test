@@ -98,6 +98,8 @@ async function sendMessage(message) {
   sendBtn.disabled = true;
   var hideThinking = showThinking('Thinking...');
 
+  console.log('[chat] Sending message:', message.substring(0, 80));
+
   try {
     var res = await fetch('/api/chat', {
       method: 'POST',
@@ -105,15 +107,22 @@ async function sendMessage(message) {
       body: JSON.stringify({ message: message }),
     });
 
+    console.log('[chat] Response status:', res.status);
+
     if (!res.ok) {
-      var err = await res.json().catch(function () { return { error: res.statusText }; });
+      var errBody = await res.text();
+      console.error('[chat] Error response body:', errBody);
+      var err;
+      try { err = JSON.parse(errBody); } catch (_e) { err = { error: res.statusText }; }
       throw new Error(err.error || 'HTTP ' + res.status);
     }
 
     var data = await res.json();
+    console.log('[chat] Reply received, sources:', (data.sources || []).length);
     var replyHtml = escapeHtml(data.reply) + formatSources(data.sources);
     appendMessage(replyHtml, 'assistant', true);
   } catch (err) {
+    console.error('[chat] Error:', err.message, err);
     appendMessage('Error: ' + err.message, 'error');
   } finally {
     hideThinking();
@@ -137,6 +146,7 @@ async function uploadFiles(files) {
   for (var i = 0; i < files.length; i++) {
     names.push(files[i].name);
   }
+  console.log('[upload] Starting upload:', names.join(', '));
   appendMessage('Uploading ' + files.length + ' file(s): ' + names.join(', '), 'upload');
   var hideThinking = showThinking('Processing files...');
 
@@ -151,8 +161,13 @@ async function uploadFiles(files) {
       body: formData,
     });
 
+    console.log('[upload] Response status:', res.status);
+
     if (!res.ok) {
-      var err = await res.json().catch(function () { return { error: res.statusText }; });
+      var errBody = await res.text();
+      console.error('[upload] Error response body:', errBody);
+      var err;
+      try { err = JSON.parse(errBody); } catch (_e) { err = { error: res.statusText }; }
       throw new Error(err.error || 'HTTP ' + res.status);
     }
 
@@ -164,16 +179,20 @@ async function uploadFiles(files) {
     for (var k = 0; k < docs.length; k++) {
       var doc = docs[k];
       if (doc.error) {
+        console.warn('[upload] File error:', doc.filename, doc.error);
         messages.push(doc.filename + ': ' + doc.error);
       } else {
         successCount++;
+        console.log('[upload] File indexed:', doc.filename, doc.chunkCount, 'chunks');
         messages.push(doc.filename + ': ' + doc.chunkCount + ' chunks indexed');
       }
     }
 
     var summary = successCount + ' of ' + docs.length + ' file(s) uploaded successfully.';
+    console.log('[upload]', summary);
     appendMessage(summary + '\n' + messages.join('\n'), 'system');
   } catch (err) {
+    console.error('[upload] Error:', err.message, err);
     appendMessage('Upload error: ' + err.message, 'error');
   } finally {
     hideThinking();

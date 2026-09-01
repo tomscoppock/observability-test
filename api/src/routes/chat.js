@@ -116,18 +116,23 @@ router.post('/api/chat', async (req, res) => {
       span.recordException(err);
       span.end();
 
-      logger.error('Chat failed', { error: err.message });
+      logger.error('Chat failed', { error: err.message, stack: err.stack });
 
-      if (err.message.includes('Embedding API')) {
-        return res.status(503).json({ error: 'Embedding service unavailable' });
+      const msg = err.message || '';
+      if (msg.includes('Embedding API')) {
+        return res.status(503).json({ error: 'Embedding service unavailable: ' + msg });
       }
-      if (err.message.includes('LLM API')) {
-        return res.status(503).json({ error: 'LLM service unavailable' });
+      if (msg.includes('LLM API')) {
+        return res.status(503).json({ error: 'LLM service unavailable: ' + msg });
       }
-      if (err.message.includes('SurrealDB') || err.message.includes('connection')) {
-        return res.status(503).json({ error: 'Database service unavailable' });
+      if (
+        msg.includes('SurrealDB') || msg.includes('connection') ||
+        msg.includes('not allowed') || msg.includes('permission') ||
+        msg.includes('Anonymous') || msg.includes('not authenticated')
+      ) {
+        return res.status(503).json({ error: 'Database service unavailable: ' + msg });
       }
-      return res.status(500).json({ error: 'Chat failed' });
+      return res.status(500).json({ error: 'Chat failed: ' + msg });
     }
   });
 });

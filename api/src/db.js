@@ -39,8 +39,37 @@ let _ready = false;
 // ---------------------------------------------------------------------------
 
 /**
+ * Force-reset the singleton so the next connect() creates a fresh session.
+ * Called automatically when a query fails with an auth/connection error.
+ */
+function _invalidate() {
+  logger.warn('Invalidating stale SurrealDB session');
+  _surreal = null;
+  _session = null;
+  _ready = false;
+}
+
+/**
+ * Returns true if the error looks like a stale/expired session that a
+ * reconnect would fix (e.g. after machine sleep).
+ */
+function _isRetryableError(err) {
+  const msg = (err.message || '').toLowerCase();
+  return (
+    msg.includes('not allowed') ||
+    msg.includes('not authenticated') ||
+    msg.includes('anonymous') ||
+    msg.includes('permission') ||
+    msg.includes('connection') ||
+    msg.includes('closed') ||
+    msg.includes('socket')
+  );
+}
+
+/**
  * Connect to SurrealDB (singleton).  On first call the schema is applied.
- * Subsequent calls return the cached session.
+ * Subsequent calls return the cached session.  If the session is stale
+ * (e.g. after machine sleep), it is automatically re-established.
  *
  * @returns {Promise<object>} The SurrealDB session with query/create/select.
  */
@@ -131,6 +160,33 @@ async function applySchema() {
 }
 
 // ---------------------------------------------------------------------------
+// Retry wrapper -- reconnects on stale session errors
+// ---------------------------------------------------------------------------
+
+/**
+ * Execute a function that uses the DB session.  If it fails with a
+ * retryable error (auth/connection), invalidate the session and retry
+ * once with a fresh connection.
+ *
+ * @param {function(session): Promise<T>} fn
+ * @returns {Promise<T>}
+ */
+async function _withRetry(fn) {
+  try {
+    const session = await connect();
+    return await fn(session);
+  } catch (err) {
+    if (_isRetryableError(err)) {
+      logger.warn('Retrying after stale session', { error: err.message });
+      _invalidate();
+      const session = await connect();
+      return await fn(session);
+    }
+    throw err;
+  }
+}
+
+// ---------------------------------------------------------------------------
 // CRUD helpers -- all use session.query() for reliable serialization
 // ---------------------------------------------------------------------------
 
@@ -143,24 +199,25 @@ async function applySchema() {
 async function insertDocument(doc) {
   return tracer.startActiveSpan('db.insertDocument', async (span) => {
     try {
-      const session = await connect();
-      const [rows] = await session.query(
-        `CREATE documents SET
-           title = $title,
-           filename = $filename,
-           source_type = $source_type,
-           content_length = $content_length,
-           chunk_count = $chunk_count,
-           created_at = time::now()`,
-        {
-          title: doc.title,
-          filename: doc.filename,
-          source_type: doc.source_type || 'upload',
-          content_length: doc.content_length,
-          chunk_count: doc.chunk_count,
-        }
-      );
-      const result = rows[0];
+      const result = await _withRetry(async (session) => {
+        const [rows] = await session.query(
+          `CREATE documents SET
+             title = $title,
+             filename = $filename,
+             source_type = $source_type,
+             content_length = $content_length,
+             chunk_count = $chunk_count,
+             created_at = time::now()`,
+          {
+            title: doc.title,
+            filename: doc.filename,
+            source_type: doc.source_type || 'upload',
+            content_length: doc.content_length,
+            chunk_count: doc.chunk_count,
+          }
+        );
+        return rows[0];
+      });
       span.setAttribute('db.document.id', String(result.id));
       span.setStatus({ code: 1 });
       return result;
@@ -184,27 +241,29 @@ async function insertDocument(doc) {
 async function insertChunks(documentId, chunks) {
   return tracer.startActiveSpan('db.insertChunks', async (span) => {
     try {
-      const session = await connect();
       span.setAttribute('db.chunk_count', chunks.length);
 
-      const results = [];
-      for (const chunk of chunks) {
-        const [rows] = await session.query(
-          `CREATE chunks SET
-             document = $doc_id,
-             text = $text,
-             embedding = $embedding,
-             chunk_index = $chunk_index,
-             created_at = time::now()`,
-          {
-            doc_id: documentId,
-            text: chunk.text,
-            embedding: chunk.embedding,
-            chunk_index: chunk.chunkIndex,
-          }
-        );
-        results.push(rows[0]);
-      }
+      const results = await _withRetry(async (session) => {
+        const out = [];
+        for (const chunk of chunks) {
+          const [rows] = await session.query(
+            `CREATE chunks SET
+               document = $doc_id,
+               text = $text,
+               embedding = $embedding,
+               chunk_index = $chunk_index,
+               created_at = time::now()`,
+            {
+              doc_id: documentId,
+              text: chunk.text,
+              embedding: chunk.embedding,
+              chunk_index: chunk.chunkIndex,
+            }
+          );
+          out.push(rows[0]);
+        }
+        return out;
+      });
 
       span.setStatus({ code: 1 });
       return results;
@@ -231,7 +290,6 @@ async function insertChunks(documentId, chunks) {
 async function vectorSearch(queryEmbedding, topK = 5) {
   return tracer.startActiveSpan('db.vectorSearch', async (span) => {
     try {
-      const session = await connect();
       span.setAttributes({
         'db.vector.dimensions': queryEmbedding.length,
         'db.vector.top_k': topK,
@@ -241,13 +299,16 @@ async function vectorSearch(queryEmbedding, topK = 5) {
       // Syntax: <|K, EF|> where EF is the search expansion factor
       // (higher = more accurate but slower; default 150 is a good balance).
       const ef = 150;
-      const [results] = await session.query(
-        `SELECT *, vector::similarity::cosine(embedding, $query_vec) AS score
-         FROM chunks
-         WHERE embedding <|${topK},${ef}|> $query_vec
-         ORDER BY score DESC`,
-        { query_vec: queryEmbedding }
-      );
+      const results = await _withRetry(async (session) => {
+        const [rows] = await session.query(
+          `SELECT *, vector::similarity::cosine(embedding, $query_vec) AS score
+           FROM chunks
+           WHERE embedding <|${topK},${ef}|> $query_vec
+           ORDER BY score DESC`,
+          { query_vec: queryEmbedding }
+        );
+        return rows;
+      });
 
       span.setAttribute('db.results_count', results.length);
       span.setStatus({ code: 1 });
@@ -271,13 +332,15 @@ async function vectorSearch(queryEmbedding, topK = 5) {
 async function getDocumentById(id) {
   return tracer.startActiveSpan('db.getDocumentById', async (span) => {
     try {
-      const session = await connect();
-      const [rows] = await session.query(
-        'SELECT * FROM $id',
-        { id }
-      );
+      const result = await _withRetry(async (session) => {
+        const [rows] = await session.query(
+          'SELECT * FROM $id',
+          { id }
+        );
+        return rows[0] || null;
+      });
       span.setStatus({ code: 1 });
-      return rows[0] || null;
+      return result;
     } catch (err) {
       span.setStatus({ code: 2, message: err.message });
       span.recordException(err);
@@ -296,11 +359,12 @@ async function getDocumentById(id) {
 async function hasDocuments() {
   return tracer.startActiveSpan('db.hasDocuments', async (span) => {
     try {
-      const session = await connect();
-      const [results] = await session.query(
-        'SELECT count() AS total FROM documents GROUP ALL'
-      );
-      const total = results?.[0]?.total ?? 0;
+      const total = await _withRetry(async (session) => {
+        const [results] = await session.query(
+          'SELECT count() AS total FROM documents GROUP ALL'
+        );
+        return results?.[0]?.total ?? 0;
+      });
       span.setAttribute('db.document_count', total);
       span.setStatus({ code: 1 });
       return total > 0;

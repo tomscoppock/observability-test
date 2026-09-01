@@ -141,16 +141,20 @@ router.post('/api/upload', upload.array('files', 10), async (req, res) => {
       span.recordException(err);
       span.end();
 
-      logger.error('Upload failed', { error: err.message });
+      logger.error('Upload failed', { error: err.message, stack: err.stack });
 
-      // Distinguish embedding/LLM API errors from other errors
-      if (err.message.includes('Embedding API')) {
-        return res.status(503).json({ error: 'Embedding service unavailable' });
+      const msg = err.message || '';
+      if (msg.includes('Embedding API')) {
+        return res.status(503).json({ error: 'Embedding service unavailable: ' + msg });
       }
-      if (err.message.includes('SurrealDB') || err.message.includes('connection')) {
-        return res.status(503).json({ error: 'Database service unavailable' });
+      if (
+        msg.includes('SurrealDB') || msg.includes('connection') ||
+        msg.includes('not allowed') || msg.includes('permission') ||
+        msg.includes('Anonymous') || msg.includes('not authenticated')
+      ) {
+        return res.status(503).json({ error: 'Database service unavailable: ' + msg });
       }
-      return res.status(500).json({ error: 'Upload failed' });
+      return res.status(500).json({ error: 'Upload failed: ' + msg });
     }
   });
 });
