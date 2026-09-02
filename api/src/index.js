@@ -2,9 +2,12 @@
 
 const express = require('express');
 const cors = require('cors');
+const { trace } = require('@opentelemetry/api');
 const logger = require('./logger');
 const uploadRouter = require('./routes/upload');
 const chatRouter = require('./routes/chat');
+
+const tracer = trace.getTracer('rag-api.test', '0.1.0');
 
 const app = express();
 const PORT = process.env.PORT || 3000;
@@ -29,6 +32,30 @@ app.use(uploadRouter);
 
 // RAG chat -- embed query, vector search, LLM completion
 app.use(chatRouter);
+
+/**
+ * Test error endpoint -- generates a deliberate exception wrapped in an
+ * OTel span so you can verify errors appear in Splunk APM.
+ * Only available in non-production environments.
+ */
+app.post('/api/test-error', (req, res) => {
+  return tracer.startActiveSpan('test.error', (span) => {
+    const message = (req.body && req.body.message) || 'Deliberate test error';
+    const err = new Error(message);
+
+    span.setAttributes({
+      'test.error': true,
+      'test.message': message,
+    });
+    span.setStatus({ code: 2, message: err.message });
+    span.recordException(err);
+    span.end();
+
+    logger.error('Test error triggered', { error: err.message, stack: err.stack });
+
+    return res.status(500).json({ error: message, otel: 'Error span recorded' });
+  });
+});
 
 // ---------------------------------------------------------------------------
 // Error-handling middleware (must be registered AFTER all routes)

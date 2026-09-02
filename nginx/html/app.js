@@ -251,3 +251,31 @@ form.addEventListener('submit', function (e) {
     sendMessage(text);
   }
 });
+
+// ---------------------------------------------------------------------------
+// Test error button
+// ---------------------------------------------------------------------------
+
+var testErrorBtn = document.getElementById('test-error-btn');
+if (testErrorBtn) {
+  testErrorBtn.addEventListener('click', async function () {
+    console.log('[test-error] Triggering test error...');
+    appendMessage('Triggering test error for OTel verification...', 'system');
+
+    try {
+      var res = await fetch('/api/test-error', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ message: 'Deliberate test error from UI at ' + new Date().toISOString() }),
+      });
+
+      console.log('[test-error] Response status:', res.status);
+      var data = await res.json();
+      console.log('[test-error] Response:', data);
+      appendMessage('Test error sent (HTTP ' + res.status + '). Check Splunk APM for the error span.\nServer: ' + data.error, 'error');
+    } catch (err) {
+      console.error('[test-error] Network error:', err);
+      appendMessage('Test error failed: ' + err.message, 'error');
+    }
+  });
+}

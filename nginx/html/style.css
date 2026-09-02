@@ -49,6 +49,27 @@ header .subtitle {
   margin-top: 4px;
 }
 
+.test-error-btn {
+  position: absolute;
+  top: 12px;
+  right: 12px;
+  padding: 4px 10px;
+  font-size: 0.7rem;
+  background: rgba(255, 255, 255, 0.2);
+  color: #fff;
+  border: 1px solid rgba(255, 255, 255, 0.4);
+  border-radius: 4px;
+  cursor: pointer;
+}
+
+.test-error-btn:hover {
+  background: rgba(255, 80, 80, 0.6);
+}
+
+header {
+  position: relative;
+}
+
 #messages {
   flex: 1;
   overflow-y: auto;
