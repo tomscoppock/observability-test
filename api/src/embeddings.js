@@ -33,15 +33,19 @@ async function embedTexts(texts) {
     const baseUrl = process.env.EMBEDDING_API_BASE_URL || 'https://api.openai.com/v1';
     const apiKey = process.env.EMBEDDING_API_KEY || '';
     const model = process.env.EMBEDDING_MODEL || 'text-embedding-3-small';
+    const provider = process.env.LLM_PROVIDER || 'openai';
     const dimensions = process.env.EMBEDDING_DIMENSIONS
       ? parseInt(process.env.EMBEDDING_DIMENSIONS, 10)
       : undefined;
+    const parsedUrl = new URL(baseUrl);
 
     span.setAttributes({
-      'gen_ai.system': 'openai',
+      'gen_ai.system': provider,
       'gen_ai.request.model': model,
       'gen_ai.operation.name': 'embeddings',
       'gen_ai.request.input_count': texts.length,
+      'server.address': parsedUrl.hostname,
+      'server.port': parseInt(parsedUrl.port, 10) || (parsedUrl.protocol === 'https:' ? 443 : 80),
     });
 
     try {
@@ -79,7 +83,7 @@ async function embedTexts(texts) {
       // Record token usage if available
       if (data.usage) {
         span.setAttributes({
-          'gen_ai.usage.prompt_tokens': data.usage.prompt_tokens,
+          'gen_ai.usage.input_tokens': data.usage.prompt_tokens,
           'gen_ai.usage.total_tokens': data.usage.total_tokens,
         });
       }

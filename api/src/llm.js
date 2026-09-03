@@ -32,12 +32,19 @@ async function chatCompletion(messages) {
     const baseUrl = process.env.LLM_API_BASE_URL || 'https://api.openai.com/v1';
     const apiKey = process.env.LLM_API_KEY || '';
     const model = process.env.LLM_MODEL || 'gpt-4o-mini';
+    const provider = process.env.LLM_PROVIDER || 'openai';
+
+    const temperature = 0.3;
+    const parsedUrl = new URL(baseUrl);
 
     span.setAttributes({
-      'gen_ai.system': 'openai',
+      'gen_ai.system': provider,
       'gen_ai.request.model': model,
       'gen_ai.operation.name': 'chat',
+      'gen_ai.request.temperature': temperature,
       'gen_ai.request.message_count': messages.length,
+      'server.address': parsedUrl.hostname,
+      'server.port': parseInt(parsedUrl.port, 10) || (parsedUrl.protocol === 'https:' ? 443 : 80),
     });
 
     try {
@@ -46,7 +53,7 @@ async function chatCompletion(messages) {
       const body = JSON.stringify({
         model,
         messages,
-        temperature: 0.3,
+        temperature,
       });
 
       logger.debug('Calling LLM API', { url, model, messageCount: messages.length });
@@ -71,8 +78,8 @@ async function chatCompletion(messages) {
 
       span.setAttributes({
         'gen_ai.response.model': data.model || model,
-        'gen_ai.usage.prompt_tokens': promptTokens,
-        'gen_ai.usage.completion_tokens': completionTokens,
+        'gen_ai.usage.input_tokens': promptTokens,
+        'gen_ai.usage.output_tokens': completionTokens,
         'gen_ai.response.finish_reason': choice?.finish_reason || 'unknown',
       });
       span.setStatus({ code: 1 });
