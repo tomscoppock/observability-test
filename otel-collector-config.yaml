@@ -21,6 +21,12 @@ processors:
     send_batch_size: 512
     timeout: 5s
 
+  # Normalise OpenLLMetry (Traceloop) spans to official gen_ai.* semconv.
+  # Built-in source -- no custom mappings needed.
+  gen_ai_normalizer:
+    sources:
+      - name: openllmetry
+
   # Add resource attributes for Splunk correlation
   resource/splunk:
     attributes:
@@ -57,7 +63,7 @@ service:
   pipelines:
     traces:
       receivers: [otlp]
-      processors: [batch, resource/splunk]
+      processors: [gen_ai_normalizer, batch, resource/splunk]
       exporters: [debug, otlp_http/splunk]
     metrics:
       receivers: [otlp]

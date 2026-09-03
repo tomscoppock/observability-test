@@ -52,7 +52,7 @@ The collector config lives at `otel-collector-config.yaml` in the
 project root. It is mounted into the container at
 `/etc/otelcol/config.yaml`.
 
-### Current config (Epic 002 -- Splunk + debug)
+### Current config
 
 The collector uses three separate exporters for Splunk, one per signal
 type, plus the debug exporter for local troubleshooting:
@@ -61,7 +61,7 @@ type, plus the debug exporter for local troubleshooting:
 |---|---|---|
 | **Traces** | `otlp_http/splunk` | Splunk APM (`/v2/trace/otlp`) |
 | **Metrics** | `signalfx` | Splunk Infrastructure Monitoring |
-| **Logs** | `splunk_hec/logs` | Splunk HEC (`/v1/log`) |
+| **Logs** | `otlp_http/splunk_logs` | Splunk Log Observer (`/v2/log/otlp`) |
 | **All** | `debug` | Collector stdout (always on) |
 
 ### Required environment variables
@@ -123,8 +123,68 @@ The project uses OTel JS SDK 2.x (stable API, experimental SDK):
 | `@opentelemetry/resources` | ^2.0.0 | Resource detection |
 | `@opentelemetry/semantic-conventions` | ^1.28.0 | Attribute constants |
 
-## gen_ai semantic conventions (Epic 005)
+## gen_ai normalizer processor (Task 017)
 
-The `gen_ai.*` attributes are the official OTel direction for LLM
-observability. They will be added in Epic 005 using the gen-ai
-normalizer processor in the collector.
+The `gen_ai.*` attributes are the official OTel semantic conventions for
+LLM observability. The API's OpenLLMetry (Traceloop) SDK emits spans
+with proprietary attribute names (`traceloop.entity.*`, `llm.*`). The
+`gen_ai_normalizer` processor in the OTel Collector converts these to
+the standard `gen_ai.*` format before export.
+
+### Configuration
+
+The processor is defined in `otel-collector-config.yaml`:
+
+```yaml
+processors:
+  gen_ai_normalizer:
+    sources:
+      - name: openllmetry
+```
+
+It runs in the **traces pipeline only**, before `batch` and
+`resource/splunk`:
+
+```yaml
+service:
+  pipelines:
+    traces:
+      receivers: [otlp]
+      processors: [gen_ai_normalizer, batch, resource/splunk]
+      exporters: [debug, otlp_http/splunk]
+```
+
+### Built-in sources
+
+The processor ships with two built-in source mappings that require no
+custom configuration:
+
+| Source | SDK | Attribute prefix |
+|---|---|---|
+| `openllmetry` | Traceloop / OpenLLMetry | `traceloop.*`, `llm.*` |
+| `openinference` | Arize / OpenInference | `openinference.*` |
+
+Custom sources can be added with explicit `mappings` if needed.
+
+### Current status
+
+The processor is configured and running in the pipeline. However, the API
+currently uses **manual OTel instrumentation** (custom spans via
+`tracer.startActiveSpan()` in `llm.js` and `embeddings.js`) rather than
+the Traceloop OpenLLMetry SDK. Since the API calls LLM/embedding APIs via
+raw `fetch()` (not the OpenAI Node.js SDK), the Traceloop SDK has nothing
+to auto-instrument, so the processor is currently a **safe no-op**.
+
+To activate normalisation, a future task would switch from raw `fetch()`
+to the official OpenAI Node.js SDK and add `@traceloop/node-server-sdk`
+for auto-instrumentation. The normaliser would then convert all
+Traceloop-emitted spans to `gen_ai.*` semconv automatically.
+
+### Verifying normalisation
+
+After a chat request, check the collector debug output for `gen_ai.*`
+attributes:
+
+```bash
+docker compose logs otel-collector | findstr "gen_ai"
+```

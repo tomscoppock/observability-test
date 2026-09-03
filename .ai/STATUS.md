@@ -1,15 +1,17 @@
 # Project Status
 
-Last updated: 2026-08-26
+Last updated: 2026-09-03
 
 ## Active work (per person)
 
 | Assignee | Item | Epic | Since |
 |---|---|---|---|
-| @tom | 013+015+016 -- RAG Pipeline (implementing) | 004 | 2026-08-26 |
+| (none) | | | |
 
 ## Recently completed
 
+- 017 -- Add gen_ai normalizer processor to OTel Collector (@tom) -- done 2026-09-03
+- 013+015+016 -- RAG Pipeline (@tom) -- done 2026-09-01
 - 022 -- Add Express error-handling middleware (@tom) -- done 2026-08-26
 - 021 -- Fix Splunk HEC logs exporter 404 (@tom) -- done 2026-08-26
 - 012 -- Add custom logger service wrapping OTel logs API (@tom) -- done 2026-08-26
@@ -41,7 +43,7 @@ Last updated: 2026-08-26
 
 ### llm-observability
 
-- 017 -- Add gen_ai normalizer processor to OTel Collector (@tom, medium)
+- 017 -- done (gen_ai normalizer processor added to collector)
 - 018 -- Instrument LLM calls with gen_ai.* spans and token metrics (@tom, high)
 
 ## Blockers
