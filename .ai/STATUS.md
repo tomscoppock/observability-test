@@ -6,7 +6,7 @@ Last updated: 2026-09-04
 
 | Assignee | Item | Epic | Since |
 |---|---|---|---|
-| (none) | | | |
+| @tom | 029 -- Docker Desktop OTel automation | -- | 2026-09-04 |
 
 ## Recently completed
 
@@ -55,7 +55,7 @@ Last updated: 2026-09-04
 
 ## Numbering
 
-Next free backlog/epic/task number: **029**
+Next free backlog/epic/task number: **030**
 
 <!-- Increment every time a numbered item is created in backlog/,
      in-progress/, epics/, or done/. Numbers are never reused. -->

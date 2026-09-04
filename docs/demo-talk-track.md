@@ -68,6 +68,17 @@ transaction, and every upload triggers insert transactions. This
 correlation is automatic because both services report to the same
 collector."
 
+**[SHOW]** Scroll to the container metric charts.
+
+**[CHART]** `Container CPU Usage`, `Container Memory Usage`,
+`Container Network I/O`
+
+**[SAY]** "We also have Docker container metrics -- CPU, memory, and
+network I/O per container. Docker Desktop exports these via OTLP to the
+same collector. So if the API container is hitting its memory limit or
+the database container is CPU-bound, we see it right here alongside the
+application metrics. No separate infrastructure monitoring tool needed."
+
 **[SAY]** "From a governance perspective, this unified view means one
 team can own the full observability stack. There's no gap between 'the
 app team's dashboard' and 'the infra team's dashboard' -- it's all
@@ -338,6 +349,14 @@ and the dashboard automation script (`splunk/dashboard.json`):
 | 12 | MCP Scrape Latency | S4: Cross-Service |
 | 13 | SurrealDB HTTP Activity | S1: Infrastructure |
 | 14 | SurrealDB Network I/O | S1: Infrastructure |
+| 15 | Container CPU Usage | S1: Infrastructure |
+| 16 | Container Memory Usage | S1: Infrastructure |
+| 17 | Container Network I/O | S1: Infrastructure |
+
+> **Note:** Charts 15-17 require Docker Desktop OTLP export to be
+> enabled. See `docs/docker-desktop-otel.md` or run
+> `scripts/setup-docker-desktop-otel.ps1` (Windows) /
+> `scripts/setup-docker-desktop-otel.sh` (macOS/Linux).
 
 ---
 

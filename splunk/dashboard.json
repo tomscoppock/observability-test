@@ -91,6 +91,24 @@
       "description": "Network bytes received and sent per second.",
       "chartType": "Area",
       "programText": "A = data('surrealdb.network.received', filter=filter('service.name', 'surrealdb')).rate().publish(label='Received bytes/s')\nB = data('surrealdb.network.sent', filter=filter('service.name', 'surrealdb')).rate().publish(label='Sent bytes/s')"
+    },
+    {
+      "name": "Container CPU Usage",
+      "description": "CPU usage per Docker container (requires Docker Desktop OTLP export).",
+      "chartType": "Line",
+      "programText": "A = data('container.cpu.usage', filter=filter('service.name', 'docker-desktop')).publish(label='CPU Usage')"
+    },
+    {
+      "name": "Container Memory Usage",
+      "description": "Memory usage per Docker container (requires Docker Desktop OTLP export).",
+      "chartType": "Line",
+      "programText": "A = data('container.memory.usage', filter=filter('service.name', 'docker-desktop')).publish(label='Memory Usage')"
+    },
+    {
+      "name": "Container Network I/O",
+      "description": "Network bytes sent and received per Docker container (requires Docker Desktop OTLP export).",
+      "chartType": "Area",
+      "programText": "A = data('container.network.io', filter=filter('service.name', 'docker-desktop') and filter('direction', 'receive')).rate().publish(label='Received bytes/s')\nB = data('container.network.io', filter=filter('service.name', 'docker-desktop') and filter('direction', 'transmit')).rate().publish(label='Sent bytes/s')"
     }
   ]
 }

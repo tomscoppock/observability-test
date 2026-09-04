@@ -1016,7 +1016,7 @@ The script:
 1. Reads `SPLUNK_ACCESS_TOKEN` and `SPLUNK_REALM` from `.env`
 2. Creates a dashboard group named `RAG Agent -- Observability`
 3. Creates a dashboard named `Demo Dashboard`
-4. Creates all 14 charts (aligned to the demo talk track)
+4. Creates all 17 charts (aligned to the demo talk track)
 5. Outputs the dashboard URL on success
 
 The script is idempotent -- it checks for existing resources before

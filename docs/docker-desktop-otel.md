@@ -238,4 +238,40 @@ processors:
 
 ---
 
-*Last updated: 2026-09-03*
+## Automated setup
+
+Instead of following the manual steps above, you can use the provided
+script to configure Docker Desktop OTLP export automatically.
+
+**Windows (PowerShell):**
+
+```powershell
+.\scripts\setup-docker-desktop-otel.ps1
+```
+
+**macOS/Linux:**
+
+```bash
+./scripts/setup-docker-desktop-otel.sh
+```
+
+The script:
+
+1. Locates Docker Desktop's `settings-store.json`
+2. Backs up the original file
+3. Enables OTLP export with endpoint `http://localhost:4318`
+4. Prompts you to restart Docker Desktop
+
+The script is idempotent -- it skips if already configured. If OTLP
+export is already enabled with a different endpoint, it asks before
+overwriting.
+
+After running the script and restarting Docker Desktop, container
+metrics (`container.cpu.usage`, `container.memory.usage`,
+`container.network.io`) will flow through the OTel Collector into
+Splunk. The demo dashboard includes charts for these metrics (charts
+15-17 in `splunk/dashboard.json`).
+
+---
+
+*Last updated: 2026-09-04*
