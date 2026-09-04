@@ -82,13 +82,80 @@ Invoke-RestMethod -Uri http://localhost/api/chat -Method POST -ContentType "appl
 
 ---
 
+### POST /api/scrape
+
+Scrape a web page via the Playwright MCP server, extract visible text,
+chunk it, generate embeddings, and store everything in SurrealDB.
+
+Requires the Playwright MCP server to be running and configured via
+`MCP_PLAYWRIGHT_URL` (see [Configuration](configuration.md)).
+
+**Request:**
+
+```json
+{
+  "url": "https://example.com/some-page"
+}
+```
+
+| Field | Type | Required | Description |
+|---|---|---|---|
+| `url` | string | Yes | HTTP or HTTPS URL to scrape |
+
+**Response (success):**
+
+```json
+{
+  "id": "document:abc123",
+  "title": "Example Page Title",
+  "url": "https://example.com/some-page",
+  "chunkCount": 12,
+  "contentLength": 8432
+}
+```
+
+| Field | Type | Description |
+|---|---|---|
+| `id` | string | SurrealDB document ID |
+| `title` | string | Page title (extracted from `<title>` tag) |
+| `url` | string | The scraped URL |
+| `chunkCount` | number | Number of text chunks stored |
+| `contentLength` | number | Total text length in characters |
+
+**Status codes:**
+- `200` -- Success
+- `400` -- Missing/invalid URL, unsupported protocol, or empty page content
+- `503` -- Playwright MCP server not configured or unreachable, embedding
+  service unavailable, or database unavailable
+- `500` -- Unexpected error
+
+**Error response:**
+
+```json
+{
+  "error": "url is required and must be a string"
+}
+```
+
+**Example with curl:**
+
+```bash
+curl -X POST http://localhost/api/scrape \
+  -H "Content-Type: application/json" \
+  -d '{"url":"https://example.com"}'
+```
+
+**Example with PowerShell:**
+
+```powershell
+Invoke-RestMethod -Uri http://localhost/api/scrape -Method POST -ContentType "application/json" -Body '{"url":"https://example.com"}'
+```
+
+---
+
 ## Future endpoints (planned)
 
-These will be added in later epics:
-
-| Method | Path | Epic | Description |
-|---|---|---|---|
-| POST | /api/ingest/scrape | 004 | Scrape a URL and store content |
-| POST | /api/ingest/upload | 004 | Upload a file (HTML, TXT, MD, PDF) |
-| GET | /api/documents | 004 | List ingested documents |
-| DELETE | /api/documents/:id | 004 | Delete a document |
+| Method | Path | Description |
+|---|---|---|
+| GET | /api/documents | List ingested documents |
+| DELETE | /api/documents/:id | Delete a document |

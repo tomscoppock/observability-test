@@ -253,6 +253,55 @@ form.addEventListener('submit', function (e) {
 });
 
 // ---------------------------------------------------------------------------
+// Scrape form
+// ---------------------------------------------------------------------------
+
+var scrapeForm = document.getElementById('scrape-form');
+var scrapeUrlInput = document.getElementById('scrape-url');
+
+if (scrapeForm) {
+  scrapeForm.addEventListener('submit', async function (e) {
+    e.preventDefault();
+    var url = scrapeUrlInput.value.trim();
+    if (!url) return;
+
+    appendMessage('Scraping: ' + url + '...', 'user');
+    var hideThinking = showThinking('Fetching and processing page...');
+    scrapeUrlInput.disabled = true;
+    document.getElementById('scrape-btn').disabled = true;
+
+    try {
+      var res = await fetch('/api/scrape', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ url: url }),
+      });
+
+      var data = await res.json();
+
+      if (!res.ok) {
+        appendMessage('Scrape failed: ' + (data.error || res.statusText), 'error');
+        return;
+      }
+
+      appendMessage(
+        'Scraped "' + escapeHtml(data.title) + '" -- ' +
+        data.chunkCount + ' chunks stored (' +
+        Math.round(data.contentLength / 1024) + ' KB). You can now ask questions about this page.',
+        'system'
+      );
+      scrapeUrlInput.value = '';
+    } catch (err) {
+      appendMessage('Scrape failed: ' + err.message, 'error');
+    } finally {
+      hideThinking();
+      scrapeUrlInput.disabled = false;
+      document.getElementById('scrape-btn').disabled = false;
+    }
+  });
+}
+
+// ---------------------------------------------------------------------------
 // Test error button
 // ---------------------------------------------------------------------------
 

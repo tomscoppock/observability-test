@@ -188,3 +188,81 @@ attributes:
 ```bash
 docker compose logs otel-collector | findstr "gen_ai"
 ```
+
+## Distributed tracing across MCP services (Task 014)
+
+The web scrape feature connects the Node.js API to an external
+[Playwright MCP server](https://github.com/tomcotter7/Playwright-MCP-Demo)
+via the Model Context Protocol (MCP). Both services are instrumented with
+OpenTelemetry, and W3C trace context (`traceparent` / `tracestate`) is
+propagated automatically across the HTTP boundary so that a single scrape
+request produces a unified trace spanning both services.
+
+### How it works
+
+1. The Node.js API creates a span `mcp.scrape` and calls the Playwright
+   MCP server via `@modelcontextprotocol/sdk` (Streamable HTTP transport).
+2. The Node.js OTel auto-instrumentation (`@opentelemetry/instrumentation-http`)
+   automatically injects the `traceparent` header into the outgoing
+   `fetch()` request.
+3. The Playwright MCP server's ASGI `OpenTelemetryMiddleware` extracts
+   the `traceparent` header and creates a child server span.
+4. Each MCP tool call (e.g. `session_create`, `browser_navigate`,
+   `browser_get_text`) is wrapped with a `@traced_tool` decorator that
+   creates a child span named `mcp.tool.<function_name>`.
+5. All spans from both services share the same trace ID and appear as a
+   single trace in Splunk APM (or any OTel-compatible backend).
+
+### Trace structure
+
+A typical scrape request produces this span hierarchy:
+
+```
+[rag-api] POST /api/scrape                    (Express auto-span)
+  [rag-api] scrape.pipeline                   (route handler)
+    [rag-api] mcp.scrape                      (mcp-client.js)
+      [rag-api] HTTP POST playwright-mcp/mcp  (auto-instrumented fetch)
+        [playwright-mcp] POST /mcp            (ASGI middleware)
+          [playwright-mcp] mcp.tool.session_create
+      [rag-api] HTTP POST playwright-mcp/mcp
+        [playwright-mcp] POST /mcp
+          [playwright-mcp] mcp.tool.browser_navigate
+      [rag-api] HTTP POST playwright-mcp/mcp
+        [playwright-mcp] POST /mcp
+          [playwright-mcp] mcp.tool.browser_get_text
+      ...
+    [rag-api] scrape.chunk                    (chunker)
+    [rag-api] embeddings.generate             (embedding API call)
+    [rag-api] db.insertDocument               (SurrealDB)
+    [rag-api] db.insertChunks                 (SurrealDB)
+```
+
+### Configuration
+
+Both services must export to the same OTel Collector (or compatible
+backend) for traces to be correlated:
+
+**Node.js API** (already configured via `docker-compose.yml`):
+- `OTEL_EXPORTER_OTLP_ENDPOINT=http://otel-collector:4318`
+- `OTEL_SERVICE_NAME=rag-api`
+
+**Playwright MCP server** (set in its own `.env`):
+- `OTEL_EXPORTER_OTLP_ENDPOINT=http://host.docker.internal:4318`
+  (if running outside Docker) or `http://otel-collector:4318` (if on
+  the same Docker network)
+- `OTEL_SERVICE_NAME=playwright-mcp`
+
+### Verifying distributed traces
+
+1. Scrape a URL via the UI or curl:
+   ```bash
+   curl -X POST http://localhost/api/scrape \
+     -H "Content-Type: application/json" \
+     -d '{"url":"https://example.com"}'
+   ```
+2. Check the collector debug output for spans from both services:
+   ```bash
+   docker compose logs otel-collector | findstr "playwright-mcp"
+   ```
+3. In Splunk APM, search for traces containing both `rag-api` and
+   `playwright-mcp` service names.

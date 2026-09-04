@@ -72,6 +72,8 @@ are needed -- just set the correct base URL format (see
 
 | Variable | Default | Description |
 |---|---|---|
+| `MCP_PLAYWRIGHT_URL` | (empty) | Playwright MCP server URL (e.g. `http://host.docker.internal:8765/mcp`) |
+| `MCP_PLAYWRIGHT_API_KEY` | (empty) | API key for the Playwright MCP server |
 | `YOU_COM_API_KEY` | (empty) | You.com API key for web search |
 
 ### Board (project tracking)

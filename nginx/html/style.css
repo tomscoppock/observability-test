@@ -191,6 +191,51 @@ header {
   text-decoration: underline;
 }
 
+/* Scrape form */
+#scrape-form {
+  display: flex;
+  padding: 8px 12px;
+  gap: 8px;
+  border-top: 1px solid #e0e0e0;
+  background: #f8f9fa;
+}
+
+#scrape-url {
+  flex: 1;
+  padding: 8px 12px;
+  border: 1px solid #ddd;
+  border-radius: 6px;
+  font-size: 0.85rem;
+  outline: none;
+  transition: border-color 0.2s;
+}
+
+#scrape-url:focus {
+  border-color: #34a853;
+}
+
+#scrape-btn {
+  padding: 8px 16px;
+  background: #34a853;
+  color: #fff;
+  border: none;
+  border-radius: 6px;
+  font-size: 0.85rem;
+  cursor: pointer;
+  transition: background 0.2s;
+  white-space: nowrap;
+}
+
+#scrape-btn:hover {
+  background: #2d8e47;
+}
+
+#scrape-btn:disabled {
+  background: #aaa;
+  cursor: not-allowed;
+}
+
+/* Chat form */
 #chat-form {
   display: flex;
   padding: 12px;
