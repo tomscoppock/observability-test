@@ -239,10 +239,53 @@ for ($i = 0; $i -lt $chartCount; $i++) {
 Write-Host ''
 Write-Host '--- Step 4: Attach charts to dashboard ---'
 
+# Read the current dashboard to get any existing chart attachments
+$currentDash = Invoke-SplunkApi -Method GET -Endpoint "/v2/dashboard/$DashId"
+$existingChartIds = @()
+if ($currentDash.charts) {
+    $existingChartIds = $currentDash.charts | ForEach-Object { $_.chartId }
+}
+
 $chartsArray = @()
 $row = 0
 $col = 0
+
+# Keep existing chart positions
+if ($currentDash.charts) {
+    foreach ($ec in $currentDash.charts) {
+        $chartsArray += @{
+            chartId = $ec.chartId
+            row     = $ec.row
+            column  = $ec.column
+            height  = $ec.height
+            width   = $ec.width
+        }
+        # Track the next available row/col
+        $endCol = $ec.column + $ec.width
+        $endRow = $ec.row + $ec.height
+        if ($endRow -gt $row -or ($endRow -eq $row -and $endCol -gt $col)) {
+            $row = $ec.row
+            $col = $endCol
+            if ($col -ge 12) {
+                $col = 0
+                $row++
+            }
+        }
+    }
+    # Start new charts on the next row after existing ones
+    if ($chartsArray.Count -gt 0) {
+        $maxRow = ($chartsArray | ForEach-Object { $_.row }) | Measure-Object -Maximum | Select-Object -ExpandProperty Maximum
+        $row = $maxRow + 1
+        $col = 0
+    }
+}
+
+# Add only charts not already on this dashboard
+$added = 0
 foreach ($cid in $ChartIds) {
+    if ($existingChartIds -contains $cid) {
+        continue
+    }
     $chartsArray += @{
         chartId = $cid
         row     = $row
@@ -250,6 +293,7 @@ foreach ($cid in $ChartIds) {
         height  = 1
         width   = 6
     }
+    $added++
     $col += 6
     if ($col -ge 12) {
         $col = 0
@@ -262,10 +306,10 @@ $dashUpdate = @{
     description = $DashDesc
     groupId     = $GroupId
     charts      = $chartsArray
-} | ConvertTo-Json -Compress -Depth 3
+} | ConvertTo-Json -Compress -Depth 4
 
 Invoke-SplunkApi -Method PUT -Endpoint "/v2/dashboard/$DashId" -Body $dashUpdate | Out-Null
-Write-Host "Attached $($ChartIds.Count) charts to dashboard."
+Write-Host "Dashboard has $($chartsArray.Count) charts ($added newly attached)."
 
 # ---------------------------------------------------------------------------
 # Done

@@ -241,11 +241,29 @@ done
 echo ""
 echo "--- Step 4: Attach charts to dashboard ---"
 
-# Build the charts array for the dashboard update
-CHARTS_ARRAY="[]"
-ROW=0
+# Read the current dashboard to get existing chart attachments
+CURRENT_DASH=$(api_call GET "/v2/dashboard/$DASH_ID")
+EXISTING_CHART_IDS_ON_DASH=$(echo "$CURRENT_DASH" | jq -r '.charts[]?.chartId // empty')
+
+# Start with existing charts to preserve their positions
+CHARTS_ARRAY=$(echo "$CURRENT_DASH" | jq '[.charts[]? | {chartId, row, column, height, width}]')
+if [ "$CHARTS_ARRAY" = "null" ] || [ -z "$CHARTS_ARRAY" ]; then
+  CHARTS_ARRAY="[]"
+fi
+
+# Calculate next available row
+MAX_ROW=$(echo "$CHARTS_ARRAY" | jq '[.[]? | (.row + .height)] | max // 0')
+ROW=$MAX_ROW
 COL=0
+
+# Add only charts not already on this dashboard
+ADDED=0
 for cid in "${CHART_IDS[@]}"; do
+  # Check if chart is already on this dashboard
+  if echo "$EXISTING_CHART_IDS_ON_DASH" | grep -q "^${cid}$"; then
+    continue
+  fi
+
   CHARTS_ARRAY=$(echo "$CHARTS_ARRAY" | jq \
     --arg chartId "$cid" \
     --argjson row "$ROW" \
@@ -253,12 +271,15 @@ for cid in "${CHART_IDS[@]}"; do
     --argjson height 1 \
     --argjson width 6 \
     '. + [{"chartId": $chartId, "row": $row, "column": $col, "height": $height, "width": $width}]')
+  ADDED=$((ADDED + 1))
   COL=$((COL + 6))
   if [ "$COL" -ge 12 ]; then
     COL=0
     ROW=$((ROW + 1))
   fi
 done
+
+TOTAL=$(echo "$CHARTS_ARRAY" | jq 'length')
 
 DASH_UPDATE=$(jq -n \
   --arg name "$DASH_NAME" \
@@ -268,7 +289,7 @@ DASH_UPDATE=$(jq -n \
   '{"name": $name, "description": $desc, "groupId": $groupId, "charts": $charts}')
 
 api_call PUT "/v2/dashboard/$DASH_ID" "$DASH_UPDATE" >/dev/null
-echo "Attached ${#CHART_IDS[@]} charts to dashboard."
+echo "Dashboard has $TOTAL charts ($ADDED newly attached)."
 
 # ---------------------------------------------------------------------------
 # Done
