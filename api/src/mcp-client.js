@@ -87,6 +87,15 @@ async function createClient() {
 async function callTool(client, toolName, args = {}) {
   const result = await client.callTool({ name: toolName, arguments: args });
 
+  // MCP tool results have an isError flag when the tool execution fails
+  if (result && result.isError) {
+    const errText = result.content
+      ?.filter((c) => c.type === 'text')
+      .map((c) => c.text)
+      .join(' ') || 'Unknown tool error';
+    throw new Error(`MCP tool ${toolName} failed: ${errText}`);
+  }
+
   // MCP tool results have a content array; extract the first text content
   if (result && result.content && Array.isArray(result.content)) {
     for (const item of result.content) {
@@ -136,34 +145,31 @@ async function scrapeUrl(url, options = {}) {
       logger.debug('Browser session created', { sessionId });
 
       // Navigate to the URL
+      // Note: Python MCP SDK (FastMCP) wraps tool args in { input: { ... } }
       const navResult = await callTool(client, 'browser_navigate', {
-        session_id: sessionId,
-        url,
+        input: { session_id: sessionId, url },
       });
       logger.debug('Navigation complete', { url, status: navResult.status });
 
       // Extract visible text content
       const textResult = await callTool(client, 'browser_get_text', {
-        session_id: sessionId,
-        selector: 'body',
-        max_length: maxLength,
+        input: { session_id: sessionId, selector: 'body', max_length: maxLength },
       });
 
       // Get the page title via evaluate
       let title = url;
       try {
         const titleResult = await callTool(client, 'browser_evaluate', {
-          session_id: sessionId,
-          function: 'document.title',
+          input: { session_id: sessionId, function: 'document.title' },
         });
         if (typeof titleResult === 'string' && titleResult.length > 0) {
           title = titleResult;
         } else if (titleResult && titleResult.result) {
           title = String(titleResult.result);
         }
-      } catch {
+      } catch (evalErr) {
         // Title extraction is best-effort; fall back to URL
-        logger.debug('Could not extract page title, using URL', { url });
+        logger.debug('Could not extract page title, using URL', { url, error: evalErr.message });
       }
 
       const text = typeof textResult === 'string'
@@ -187,7 +193,7 @@ async function scrapeUrl(url, options = {}) {
       // Always close the session
       if (client && sessionId) {
         try {
-          await callTool(client, 'session_close', { session_id: sessionId });
+          await callTool(client, 'session_close', { input: { session_id: sessionId } });
           logger.debug('Browser session closed', { sessionId });
         } catch (closeErr) {
           logger.warn('Failed to close browser session', {
