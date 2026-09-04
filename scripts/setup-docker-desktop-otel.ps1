@@ -86,21 +86,36 @@ else {
 # ---------------------------------------------------------------------------
 # Check if already configured
 # ---------------------------------------------------------------------------
-if ($settings.openTelemetry) {
+# Strict mode forbids accessing non-existent properties on PSCustomObject,
+# so use PSObject.Properties or ContainsKey to probe safely.
+$hasOtel = if ($settings -is [hashtable]) { $settings.ContainsKey('openTelemetry') }
+           else { $null -ne $settings.PSObject.Properties['openTelemetry'] }
+
+if ($hasOtel) {
     $current = $settings.openTelemetry
-    if ($current.enabled -eq $true -and $current.endpoint -eq $OtelEndpoint) {
+    $curEnabled  = if ($current -is [hashtable]) { $current['enabled'] }
+                   elseif ($null -ne $current.PSObject.Properties['enabled']) { $current.enabled }
+                   else { $false }
+    $curEndpoint = if ($current -is [hashtable]) { $current['endpoint'] }
+                   elseif ($null -ne $current.PSObject.Properties['endpoint']) { $current.endpoint }
+                   else { $null }
+    $curProtocol = if ($current -is [hashtable]) { $current['protocol'] }
+                   elseif ($null -ne $current.PSObject.Properties['protocol']) { $current.protocol }
+                   else { $null }
+
+    if ($curEnabled -eq $true -and $curEndpoint -eq $OtelEndpoint) {
         Write-Host 'Docker Desktop OTLP export is already configured correctly.'
-        Write-Host "  enabled:  $($current.enabled)"
-        Write-Host "  endpoint: $($current.endpoint)"
-        Write-Host "  protocol: $($current.protocol)"
+        Write-Host "  enabled:  $curEnabled"
+        Write-Host "  endpoint: $curEndpoint"
+        Write-Host "  protocol: $curProtocol"
         Write-Host ''
         Write-Host 'No changes needed. If telemetry is not appearing, restart Docker Desktop.'
         exit 0
     }
 
-    if ($current.enabled -eq $true -and $current.endpoint -ne $OtelEndpoint) {
+    if ($curEnabled -eq $true -and $curEndpoint -ne $OtelEndpoint) {
         Write-Host "WARNING: OTLP export is already enabled but pointing to a different endpoint:"
-        Write-Host "  Current:  $($current.endpoint)"
+        Write-Host "  Current:  $curEndpoint"
         Write-Host "  Expected: $OtelEndpoint"
         Write-Host ''
         $response = Read-Host 'Overwrite with the project endpoint? (y/N)'
