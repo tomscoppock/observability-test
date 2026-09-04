@@ -94,21 +94,21 @@
     },
     {
       "name": "Container CPU Usage",
-      "description": "CPU usage per Docker container (requires Docker Desktop OTLP export).",
+      "description": "CPU usage per Docker container (via docker_stats receiver).",
       "chartType": "Line",
-      "programText": "A = data('container.cpu.usage', filter=filter('service.name', 'docker-desktop')).publish(label='CPU Usage')"
+      "programText": "A = data('container.cpu.usage.total').publish(label='CPU Usage')"
     },
     {
       "name": "Container Memory Usage",
-      "description": "Memory usage per Docker container (requires Docker Desktop OTLP export).",
+      "description": "Memory usage per Docker container (via docker_stats receiver).",
       "chartType": "Line",
-      "programText": "A = data('container.memory.usage', filter=filter('service.name', 'docker-desktop')).publish(label='Memory Usage')"
+      "programText": "A = data('container.memory.usage.total').publish(label='Memory Usage')"
     },
     {
       "name": "Container Network I/O",
-      "description": "Network bytes sent and received per Docker container (requires Docker Desktop OTLP export).",
+      "description": "Network bytes sent and received per Docker container (via docker_stats receiver).",
       "chartType": "Area",
-      "programText": "A = data('container.network.io', filter=filter('service.name', 'docker-desktop') and filter('direction', 'receive')).rate().publish(label='Received bytes/s')\nB = data('container.network.io', filter=filter('service.name', 'docker-desktop') and filter('direction', 'transmit')).rate().publish(label='Sent bytes/s')"
+      "programText": "A = data('container.network.io.usage.rx_bytes').rate().publish(label='Received bytes/s')\nB = data('container.network.io.usage.tx_bytes').rate().publish(label='Sent bytes/s')"
     }
   ]
 }

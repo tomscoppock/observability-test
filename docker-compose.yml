@@ -91,6 +91,8 @@ services:
   # when SPLUNK_ACCESS_TOKEN and SPLUNK_REALM are set in .env.
   otel-collector:
     image: otel/opentelemetry-collector-contrib:latest
+    # Run as root so the docker_stats receiver can read /var/run/docker.sock.
+    user: "0:0"
     command: ["--config", "/etc/otelcol/config.yaml"]
     ports:
       - "4317:4317"   # OTLP gRPC
@@ -101,6 +103,7 @@ services:
       - OTEL_DEPLOYMENT_ENV=dev
     volumes:
       - ./otel-collector-config.yaml:/etc/otelcol/config.yaml:ro
+      - /var/run/docker.sock:/var/run/docker.sock:ro
     restart: unless-stopped
 
 volumes:

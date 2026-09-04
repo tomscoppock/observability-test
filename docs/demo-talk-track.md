@@ -74,10 +74,11 @@ collector."
 `Container Network I/O`
 
 **[SAY]** "We also have Docker container metrics -- CPU, memory, and
-network I/O per container. Docker Desktop exports these via OTLP to the
-same collector. So if the API container is hitting its memory limit or
-the database container is CPU-bound, we see it right here alongside the
-application metrics. No separate infrastructure monitoring tool needed."
+network I/O per container. The OTel Collector reads these directly from
+the Docker daemon socket via its docker_stats receiver. So if the API
+container is hitting its memory limit or the database container is
+CPU-bound, we see it right here alongside the application metrics. No
+separate infrastructure monitoring tool needed."
 
 **[SAY]** "From a governance perspective, this unified view means one
 team can own the full observability stack. There's no gap between 'the
@@ -353,10 +354,10 @@ and the dashboard automation script (`splunk/dashboard.json`):
 | 16 | Container Memory Usage | S1: Infrastructure |
 | 17 | Container Network I/O | S1: Infrastructure |
 
-> **Note:** Charts 15-17 require Docker Desktop OTLP export to be
-> enabled. See `docs/docker-desktop-otel.md` or run
-> `scripts/setup-docker-desktop-otel.ps1` (Windows) /
-> `scripts/setup-docker-desktop-otel.sh` (macOS/Linux).
+> **Note:** Charts 15-17 use the OTel Collector's `docker_stats`
+> receiver, which reads container metrics from the Docker daemon
+> socket. This is enabled by default in `docker-compose.yml` and
+> `otel-collector-config.yaml` -- no extra setup needed.
 
 ---
 

@@ -16,6 +16,15 @@ receivers:
       http:
         endpoint: 0.0.0.0:4318
 
+  # Container resource metrics via the Docker daemon socket.
+  # Requires /var/run/docker.sock mounted into the collector container.
+  docker_stats:
+    endpoint: unix:///var/run/docker.sock
+    collection_interval: 15s
+    container_labels_to_metric_labels:
+      com.docker.compose.service: compose.service
+      com.docker.compose.project: compose.project
+
 processors:
   batch:
     send_batch_size: 512
@@ -66,7 +75,7 @@ service:
       processors: [gen_ai_normalizer, batch, resource/splunk]
       exporters: [debug, otlp_http/splunk]
     metrics:
-      receivers: [otlp]
+      receivers: [otlp, docker_stats]
       processors: [batch, resource/splunk]
       exporters: [debug, signalfx]
     logs:
