@@ -171,7 +171,7 @@ Two improvements in one task:
 - [x] Add conversation history support to `chat.js` and `app.js`
 - [x] Create `api/src/__tests__/chat-stream.test.js`
 - [x] Run full test suite (63 pass, 0 fail)
-- [ ] Manual smoke test: send a chat message, verify streaming + markdown rendering
+- [x] Manual smoke test: send a chat message, verify streaming + markdown rendering
 - [x] Update `.ai/STATUS.md`
 
 ## Review notes
