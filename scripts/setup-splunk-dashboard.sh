@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# setup-splunk-dashboard.sh -- Create the RAG Agent demo dashboard in
+# setup-splunk-dashboard.sh -- Create the RAG Agent demo dashboards in
 # Splunk Observability Cloud via the REST API.
 #
 # Usage:
@@ -11,6 +11,10 @@
 #
 # The script is idempotent: it checks for existing resources before
 # creating new ones. Re-running updates chart programs in place.
+#
+# Dashboard structure (from splunk/dashboard.json):
+#   dashboardGroup -> dashboards[] -> charts[]
+# Each dashboard appears as a tab in the Splunk UI.
 
 set -euo pipefail
 
@@ -74,6 +78,8 @@ api_call() {
     args+=(-X POST -d "$data")
   elif [ "$method" = "PUT" ]; then
     args+=(-X PUT -d "$data")
+  elif [ "$method" = "DELETE" ]; then
+    args+=(-X DELETE)
   fi
 
   local response
@@ -84,7 +90,7 @@ api_call() {
   local body
   body=$(echo "$response" | sed '$d')
 
-  if [ "$http_code" -ge 400 ]; then
+  if [[ "$http_code" -ge 400 ]]; then
     echo "ERROR: API returned HTTP $http_code for $method $endpoint" >&2
     echo "$body" >&2
     return 1
@@ -98,13 +104,12 @@ api_call() {
 # ---------------------------------------------------------------------------
 GROUP_NAME=$(jq -r '.dashboardGroup.name' "$DASHBOARD_JSON")
 GROUP_DESC=$(jq -r '.dashboardGroup.description' "$DASHBOARD_JSON")
-DASH_NAME=$(jq -r '.dashboard.name' "$DASHBOARD_JSON")
-DASH_DESC=$(jq -r '.dashboard.description' "$DASHBOARD_JSON")
+DASH_COUNT=$(jq '.dashboards | length' "$DASHBOARD_JSON")
 
 echo "=== Splunk Dashboard Setup ==="
 echo "Realm:           $SPLUNK_REALM"
 echo "Dashboard group: $GROUP_NAME"
-echo "Dashboard:       $DASH_NAME"
+echo "Dashboards:      $DASH_COUNT"
 echo ""
 
 # ---------------------------------------------------------------------------
@@ -113,7 +118,6 @@ echo ""
 echo "--- Step 1: Dashboard group ---"
 
 GROUP_ID=""
-# Search for existing group by name
 GROUPS_RESPONSE=$(api_call GET "/v2/dashboardgroup?limit=100")
 GROUP_ID=$(echo "$GROUPS_RESPONSE" | jq -r --arg name "$GROUP_NAME" \
   '.results[]? | select(.name == $name) | .id' | head -1)
@@ -130,176 +134,191 @@ else
 fi
 
 # ---------------------------------------------------------------------------
-# Step 2: Find or create dashboard
+# Step 2: Clean up old single "Demo Dashboard" if it exists
 # ---------------------------------------------------------------------------
 echo ""
-echo "--- Step 2: Dashboard ---"
+echo "--- Step 2: Clean up old dashboards ---"
 
-DASH_ID=""
-# Search for existing dashboard in the group
 DASH_LIST=$(api_call GET "/v2/dashboard?limit=100&groupId=$GROUP_ID")
-DASH_ID=$(echo "$DASH_LIST" | jq -r --arg name "$DASH_NAME" \
-  '.results[]? | select(.name == $name) | .id' | head -1)
+OLD_DASH_ID=$(echo "$DASH_LIST" | jq -r '.results[]? | select(.name == "Demo Dashboard") | .id' | head -1)
+if [ -n "$OLD_DASH_ID" ]; then
+  echo "Deleting old 'Demo Dashboard': $OLD_DASH_ID"
+  api_call DELETE "/v2/dashboard/$OLD_DASH_ID" >/dev/null 2>&1 || echo "  (could not delete -- may be the default dashboard)"
+fi
 
-if [ -n "$DASH_ID" ]; then
-  echo "Found existing dashboard: $DASH_ID"
-else
-  echo "Creating dashboard: $DASH_NAME"
-  DASH_BODY=$(jq -n \
+# ---------------------------------------------------------------------------
+# Step 3: Create or update each dashboard and its charts
+# ---------------------------------------------------------------------------
+
+# Helper: determine chart width based on type
+chart_width() {
+  local chart_type="$1"
+  case "$chart_type" in
+    SingleValue) echo 3 ;;
+    List)        echo 4 ;;
+    *)           echo 6 ;;
+  esac
+}
+
+for d in $(seq 0 $((DASH_COUNT - 1))); do
+  DASH_NAME=$(jq -r ".dashboards[$d].name" "$DASHBOARD_JSON")
+  DASH_DESC=$(jq -r ".dashboards[$d].description" "$DASHBOARD_JSON")
+  CHART_COUNT=$(jq ".dashboards[$d].charts | length" "$DASHBOARD_JSON")
+
+  echo ""
+  echo "--- Dashboard $((d + 1))/$DASH_COUNT: $DASH_NAME ($CHART_COUNT charts) ---"
+
+  # Find or create this dashboard
+  DASH_LIST=$(api_call GET "/v2/dashboard?limit=100&groupId=$GROUP_ID")
+  DASH_ID=$(echo "$DASH_LIST" | jq -r --arg name "$DASH_NAME" \
+    '.results[]? | select(.name == $name) | .id' | head -1)
+
+  if [ -n "$DASH_ID" ]; then
+    echo "Found existing dashboard: $DASH_ID"
+  else
+    echo "Creating dashboard: $DASH_NAME"
+    DASH_BODY=$(jq -n \
+      --arg name "$DASH_NAME" \
+      --arg desc "$DASH_DESC" \
+      --arg groupId "$GROUP_ID" \
+      '{"name": $name, "description": $desc, "groupId": $groupId, "charts": []}')
+    DASH_RESPONSE=$(api_call POST "/v2/dashboard" "$DASH_BODY")
+    DASH_ID=$(echo "$DASH_RESPONSE" | jq -r '.id')
+    echo "Created dashboard: $DASH_ID"
+  fi
+
+  # Build a map of chart names already on this dashboard
+  CURRENT_DASH=$(api_call GET "/v2/dashboard/$DASH_ID")
+  declare -A DASH_CHART_MAP=()
+  DASH_CHART_IDS_RAW=$(echo "$CURRENT_DASH" | jq -r '.charts[]?.chartId // empty')
+  for dcid in $DASH_CHART_IDS_RAW; do
+    CHART_DETAIL=$(api_call GET "/v2/chart/$dcid" 2>/dev/null || true)
+    if [ -n "$CHART_DETAIL" ]; then
+      CNAME=$(echo "$CHART_DETAIL" | jq -r '.name // empty')
+      if [ -n "$CNAME" ]; then
+        DASH_CHART_MAP["$CNAME"]="$dcid"
+      fi
+    fi
+  done
+
+  # Create or update charts
+  CHART_IDS=()
+  for i in $(seq 0 $((CHART_COUNT - 1))); do
+    CHART_NAME=$(jq -r ".dashboards[$d].charts[$i].name" "$DASHBOARD_JSON")
+    CHART_DESC=$(jq -r ".dashboards[$d].charts[$i].description" "$DASHBOARD_JSON")
+    CHART_TYPE=$(jq -r ".dashboards[$d].charts[$i].chartType" "$DASHBOARD_JSON")
+    PROGRAM_TEXT=$(jq -r ".dashboards[$d].charts[$i].programText" "$DASHBOARD_JSON")
+
+    # Map chart types to Splunk API options.type values
+    PLOT_TYPE="TimeSeriesChart"
+    DEFAULT_PLOT_TYPE=""
+    case "$CHART_TYPE" in
+      Line)        PLOT_TYPE="TimeSeriesChart" ;;
+      Area)        PLOT_TYPE="TimeSeriesChart"; DEFAULT_PLOT_TYPE="AreaChart" ;;
+      List)        PLOT_TYPE="List" ;;
+      SingleValue) PLOT_TYPE="SingleValue" ;;
+    esac
+
+    if [ -n "$DEFAULT_PLOT_TYPE" ]; then
+      CHART_BODY=$(jq -n \
+        --arg name "$CHART_NAME" \
+        --arg desc "$CHART_DESC" \
+        --arg programText "$PROGRAM_TEXT" \
+        --arg plotType "$PLOT_TYPE" \
+        --arg defaultPlotType "$DEFAULT_PLOT_TYPE" \
+        '{
+          "name": $name,
+          "description": $desc,
+          "programText": $programText,
+          "options": {
+            "type": $plotType,
+            "defaultPlotType": $defaultPlotType
+          }
+        }')
+    else
+      CHART_BODY=$(jq -n \
+        --arg name "$CHART_NAME" \
+        --arg desc "$CHART_DESC" \
+        --arg programText "$PROGRAM_TEXT" \
+        --arg plotType "$PLOT_TYPE" \
+        '{
+          "name": $name,
+          "description": $desc,
+          "programText": $programText,
+          "options": {
+            "type": $plotType
+          }
+        }')
+    fi
+
+    EXISTING_CHART_ID="${DASH_CHART_MAP[$CHART_NAME]:-}"
+    if [ -n "$EXISTING_CHART_ID" ]; then
+      echo "  Updating chart [$((i + 1))/$CHART_COUNT]: $CHART_NAME ($EXISTING_CHART_ID)"
+      api_call PUT "/v2/chart/$EXISTING_CHART_ID" "$CHART_BODY" >/dev/null
+      CHART_IDS+=("$EXISTING_CHART_ID")
+    else
+      echo "  Creating chart [$((i + 1))/$CHART_COUNT]: $CHART_NAME"
+      CHART_RESPONSE=$(api_call POST "/v2/chart" "$CHART_BODY")
+      CHART_ID=$(echo "$CHART_RESPONSE" | jq -r '.id')
+      CHART_IDS+=("$CHART_ID")
+    fi
+
+    sleep 0.2
+  done
+
+  # Attach charts to dashboard with smart layout
+  echo "  Attaching charts to dashboard ..."
+
+  EXISTING_CHART_IDS_ON_DASH=$(echo "$CURRENT_DASH" | jq -r '.charts[]?.chartId // empty')
+  CHARTS_ARRAY=$(echo "$CURRENT_DASH" | jq '[.charts[]? | {chartId, row, column, height, width}]')
+  if [ "$CHARTS_ARRAY" = "null" ] || [ -z "$CHARTS_ARRAY" ]; then
+    CHARTS_ARRAY="[]"
+  fi
+
+  # For a clean layout, rebuild chart positions from scratch
+  CHARTS_ARRAY="[]"
+  ROW=0
+  COL=0
+
+  for idx in "${!CHART_IDS[@]}"; do
+    cid="${CHART_IDS[$idx]}"
+    # Determine width from chart type
+    CT=$(jq -r ".dashboards[$d].charts[$idx].chartType" "$DASHBOARD_JSON")
+    W=$(chart_width "$CT")
+
+    # Wrap to next row if this chart won't fit
+    if [ $((COL + W)) -gt 12 ]; then
+      COL=0
+      ROW=$((ROW + 1))
+    fi
+
+    CHARTS_ARRAY=$(echo "$CHARTS_ARRAY" | jq \
+      --arg chartId "$cid" \
+      --argjson row "$ROW" \
+      --argjson col "$COL" \
+      --argjson height 1 \
+      --argjson width "$W" \
+      '. + [{"chartId": $chartId, "row": $row, "column": $col, "height": $height, "width": $width}]')
+
+    COL=$((COL + W))
+    if [ "$COL" -ge 12 ]; then
+      COL=0
+      ROW=$((ROW + 1))
+    fi
+  done
+
+  TOTAL=$(echo "$CHARTS_ARRAY" | jq 'length')
+
+  DASH_UPDATE=$(jq -n \
     --arg name "$DASH_NAME" \
     --arg desc "$DASH_DESC" \
     --arg groupId "$GROUP_ID" \
-    '{"name": $name, "description": $desc, "groupId": $groupId, "charts": []}')
-  DASH_RESPONSE=$(api_call POST "/v2/dashboard" "$DASH_BODY")
-  DASH_ID=$(echo "$DASH_RESPONSE" | jq -r '.id')
-  echo "Created dashboard: $DASH_ID"
-fi
+    --argjson charts "$CHARTS_ARRAY" \
+    '{"name": $name, "description": $desc, "groupId": $groupId, "charts": $charts}')
 
-# ---------------------------------------------------------------------------
-# Step 3: Create or update charts
-# ---------------------------------------------------------------------------
-echo ""
-echo "--- Step 3: Charts ---"
-
-# Build a map of chart names already on our target dashboard so we only
-# update those (not charts with the same name on other dashboards).
-CURRENT_DASH_FOR_CHARTS=$(api_call GET "/v2/dashboard/$DASH_ID")
-declare -A DASH_CHART_MAP
-DASH_CHART_IDS_RAW=$(echo "$CURRENT_DASH_FOR_CHARTS" | jq -r '.charts[]?.chartId // empty')
-for dcid in $DASH_CHART_IDS_RAW; do
-  CHART_DETAIL=$(api_call GET "/v2/chart/$dcid" 2>/dev/null || true)
-  if [ -n "$CHART_DETAIL" ]; then
-    CNAME=$(echo "$CHART_DETAIL" | jq -r '.name // empty')
-    if [ -n "$CNAME" ]; then
-      DASH_CHART_MAP["$CNAME"]="$dcid"
-    fi
-  fi
+  api_call PUT "/v2/dashboard/$DASH_ID" "$DASH_UPDATE" >/dev/null
+  echo "  Dashboard '$DASH_NAME' has $TOTAL charts."
 done
-
-CHART_COUNT=$(jq '.charts | length' "$DASHBOARD_JSON")
-CHART_IDS=()
-
-for i in $(seq 0 $((CHART_COUNT - 1))); do
-  CHART_NAME=$(jq -r ".charts[$i].name" "$DASHBOARD_JSON")
-  CHART_DESC=$(jq -r ".charts[$i].description" "$DASHBOARD_JSON")
-  CHART_TYPE=$(jq -r ".charts[$i].chartType" "$DASHBOARD_JSON")
-  PROGRAM_TEXT=$(jq -r ".charts[$i].programText" "$DASHBOARD_JSON")
-
-  # Map our chart types to Splunk API options.type values
-  # Valid types: Event, Heatmap, List, SingleValue, Text, TimeSeriesChart
-  PLOT_TYPE="TimeSeriesChart"
-  DEFAULT_PLOT_TYPE=""
-  case "$CHART_TYPE" in
-    Line) PLOT_TYPE="TimeSeriesChart" ;;
-    Area) PLOT_TYPE="TimeSeriesChart"; DEFAULT_PLOT_TYPE="AreaChart" ;;
-    List) PLOT_TYPE="List" ;;
-    SingleValue) PLOT_TYPE="SingleValue" ;;
-  esac
-
-  if [ -n "$DEFAULT_PLOT_TYPE" ]; then
-    CHART_BODY=$(jq -n \
-      --arg name "$CHART_NAME" \
-      --arg desc "$CHART_DESC" \
-      --arg programText "$PROGRAM_TEXT" \
-      --arg plotType "$PLOT_TYPE" \
-      --arg defaultPlotType "$DEFAULT_PLOT_TYPE" \
-      '{
-        "name": $name,
-        "description": $desc,
-        "programText": $programText,
-        "options": {
-          "type": $plotType,
-          "defaultPlotType": $defaultPlotType
-        }
-      }')
-  else
-    CHART_BODY=$(jq -n \
-      --arg name "$CHART_NAME" \
-      --arg desc "$CHART_DESC" \
-      --arg programText "$PROGRAM_TEXT" \
-      --arg plotType "$PLOT_TYPE" \
-      '{
-        "name": $name,
-        "description": $desc,
-        "programText": $programText,
-        "options": {
-          "type": $plotType
-        }
-      }')
-  fi
-
-  # Only update charts already on THIS dashboard (not other dashboards)
-  EXISTING_CHART_ID="${DASH_CHART_MAP[$CHART_NAME]:-}"
-  if [ -n "$EXISTING_CHART_ID" ]; then
-    echo "  Updating chart [$((i + 1))/$CHART_COUNT]: $CHART_NAME ($EXISTING_CHART_ID)"
-    api_call PUT "/v2/chart/$EXISTING_CHART_ID" "$CHART_BODY" >/dev/null
-    CHART_IDS+=("$EXISTING_CHART_ID")
-  else
-    echo "  Creating chart [$((i + 1))/$CHART_COUNT]: $CHART_NAME"
-    CHART_RESPONSE=$(api_call POST "/v2/chart" "$CHART_BODY")
-    CHART_ID=$(echo "$CHART_RESPONSE" | jq -r '.id')
-    CHART_IDS+=("$CHART_ID")
-  fi
-
-  # Brief pause to respect rate limits
-  sleep 0.2
-done
-
-# ---------------------------------------------------------------------------
-# Step 4: Attach charts to dashboard
-# ---------------------------------------------------------------------------
-echo ""
-echo "--- Step 4: Attach charts to dashboard ---"
-
-# Read the current dashboard to get existing chart attachments
-CURRENT_DASH=$(api_call GET "/v2/dashboard/$DASH_ID")
-EXISTING_CHART_IDS_ON_DASH=$(echo "$CURRENT_DASH" | jq -r '.charts[]?.chartId // empty')
-
-# Start with existing charts to preserve their positions
-CHARTS_ARRAY=$(echo "$CURRENT_DASH" | jq '[.charts[]? | {chartId, row, column, height, width}]')
-if [ "$CHARTS_ARRAY" = "null" ] || [ -z "$CHARTS_ARRAY" ]; then
-  CHARTS_ARRAY="[]"
-fi
-
-# Calculate next available row
-MAX_ROW=$(echo "$CHARTS_ARRAY" | jq '[.[]? | (.row + .height)] | max // 0')
-ROW=$MAX_ROW
-COL=0
-
-# Add only charts not already on this dashboard
-ADDED=0
-for cid in "${CHART_IDS[@]}"; do
-  # Check if chart is already on this dashboard
-  if echo "$EXISTING_CHART_IDS_ON_DASH" | grep -q "^${cid}$"; then
-    continue
-  fi
-
-  CHARTS_ARRAY=$(echo "$CHARTS_ARRAY" | jq \
-    --arg chartId "$cid" \
-    --argjson row "$ROW" \
-    --argjson col "$COL" \
-    --argjson height 1 \
-    --argjson width 6 \
-    '. + [{"chartId": $chartId, "row": $row, "column": $col, "height": $height, "width": $width}]')
-  ADDED=$((ADDED + 1))
-  COL=$((COL + 6))
-  if [ "$COL" -ge 12 ]; then
-    COL=0
-    ROW=$((ROW + 1))
-  fi
-done
-
-TOTAL=$(echo "$CHARTS_ARRAY" | jq 'length')
-
-DASH_UPDATE=$(jq -n \
-  --arg name "$DASH_NAME" \
-  --arg desc "$DASH_DESC" \
-  --arg groupId "$GROUP_ID" \
-  --argjson charts "$CHARTS_ARRAY" \
-  '{"name": $name, "description": $desc, "groupId": $groupId, "charts": $charts}')
-
-api_call PUT "/v2/dashboard/$DASH_ID" "$DASH_UPDATE" >/dev/null
-echo "Dashboard has $TOTAL charts ($ADDED newly attached)."
 
 # ---------------------------------------------------------------------------
 # Done
@@ -307,9 +326,8 @@ echo "Dashboard has $TOTAL charts ($ADDED newly attached)."
 echo ""
 echo "=== Setup complete ==="
 echo ""
-echo "Dashboard URL:"
-echo "  https://app.${SPLUNK_REALM}.signalfx.com/#/dashboard/$DASH_ID"
+echo "Dashboard group URL:"
+echo "  https://app.${SPLUNK_REALM}.signalfx.com/#/dashboard-group/$GROUP_ID"
 echo ""
 echo "Dashboard group: $GROUP_ID"
-echo "Dashboard:       $DASH_ID"
-echo "Charts:          ${#CHART_IDS[@]}"
+echo "Dashboards:      $DASH_COUNT"

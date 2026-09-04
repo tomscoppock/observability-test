@@ -3,112 +3,186 @@
     "name": "RAG Agent -- Observability",
     "description": "Dashboard group for the RAG Agent observability demo stack."
   },
-  "dashboard": {
-    "name": "Demo Dashboard",
-    "description": "Automated demo dashboard aligned to the demo talk track (docs/demo-talk-track.md). Created by scripts/setup-splunk-dashboard.sh."
-  },
-  "charts": [
+  "dashboards": [
     {
-      "name": "Service Health Overview",
-      "description": "Total request count by service -- quick health check for all services.",
-      "chartType": "SingleValue",
-      "programText": "A = histogram('service.request', filter=filter('sf_environment', 'dev')).count().sum().publish(label='Requests')"
+      "name": "Service Overview",
+      "description": "At-a-glance service health, request rates, latency, and error breakdown.",
+      "charts": [
+        {
+          "name": "rag-api Requests",
+          "description": "Total request count for the rag-api service.",
+          "chartType": "SingleValue",
+          "programText": "A = histogram('service.request', filter=filter('sf_service', 'rag-api') and filter('sf_environment', 'dev')).count().sum().publish(label='rag-api')"
+        },
+        {
+          "name": "surrealdb Requests",
+          "description": "Total request count for the surrealdb service.",
+          "chartType": "SingleValue",
+          "programText": "A = histogram('service.request', filter=filter('sf_service', 'surrealdb') and filter('sf_environment', 'dev')).count().sum().publish(label='surrealdb')"
+        },
+        {
+          "name": "playwright-mcp Requests",
+          "description": "Total request count for the playwright-mcp service.",
+          "chartType": "SingleValue",
+          "programText": "A = histogram('service.request', filter=filter('sf_service', 'playwright-mcp') and filter('sf_environment', 'dev')).count().sum().publish(label='playwright-mcp')"
+        },
+        {
+          "name": "Error Rate %",
+          "description": "Percentage of rag-api requests resulting in an error.",
+          "chartType": "SingleValue",
+          "programText": "A = histogram('service.request', filter=filter('sf_service', 'rag-api') and filter('sf_environment', 'dev') and filter('sf_error', 'true')).count().publish(label='Errors', enable=False)\nB = histogram('service.request', filter=filter('sf_service', 'rag-api') and filter('sf_environment', 'dev')).count().publish(label='Total', enable=False)\nC = (A / B * 100).publish(label='Error Rate %')"
+        },
+        {
+          "name": "Request Rate",
+          "description": "Requests per second for the rag-api service.",
+          "chartType": "Line",
+          "programText": "A = histogram('service.request', filter=filter('sf_service', 'rag-api') and filter('sf_environment', 'dev')).count().rate().publish(label='Request Rate')"
+        },
+        {
+          "name": "Service Latency (P50/P90/P99)",
+          "description": "Request latency percentiles for the rag-api service.",
+          "chartType": "Line",
+          "programText": "filter_ = filter('sf_service', 'rag-api') and filter('sf_environment', 'dev')\nA = histogram('service.request', filter=filter_).percentile(pct=50).publish(label='P50')\nB = histogram('service.request', filter=filter_).percentile(pct=90).publish(label='P90')\nC = histogram('service.request', filter=filter_).percentile(pct=99).publish(label='P99')"
+        },
+        {
+          "name": "Error Count by Endpoint",
+          "description": "Top 5 endpoints by error count.",
+          "chartType": "List",
+          "programText": "A = histogram('service.request', filter=filter('sf_service', 'rag-api') and filter('sf_environment', 'dev') and filter('sf_error', 'true')).count().sum(by=['sf_operation']).top(count=5).publish(label='Errors by Endpoint')"
+        },
+        {
+          "name": "Top Endpoints",
+          "description": "Top 10 endpoints by request count.",
+          "chartType": "List",
+          "programText": "A = histogram('service.request', filter=filter('sf_service', 'rag-api') and filter('sf_environment', 'dev')).count().top(count=10).publish(label='Top Endpoints')"
+        }
+      ]
     },
     {
-      "name": "SurrealDB Process Health",
-      "description": "CPU and memory usage of the SurrealDB instance.",
-      "chartType": "Line",
-      "programText": "A = data('surrealdb.process.cpu_percent', filter=filter('service.name', 'surrealdb')).publish(label='CPU %')\nB = data('surrealdb.process.memory', filter=filter('service.name', 'surrealdb')).publish(label='Memory (bytes)')"
+      "name": "RAG Pipeline",
+      "description": "End-to-end RAG flow timing, operation breakdown, and session tracking.",
+      "charts": [
+        {
+          "name": "RAG Chat Pipeline Latency",
+          "description": "Duration breakdown of the chat pipeline by step.",
+          "chartType": "Line",
+          "programText": "filter_ = filter('sf_service', 'rag-api') and filter('sf_environment', 'dev')\nA = histogram('spans', filter=filter_ and filter('sf_operation', 'chat.pipeline')).median().publish(label='Total Chat')\nB = histogram('spans', filter=filter_ and filter('sf_operation', 'embeddings.embedTexts')).median().publish(label='Query Embedding')\nC = histogram('spans', filter=filter_ and filter('sf_operation', 'db.vectorSearch')).median().publish(label='Vector Search')\nD = histogram('spans', filter=filter_ and filter('sf_operation', 'llm.chatCompletion')).median().publish(label='LLM Completion')"
+        },
+        {
+          "name": "RAG Upload Pipeline Latency",
+          "description": "Duration breakdown of the upload pipeline by step.",
+          "chartType": "Line",
+          "programText": "filter_ = filter('sf_service', 'rag-api') and filter('sf_environment', 'dev')\nA = histogram('spans', filter=filter_ and filter('sf_operation', 'upload.pipeline')).median().publish(label='Total Upload')\nB = histogram('spans', filter=filter_ and filter('sf_operation', 'embeddings.embedTexts')).median().publish(label='Embedding')\nC = histogram('spans', filter=filter_ and filter('sf_operation', 'db.insertChunks')).median().publish(label='DB Insert')"
+        },
+        {
+          "name": "MCP Scrape Latency",
+          "description": "End-to-end MCP scrape latency broken down by tool call.",
+          "chartType": "Line",
+          "programText": "filter_api = filter('sf_service', 'rag-api') and filter('sf_environment', 'dev')\nfilter_mcp = filter('sf_service', 'playwright-mcp') and filter('sf_environment', 'dev')\nA = histogram('spans', filter=filter_api and filter('sf_operation', 'mcp.scrape')).median().publish(label='Total Scrape')\nB = histogram('spans', filter=filter_mcp and filter('sf_operation', 'mcp.tool.browser_navigate')).median().publish(label='Navigate')\nC = histogram('spans', filter=filter_mcp and filter('sf_operation', 'mcp.tool.browser_get_text')).median().publish(label='Get Text')"
+        },
+        {
+          "name": "Embedding Latency (P50/P90)",
+          "description": "Embedding API call latency percentiles.",
+          "chartType": "Line",
+          "programText": "filter_ = filter('sf_service', 'rag-api') and filter('sf_environment', 'dev')\nA = histogram('spans', filter=filter_ and filter('sf_operation', 'embeddings.embedTexts')).percentile(pct=50).publish(label='P50')\nB = histogram('spans', filter=filter_ and filter('sf_operation', 'embeddings.embedTexts')).percentile(pct=90).publish(label='P90')"
+        },
+        {
+          "name": "DB Operation Breakdown",
+          "description": "Request count by database operation type.",
+          "chartType": "List",
+          "programText": "A = histogram('spans', filter=filter('sf_service', 'rag-api') and filter('sf_environment', 'dev') and filter('sf_operation', 'db.*')).count().sum(by=['sf_operation']).publish(label='DB Operations')"
+        },
+        {
+          "name": "Vector Search Latency (P50/P90)",
+          "description": "Vector search latency percentiles.",
+          "chartType": "Line",
+          "programText": "filter_ = filter('sf_service', 'rag-api') and filter('sf_environment', 'dev')\nA = histogram('spans', filter=filter_ and filter('sf_operation', 'db.vectorSearch')).percentile(pct=50).publish(label='P50')\nB = histogram('spans', filter=filter_ and filter('sf_operation', 'db.vectorSearch')).percentile(pct=90).publish(label='P90')"
+        },
+        {
+          "name": "Active Sessions",
+          "description": "Count of unique session IDs in the current time window.",
+          "chartType": "SingleValue",
+          "programText": "A = histogram('service.request', filter=filter('sf_service', 'rag-api') and filter('sf_environment', 'dev')).count().sum(by=['session.id']).count().publish(label='Active Sessions')"
+        }
+      ]
     },
     {
-      "name": "SurrealDB Transaction Rate",
-      "description": "Transaction throughput (transactions per second).",
-      "chartType": "Line",
-      "programText": "A = data('surrealdb.transaction', filter=filter('service.name', 'surrealdb')).rate().publish(label='Tx/s')"
+      "name": "LLM and AI",
+      "description": "Token usage, model latency, and AI cost metrics.",
+      "charts": [
+        {
+          "name": "Total Input Tokens",
+          "description": "Total input (prompt) tokens consumed in the current time window.",
+          "chartType": "SingleValue",
+          "programText": "A = data('gen_ai.client.token.usage', filter=filter('gen_ai.token.type', 'input') and filter('service.name', 'rag-api')).sum().publish(label='Input Tokens')"
+        },
+        {
+          "name": "Total Output Tokens",
+          "description": "Total output (completion) tokens consumed in the current time window.",
+          "chartType": "SingleValue",
+          "programText": "A = data('gen_ai.client.token.usage', filter=filter('gen_ai.token.type', 'output') and filter('service.name', 'rag-api')).sum().publish(label='Output Tokens')"
+        },
+        {
+          "name": "Token Usage Over Time",
+          "description": "Input and output token consumption over time.",
+          "chartType": "Line",
+          "programText": "A = data('gen_ai.client.token.usage', filter=filter('gen_ai.token.type', 'input') and filter('service.name', 'rag-api')).sum().publish(label='Input Tokens')\nB = data('gen_ai.client.token.usage', filter=filter('gen_ai.token.type', 'output') and filter('service.name', 'rag-api')).sum().publish(label='Output Tokens')"
+        },
+        {
+          "name": "LLM Call Latency (P50/P90/P99)",
+          "description": "LLM completion call latency percentiles.",
+          "chartType": "Line",
+          "programText": "filter_ = filter('sf_service', 'rag-api') and filter('sf_environment', 'dev')\nA = histogram('spans', filter=filter_ and filter('sf_operation', 'llm.chatCompletion')).percentile(pct=50).publish(label='P50')\nB = histogram('spans', filter=filter_ and filter('sf_operation', 'llm.chatCompletion')).percentile(pct=90).publish(label='P90')\nC = histogram('spans', filter=filter_ and filter('sf_operation', 'llm.chatCompletion')).percentile(pct=99).publish(label='P99')"
+        },
+        {
+          "name": "Embedding API Latency",
+          "description": "Embedding API call latency (median).",
+          "chartType": "Line",
+          "programText": "filter_ = filter('sf_service', 'rag-api') and filter('sf_environment', 'dev')\nA = histogram('spans', filter=filter_ and filter('sf_operation', 'embeddings.embedTexts')).percentile(pct=50).publish(label='P50')"
+        }
+      ]
     },
     {
-      "name": "Request Rate",
-      "description": "Requests per second for the rag-api service.",
-      "chartType": "Line",
-      "programText": "A = histogram('service.request', filter=filter('sf_service', 'rag-api') and filter('sf_environment', 'dev')).count().rate().publish(label='Request Rate')"
-    },
-    {
-      "name": "Error Rate %",
-      "description": "Percentage of requests resulting in an error.",
-      "chartType": "Line",
-      "programText": "A = histogram('service.request', filter=filter('sf_service', 'rag-api') and filter('sf_environment', 'dev') and filter('sf_error', 'true')).count().publish(label='Errors', enable=False)\nB = histogram('service.request', filter=filter('sf_service', 'rag-api') and filter('sf_environment', 'dev')).count().publish(label='Total', enable=False)\nC = (A / B * 100).publish(label='Error Rate %')"
-    },
-    {
-      "name": "Service Latency (P50/P90/P99)",
-      "description": "Request latency percentiles for the rag-api service.",
-      "chartType": "Line",
-      "programText": "filter_ = filter('sf_service', 'rag-api') and filter('sf_environment', 'dev')\nA = histogram('service.request', filter=filter_).percentile(pct=50).publish(label='P50')\nB = histogram('service.request', filter=filter_).percentile(pct=90).publish(label='P90')\nC = histogram('service.request', filter=filter_).percentile(pct=99).publish(label='P99')"
-    },
-    {
-      "name": "RAG Chat Pipeline Latency",
-      "description": "Duration breakdown of the chat pipeline by step.",
-      "chartType": "Line",
-      "programText": "filter_ = filter('sf_service', 'rag-api') and filter('sf_environment', 'dev')\nA = histogram('spans', filter=filter_ and filter('sf_operation', 'chat.pipeline')).median().publish(label='Total Chat')\nB = histogram('spans', filter=filter_ and filter('sf_operation', 'embeddings.embedTexts')).median().publish(label='Query Embedding')\nC = histogram('spans', filter=filter_ and filter('sf_operation', 'db.vectorSearch')).median().publish(label='Vector Search')\nD = histogram('spans', filter=filter_ and filter('sf_operation', 'llm.chatCompletion')).median().publish(label='LLM Completion')"
-    },
-    {
-      "name": "RAG Upload Pipeline Latency",
-      "description": "Duration breakdown of the upload pipeline by step.",
-      "chartType": "Line",
-      "programText": "filter_ = filter('sf_service', 'rag-api') and filter('sf_environment', 'dev')\nA = histogram('spans', filter=filter_ and filter('sf_operation', 'upload.pipeline')).median().publish(label='Total Upload')\nB = histogram('spans', filter=filter_ and filter('sf_operation', 'embeddings.embedTexts')).median().publish(label='Embedding')\nC = histogram('spans', filter=filter_ and filter('sf_operation', 'db.insertChunks')).median().publish(label='DB Insert')"
-    },
-    {
-      "name": "Token Usage (Input)",
-      "description": "Input (prompt) token consumption over time.",
-      "chartType": "Line",
-      "programText": "A = data('gen_ai.client.token.usage', filter=filter('gen_ai.token.type', 'input') and filter('service.name', 'rag-api')).sum().publish(label='Input Tokens')"
-    },
-    {
-      "name": "Token Usage (Output)",
-      "description": "Output (completion) token consumption over time.",
-      "chartType": "Line",
-      "programText": "A = data('gen_ai.client.token.usage', filter=filter('gen_ai.token.type', 'output') and filter('service.name', 'rag-api')).sum().publish(label='Output Tokens')"
-    },
-    {
-      "name": "Top Endpoints",
-      "description": "Top 10 endpoints by request count.",
-      "chartType": "List",
-      "programText": "A = histogram('service.request', filter=filter('sf_service', 'rag-api') and filter('sf_environment', 'dev')).count().top(count=10).publish(label='Top Endpoints')"
-    },
-    {
-      "name": "MCP Scrape Latency",
-      "description": "End-to-end MCP scrape latency broken down by tool call.",
-      "chartType": "Line",
-      "programText": "filter_api = filter('sf_service', 'rag-api') and filter('sf_environment', 'dev')\nfilter_mcp = filter('sf_service', 'playwright-mcp') and filter('sf_environment', 'dev')\nA = histogram('spans', filter=filter_api and filter('sf_operation', 'mcp.scrape')).median().publish(label='Total Scrape')\nB = histogram('spans', filter=filter_mcp and filter('sf_operation', 'mcp.tool.browser_navigate')).median().publish(label='Navigate')\nC = histogram('spans', filter=filter_mcp and filter('sf_operation', 'mcp.tool.browser_get_text')).median().publish(label='Get Text')"
-    },
-    {
-      "name": "SurrealDB HTTP Activity",
-      "description": "HTTP request rate and active connections for SurrealDB.",
-      "chartType": "Line",
-      "programText": "A = data('surrealdb.http.request', filter=filter('service.name', 'surrealdb')).rate().publish(label='HTTP Req/s')\nB = data('surrealdb.http.active_requests', filter=filter('service.name', 'surrealdb')).publish(label='Active Requests')"
-    },
-    {
-      "name": "SurrealDB Network I/O",
-      "description": "Network bytes received and sent per second.",
-      "chartType": "Area",
-      "programText": "A = data('surrealdb.network.received', filter=filter('service.name', 'surrealdb')).rate().publish(label='Received bytes/s')\nB = data('surrealdb.network.sent', filter=filter('service.name', 'surrealdb')).rate().publish(label='Sent bytes/s')"
-    },
-    {
-      "name": "Container CPU Usage",
-      "description": "CPU usage per Docker container (via docker_stats receiver).",
-      "chartType": "Line",
-      "programText": "A = data('container.cpu.usage.total').publish(label='CPU Usage')"
-    },
-    {
-      "name": "Container Memory Usage",
-      "description": "Memory usage per Docker container (via docker_stats receiver).",
-      "chartType": "Line",
-      "programText": "A = data('container.memory.usage.total').publish(label='Memory Usage')"
-    },
-    {
-      "name": "Container Network I/O",
-      "description": "Network bytes sent and received per Docker container (via docker_stats receiver).",
-      "chartType": "Area",
-      "programText": "A = data('container.network.io.usage.rx_bytes').rate().publish(label='Received bytes/s')\nB = data('container.network.io.usage.tx_bytes').rate().publish(label='Sent bytes/s')"
+      "name": "Infrastructure",
+      "description": "Container resources and database health.",
+      "charts": [
+        {
+          "name": "Container CPU Usage",
+          "description": "CPU usage per Docker container (via docker_stats receiver).",
+          "chartType": "Line",
+          "programText": "A = data('container.cpu.usage.total').publish(label='CPU Usage')"
+        },
+        {
+          "name": "Container Memory Usage",
+          "description": "Memory usage per Docker container (via docker_stats receiver).",
+          "chartType": "Line",
+          "programText": "A = data('container.memory.usage.total').publish(label='Memory Usage')"
+        },
+        {
+          "name": "Container Network I/O",
+          "description": "Network bytes sent and received per Docker container (via docker_stats receiver).",
+          "chartType": "Area",
+          "programText": "A = data('container.network.io.usage.rx_bytes').rate().publish(label='Received bytes/s')\nB = data('container.network.io.usage.tx_bytes').rate().publish(label='Sent bytes/s')"
+        },
+        {
+          "name": "SurrealDB Process Health",
+          "description": "CPU and memory usage of the SurrealDB instance.",
+          "chartType": "Line",
+          "programText": "A = data('surrealdb.process.cpu_percent', filter=filter('service.name', 'surrealdb')).publish(label='CPU %')\nB = data('surrealdb.process.memory', filter=filter('service.name', 'surrealdb')).publish(label='Memory (bytes)')"
+        },
+        {
+          "name": "SurrealDB Transaction Rate",
+          "description": "Transaction throughput (transactions per second).",
+          "chartType": "Line",
+          "programText": "A = data('surrealdb.transaction', filter=filter('service.name', 'surrealdb')).rate().publish(label='Tx/s')"
+        },
+        {
+          "name": "SurrealDB HTTP Activity",
+          "description": "HTTP request rate and active connections for SurrealDB.",
+          "chartType": "Line",
+          "programText": "A = data('surrealdb.http.request', filter=filter('service.name', 'surrealdb')).rate().publish(label='HTTP Req/s')\nB = data('surrealdb.http.active_requests', filter=filter('service.name', 'surrealdb')).publish(label='Active Requests')"
+        }
+      ]
     }
   ]
 }

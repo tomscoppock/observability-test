@@ -53,7 +53,9 @@ Each section includes:
 ## Opening (~30 seconds)
 
 **[SHOW]** Open Splunk Observability Cloud. Navigate to the `RAG Agent
--- Observability` dashboard group and select the `Demo Dashboard`.
+-- Observability` dashboard group. You will see four tabs: **Service
+Overview**, **RAG Pipeline**, **LLM and AI**, and **Infrastructure**.
+Start on the **Service Overview** tab.
 
 **[SAY]** "What you're looking at is a fully instrumented RAG agent
 stack -- a Node.js API backed by SurrealDB for document and vector
@@ -104,9 +106,11 @@ automatically from trace data using Monitoring MetricSets. This is a
 key benefit of the platform: you get baseline observability for free,
 just by sending traces."
 
-**[CHART]** `Service Health Overview`
+**[CHART]** `rag-api Requests`, `surrealdb Requests`,
+`playwright-mcp Requests`, `Error Rate %` (Service Overview tab)
 
-**[SHOW]** Switch to the Demo Dashboard. Point to the SurrealDB charts.
+**[SHOW]** Switch to the **Infrastructure** tab. Point to the SurrealDB
+charts.
 
 **[SAY]** "Now let's look at the infrastructure layer. SurrealDB 3.2
 has native OpenTelemetry support -- it pushes metrics directly to our
@@ -116,7 +120,7 @@ monitoring in one place -- we can correlate a spike in API latency with
 a spike in database CPU without switching tools."
 
 **[CHART]** `SurrealDB Process Health`, `SurrealDB Transaction Rate`,
-`SurrealDB HTTP Activity`
+`SurrealDB HTTP Activity` (Infrastructure tab)
 
 **[HIGHLIGHT]** "Notice how SurrealDB's transaction rate correlates
 with the API request rate -- every chat query triggers a vector search
@@ -127,7 +131,7 @@ collector."
 **[SHOW]** Scroll to the container metric charts.
 
 **[CHART]** `Container CPU Usage`, `Container Memory Usage`,
-`Container Network I/O`
+`Container Network I/O` (Infrastructure tab)
 
 **[SAY]** "We also have Docker container metrics -- CPU, memory, and
 network I/O per container. The OTel Collector reads these directly from
@@ -145,9 +149,11 @@ here, correlated by time and service."
 
 ## Section 2: RAG Pipeline Performance (~2 minutes)
 
-**[SHOW]** Point to the request rate and latency charts on the dashboard.
+**[SHOW]** Switch to the **Service Overview** tab. Point to the request
+rate and latency charts.
 
-**[CHART]** `Request Rate`, `Error Rate %`, `Service Latency (P50/P90/P99)`
+**[CHART]** `Request Rate`, `Error Rate %`, `Service Latency (P50/P90/P99)`,
+`Error Count by Endpoint` (Service Overview tab)
 
 **[SAY]** "These are the core health signals. Request rate tells us
 throughput -- a sudden drop to zero means the service is down. Error
@@ -155,9 +161,11 @@ rate is the primary quality signal. And latency percentiles show us
 both typical experience (P50) and worst-case (P99). A widening gap
 between P50 and P99 is a red flag for inconsistent performance."
 
-**[SHOW]** Point to the RAG pipeline breakdown charts.
+**[SHOW]** Switch to the **RAG Pipeline** tab. Point to the pipeline
+breakdown charts.
 
 **[CHART]** `RAG Chat Pipeline Latency`, `RAG Upload Pipeline Latency`
+(RAG Pipeline tab)
 
 **[SAY]** "This is where it gets interesting for RAG specifically. We
 instrument each step of the pipeline with custom spans -- embedding
@@ -173,7 +181,7 @@ multiple chunks in a single API call. This kind of per-step visibility
 is only possible because we use OpenTelemetry's manual instrumentation
 alongside the auto-instrumentation."
 
-**[CHART]** `Top Endpoints`
+**[CHART]** `Top Endpoints` (Service Overview tab)
 
 **[SAY]** "The top endpoints chart shows traffic distribution. In a
 healthy system, chat requests dominate. If upload or scrape traffic
@@ -184,9 +192,11 @@ misconfigured client."
 
 ## Section 3: Token Economics (~1.5 minutes)
 
-**[SHOW]** Point to the token usage charts on the dashboard.
+**[SHOW]** Switch to the **LLM and AI** tab. Point to the token usage
+charts.
 
-**[CHART]** `Token Usage (Input)`, `Token Usage (Output)`
+**[CHART]** `Total Input Tokens`, `Total Output Tokens`,
+`Token Usage Over Time` (LLM and AI tab)
 
 **[SAY]** "Token usage is where observability meets cost management.
 Every LLM and embedding API call costs money, and the cost scales
@@ -238,7 +248,7 @@ server, and on the MCP side, each tool invocation -- `session_create`,
 a child span. Then back in the API, we see chunking, embedding, and
 database insertion."
 
-**[CHART]** `MCP Scrape Latency`
+**[CHART]** `MCP Scrape Latency` (RAG Pipeline tab)
 
 **[HIGHLIGHT]** "Navigation is usually the slowest MCP tool call --
 it's waiting for the page to load. Text extraction is fast. Session
@@ -357,7 +367,7 @@ gate."
 
 ## Closing (~30 seconds)
 
-**[SHOW]** Return to the Demo Dashboard overview.
+**[SHOW]** Return to the **Service Overview** tab for a final summary.
 
 **[SAY]** "To summarise what we've seen: a single OpenTelemetry
 pipeline gives us infrastructure monitoring, application performance
@@ -388,29 +398,56 @@ This is what production-ready AI observability looks like. Thank you."
 ## Chart name reference
 
 The following chart names must match exactly between this talk track
-and the dashboard automation script (`splunk/dashboard.json`):
+and the dashboard automation script (`splunk/dashboard.json`). Charts
+are organised across 4 dashboard tabs.
+
+### Service Overview (8 charts)
 
 | # | Chart name | Talk track section |
 |---|---|---|
-| 1 | Service Health Overview | S1: Infrastructure |
-| 2 | SurrealDB Process Health | S1: Infrastructure |
-| 3 | SurrealDB Transaction Rate | S1: Infrastructure |
-| 4 | Request Rate | S2: RAG Pipeline |
-| 5 | Error Rate % | S2: RAG Pipeline |
+| 1 | rag-api Requests | S1: Infrastructure |
+| 2 | surrealdb Requests | S1: Infrastructure |
+| 3 | playwright-mcp Requests | S1: Infrastructure |
+| 4 | Error Rate % | S2: RAG Pipeline |
+| 5 | Request Rate | S2: RAG Pipeline |
 | 6 | Service Latency (P50/P90/P99) | S2: RAG Pipeline |
-| 7 | RAG Chat Pipeline Latency | S2: RAG Pipeline |
-| 8 | RAG Upload Pipeline Latency | S2: RAG Pipeline |
-| 9 | Token Usage (Input) | S3: Token Economics |
-| 10 | Token Usage (Output) | S3: Token Economics |
-| 11 | Top Endpoints | S2: RAG Pipeline |
-| 12 | MCP Scrape Latency | S4: Cross-Service |
-| 13 | SurrealDB HTTP Activity | S1: Infrastructure |
-| 14 | SurrealDB Network I/O | S1: Infrastructure |
-| 15 | Container CPU Usage | S1: Infrastructure |
-| 16 | Container Memory Usage | S1: Infrastructure |
-| 17 | Container Network I/O | S1: Infrastructure |
+| 7 | Error Count by Endpoint | S2: RAG Pipeline |
+| 8 | Top Endpoints | S2: RAG Pipeline |
 
-> **Note:** Charts 15-17 use the OTel Collector's `docker_stats`
+### RAG Pipeline (7 charts)
+
+| # | Chart name | Talk track section |
+|---|---|---|
+| 9 | RAG Chat Pipeline Latency | S2: RAG Pipeline |
+| 10 | RAG Upload Pipeline Latency | S2: RAG Pipeline |
+| 11 | MCP Scrape Latency | S4: Cross-Service |
+| 12 | Embedding Latency (P50/P90) | S2: RAG Pipeline |
+| 13 | DB Operation Breakdown | S2: RAG Pipeline |
+| 14 | Vector Search Latency (P50/P90) | S2: RAG Pipeline |
+| 15 | Active Sessions | S2: RAG Pipeline |
+
+### LLM and AI (5 charts)
+
+| # | Chart name | Talk track section |
+|---|---|---|
+| 16 | Total Input Tokens | S3: Token Economics |
+| 17 | Total Output Tokens | S3: Token Economics |
+| 18 | Token Usage Over Time | S3: Token Economics |
+| 19 | LLM Call Latency (P50/P90/P99) | S3: Token Economics |
+| 20 | Embedding API Latency | S3: Token Economics |
+
+### Infrastructure (6 charts)
+
+| # | Chart name | Talk track section |
+|---|---|---|
+| 21 | Container CPU Usage | S1: Infrastructure |
+| 22 | Container Memory Usage | S1: Infrastructure |
+| 23 | Container Network I/O | S1: Infrastructure |
+| 24 | SurrealDB Process Health | S1: Infrastructure |
+| 25 | SurrealDB Transaction Rate | S1: Infrastructure |
+| 26 | SurrealDB HTTP Activity | S1: Infrastructure |
+
+> **Note:** Charts 21-23 use the OTel Collector's `docker_stats`
 > receiver, which reads container metrics from the Docker daemon
 > socket. This is enabled by default in `docker-compose.yml` and
 > `otel-collector-config.yaml` -- no extra setup needed.

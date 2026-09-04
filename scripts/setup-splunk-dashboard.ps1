@@ -1,4 +1,4 @@
-# setup-splunk-dashboard.ps1 -- Create the RAG Agent demo dashboard in
+# setup-splunk-dashboard.ps1 -- Create the RAG Agent demo dashboards in
 # Splunk Observability Cloud via the REST API.
 #
 # Usage:
@@ -10,6 +10,10 @@
 #
 # The script is idempotent: it checks for existing resources before
 # creating new ones. Re-running updates chart programs in place.
+#
+# Dashboard structure (from splunk/dashboard.json):
+#   dashboardGroup -> dashboards[] -> charts[]
+# Each dashboard appears as a tab in the Splunk UI.
 
 Set-StrictMode -Version Latest
 $ErrorActionPreference = 'Stop'
@@ -98,19 +102,30 @@ function Invoke-SplunkApi {
 }
 
 # ---------------------------------------------------------------------------
+# Helper: determine chart width based on type
+# ---------------------------------------------------------------------------
+function Get-ChartWidth {
+    param([string]$ChartType)
+    switch ($ChartType) {
+        'SingleValue' { return 3 }
+        'List'        { return 4 }
+        default       { return 6 }
+    }
+}
+
+# ---------------------------------------------------------------------------
 # Read dashboard definition
 # ---------------------------------------------------------------------------
 $Config = Get-Content $DashboardJson -Raw | ConvertFrom-Json
 
 $GroupName = $Config.dashboardGroup.name
 $GroupDesc = $Config.dashboardGroup.description
-$DashName  = $Config.dashboard.name
-$DashDesc  = $Config.dashboard.description
+$DashCount = $Config.dashboards.Count
 
 Write-Host '=== Splunk Dashboard Setup ==='
 Write-Host "Realm:           $SplunkRealm"
 Write-Host "Dashboard group: $GroupName"
-Write-Host "Dashboard:       $DashName"
+Write-Host "Dashboards:      $DashCount"
 Write-Host ''
 
 # ---------------------------------------------------------------------------
@@ -139,185 +154,170 @@ else {
 }
 
 # ---------------------------------------------------------------------------
-# Step 2: Find or create dashboard
+# Step 2: Clean up old single "Demo Dashboard" if it exists
 # ---------------------------------------------------------------------------
 Write-Host ''
-Write-Host '--- Step 2: Dashboard ---'
+Write-Host '--- Step 2: Clean up old dashboards ---'
 
-$DashId = $null
 $dashList = Invoke-SplunkApi -Method GET -Endpoint "/v2/dashboard?limit=100&groupId=$GroupId"
 if ($dashList.results) {
-    $existingDash = $dashList.results | Where-Object { $_.name -eq $DashName } | Select-Object -First 1
-    if ($existingDash) {
-        $DashId = $existingDash.id
-    }
-}
-
-if ($DashId) {
-    Write-Host "Found existing dashboard: $DashId"
-}
-else {
-    Write-Host "Creating dashboard: $DashName"
-    $dashBody = @{
-        name        = $DashName
-        description = $DashDesc
-        groupId     = $GroupId
-        charts      = @()
-    } | ConvertTo-Json -Compress
-    $dashResponse = Invoke-SplunkApi -Method POST -Endpoint '/v2/dashboard' -Body $dashBody
-    $DashId = $dashResponse.id
-    Write-Host "Created dashboard: $DashId"
-}
-
-# ---------------------------------------------------------------------------
-# Step 3: Create or update charts
-# ---------------------------------------------------------------------------
-Write-Host ''
-Write-Host '--- Step 3: Charts ---'
-
-# Build a map of chart names already on our target dashboard so we only
-# update those (not charts with the same name on other dashboards).
-$currentDashForCharts = Invoke-SplunkApi -Method GET -Endpoint "/v2/dashboard/$DashId"
-$dashChartMap = @{}
-if ($currentDashForCharts.charts) {
-    foreach ($dc in $currentDashForCharts.charts) {
+    $oldDash = $dashList.results | Where-Object { $_.name -eq 'Demo Dashboard' } | Select-Object -First 1
+    if ($oldDash) {
+        Write-Host "Deleting old 'Demo Dashboard': $($oldDash.id)"
         try {
-            $chartDetail = Invoke-SplunkApi -Method GET -Endpoint "/v2/chart/$($dc.chartId)"
-            $dashChartMap[$chartDetail.name] = $dc.chartId
+            Invoke-SplunkApi -Method DELETE -Endpoint "/v2/dashboard/$($oldDash.id)" | Out-Null
         }
         catch {
-            # Chart may have been deleted; skip
+            Write-Host "  (could not delete -- may be the default dashboard)"
         }
-    }
-}
-
-$ChartIds = @()
-$chartCount = $Config.charts.Count
-
-for ($i = 0; $i -lt $chartCount; $i++) {
-    $chart = $Config.charts[$i]
-    $chartName = $chart.name
-    $chartDesc = $chart.description
-    $chartType = $chart.chartType
-    $programText = $chart.programText
-
-    # Map chart types to Splunk API options.type values
-    # Valid types: Event, Heatmap, List, SingleValue, Text, TimeSeriesChart
-    $plotType = switch ($chartType) {
-        'Line'        { 'TimeSeriesChart' }
-        'Area'        { 'TimeSeriesChart' }
-        'List'        { 'List' }
-        'SingleValue' { 'SingleValue' }
-        default       { 'TimeSeriesChart' }
-    }
-
-    # For Area charts, set the default plot type inside options
-    $optionsObj = @{ type = $plotType }
-    if ($chartType -eq 'Area') {
-        $optionsObj['defaultPlotType'] = 'AreaChart'
-    }
-
-    $chartBody = @{
-        name        = $chartName
-        description = $chartDesc
-        programText = $programText
-        options     = $optionsObj
-    } | ConvertTo-Json -Compress -Depth 3
-
-    # Only update charts already on THIS dashboard (not other dashboards)
-    if ($dashChartMap.ContainsKey($chartName)) {
-        $existingChartId = $dashChartMap[$chartName]
-        Write-Host "  Updating chart [$($i + 1)/$chartCount]: $chartName ($existingChartId)"
-        Invoke-SplunkApi -Method PUT -Endpoint "/v2/chart/$existingChartId" -Body $chartBody | Out-Null
-        $ChartIds += $existingChartId
     }
     else {
-        Write-Host "  Creating chart [$($i + 1)/$chartCount]: $chartName"
-        $chartResponse = Invoke-SplunkApi -Method POST -Endpoint '/v2/chart' -Body $chartBody
-        $ChartIds += $chartResponse.id
+        Write-Host "No old 'Demo Dashboard' found."
+    }
+}
+
+# ---------------------------------------------------------------------------
+# Step 3: Create or update each dashboard and its charts
+# ---------------------------------------------------------------------------
+
+for ($d = 0; $d -lt $DashCount; $d++) {
+    $dashDef = $Config.dashboards[$d]
+    $DashName = $dashDef.name
+    $DashDesc = $dashDef.description
+    $chartCount = $dashDef.charts.Count
+
+    Write-Host ''
+    Write-Host "--- Dashboard $($d + 1)/$DashCount`: $DashName ($chartCount charts) ---"
+
+    # Find or create this dashboard
+    $dashList = Invoke-SplunkApi -Method GET -Endpoint "/v2/dashboard?limit=100&groupId=$GroupId"
+    $DashId = $null
+    if ($dashList.results) {
+        $existingDash = $dashList.results | Where-Object { $_.name -eq $DashName } | Select-Object -First 1
+        if ($existingDash) {
+            $DashId = $existingDash.id
+        }
     }
 
-    # Brief pause to respect rate limits
-    Start-Sleep -Milliseconds 200
-}
+    if ($DashId) {
+        Write-Host "Found existing dashboard: $DashId"
+    }
+    else {
+        Write-Host "Creating dashboard: $DashName"
+        $dashBody = @{
+            name        = $DashName
+            description = $DashDesc
+            groupId     = $GroupId
+            charts      = @()
+        } | ConvertTo-Json -Compress
+        $dashResponse = Invoke-SplunkApi -Method POST -Endpoint '/v2/dashboard' -Body $dashBody
+        $DashId = $dashResponse.id
+        Write-Host "Created dashboard: $DashId"
+    }
 
-# ---------------------------------------------------------------------------
-# Step 4: Attach charts to dashboard
-# ---------------------------------------------------------------------------
-Write-Host ''
-Write-Host '--- Step 4: Attach charts to dashboard ---'
-
-# Read the current dashboard to get any existing chart attachments
-$currentDash = Invoke-SplunkApi -Method GET -Endpoint "/v2/dashboard/$DashId"
-$existingChartIds = @()
-if ($currentDash.charts) {
-    $existingChartIds = $currentDash.charts | ForEach-Object { $_.chartId }
-}
-
-$chartsArray = @()
-$row = 0
-$col = 0
-
-# Keep existing chart positions
-if ($currentDash.charts) {
-    foreach ($ec in $currentDash.charts) {
-        $chartsArray += @{
-            chartId = $ec.chartId
-            row     = $ec.row
-            column  = $ec.column
-            height  = $ec.height
-            width   = $ec.width
-        }
-        # Track the next available row/col
-        $endCol = $ec.column + $ec.width
-        $endRow = $ec.row + $ec.height
-        if ($endRow -gt $row -or ($endRow -eq $row -and $endCol -gt $col)) {
-            $row = $ec.row
-            $col = $endCol
-            if ($col -ge 12) {
-                $col = 0
-                $row++
+    # Build a map of chart names already on this dashboard
+    $currentDash = Invoke-SplunkApi -Method GET -Endpoint "/v2/dashboard/$DashId"
+    $dashChartMap = @{}
+    if ($currentDash.charts) {
+        foreach ($dc in $currentDash.charts) {
+            try {
+                $chartDetail = Invoke-SplunkApi -Method GET -Endpoint "/v2/chart/$($dc.chartId)"
+                $dashChartMap[$chartDetail.name] = $dc.chartId
+            }
+            catch {
+                # Chart may have been deleted; skip
             }
         }
     }
-    # Start new charts on the next row after existing ones
-    if ($chartsArray.Count -gt 0) {
-        $maxRow = ($chartsArray | ForEach-Object { $_.row }) | Measure-Object -Maximum | Select-Object -ExpandProperty Maximum
-        $row = $maxRow + 1
-        $col = 0
+
+    # Create or update charts
+    $ChartIds = @()
+    for ($i = 0; $i -lt $chartCount; $i++) {
+        $chart = $dashDef.charts[$i]
+        $chartName = $chart.name
+        $chartDesc = $chart.description
+        $chartType = $chart.chartType
+        $programText = $chart.programText
+
+        # Map chart types to Splunk API options.type values
+        $plotType = switch ($chartType) {
+            'Line'        { 'TimeSeriesChart' }
+            'Area'        { 'TimeSeriesChart' }
+            'List'        { 'List' }
+            'SingleValue' { 'SingleValue' }
+            default       { 'TimeSeriesChart' }
+        }
+
+        $optionsObj = @{ type = $plotType }
+        if ($chartType -eq 'Area') {
+            $optionsObj['defaultPlotType'] = 'AreaChart'
+        }
+
+        $chartBody = @{
+            name        = $chartName
+            description = $chartDesc
+            programText = $programText
+            options     = $optionsObj
+        } | ConvertTo-Json -Compress -Depth 3
+
+        if ($dashChartMap.ContainsKey($chartName)) {
+            $existingChartId = $dashChartMap[$chartName]
+            Write-Host "  Updating chart [$($i + 1)/$chartCount]: $chartName ($existingChartId)"
+            Invoke-SplunkApi -Method PUT -Endpoint "/v2/chart/$existingChartId" -Body $chartBody | Out-Null
+            $ChartIds += $existingChartId
+        }
+        else {
+            Write-Host "  Creating chart [$($i + 1)/$chartCount]: $chartName"
+            $chartResponse = Invoke-SplunkApi -Method POST -Endpoint '/v2/chart' -Body $chartBody
+            $ChartIds += $chartResponse.id
+        }
+
+        Start-Sleep -Milliseconds 200
     }
+
+    # Attach charts to dashboard with smart layout
+    Write-Host "  Attaching charts to dashboard ..."
+
+    $chartsArray = @()
+    $row = 0
+    $col = 0
+
+    for ($idx = 0; $idx -lt $ChartIds.Count; $idx++) {
+        $cid = $ChartIds[$idx]
+        $ct = $dashDef.charts[$idx].chartType
+        $w = Get-ChartWidth -ChartType $ct
+
+        # Wrap to next row if this chart won't fit
+        if (($col + $w) -gt 12) {
+            $col = 0
+            $row++
+        }
+
+        $chartsArray += @{
+            chartId = $cid
+            row     = $row
+            column  = $col
+            height  = 1
+            width   = $w
+        }
+
+        $col += $w
+        if ($col -ge 12) {
+            $col = 0
+            $row++
+        }
+    }
+
+    $dashUpdate = @{
+        name        = $DashName
+        description = $DashDesc
+        groupId     = $GroupId
+        charts      = $chartsArray
+    } | ConvertTo-Json -Compress -Depth 4
+
+    Invoke-SplunkApi -Method PUT -Endpoint "/v2/dashboard/$DashId" -Body $dashUpdate | Out-Null
+    Write-Host "  Dashboard '$DashName' has $($chartsArray.Count) charts."
 }
-
-# Add only charts not already on this dashboard
-$added = 0
-foreach ($cid in $ChartIds) {
-    if ($existingChartIds -contains $cid) {
-        continue
-    }
-    $chartsArray += @{
-        chartId = $cid
-        row     = $row
-        column  = $col
-        height  = 1
-        width   = 6
-    }
-    $added++
-    $col += 6
-    if ($col -ge 12) {
-        $col = 0
-        $row++
-    }
-}
-
-$dashUpdate = @{
-    name        = $DashName
-    description = $DashDesc
-    groupId     = $GroupId
-    charts      = $chartsArray
-} | ConvertTo-Json -Compress -Depth 4
-
-Invoke-SplunkApi -Method PUT -Endpoint "/v2/dashboard/$DashId" -Body $dashUpdate | Out-Null
-Write-Host "Dashboard has $($chartsArray.Count) charts ($added newly attached)."
 
 # ---------------------------------------------------------------------------
 # Done
@@ -325,9 +325,8 @@ Write-Host "Dashboard has $($chartsArray.Count) charts ($added newly attached)."
 Write-Host ''
 Write-Host '=== Setup complete ==='
 Write-Host ''
-Write-Host 'Dashboard URL:'
-Write-Host "  https://app.$SplunkRealm.signalfx.com/#/dashboard/$DashId"
+Write-Host 'Dashboard group URL:'
+Write-Host "  https://app.$SplunkRealm.signalfx.com/#/dashboard-group/$GroupId"
 Write-Host ''
 Write-Host "Dashboard group: $GroupId"
-Write-Host "Dashboard:       $DashId"
-Write-Host "Charts:          $($ChartIds.Count)"
+Write-Host "Dashboards:      $DashCount"

@@ -9,6 +9,7 @@ Last updated: 2026-09-04
 | @tom | 027 -- Demo talk track | 025 | 2026-09-04 |
 | @tom | 028 -- Dashboard automation | 025 | 2026-09-04 |
 | @tom | 031 -- Demo traffic simulation script | 025 | 2026-09-04 |
+| @tom | 032 -- Dashboard 4-tab split | 025 | 2026-09-04 |
 
 ## Recently completed
 
@@ -18,6 +19,7 @@ Last updated: 2026-09-04
   - 026 -- Splunk docs review and MCP monitoring section (@tom) -- done 2026-09-04
   - 027 -- Demo talk track (@tom) -- in progress
   - 028 -- Dashboard automation (@tom) -- in progress
+  - 032 -- Dashboard 4-tab split (@tom) -- in progress
 - 024 -- Admin tab with database management UI (@tom) -- done 2026-09-04
 - 018 -- Instrument LLM calls with gen_ai.* spans and token metrics (@tom) -- done 2026-09-04
 - 014 -- Implement web scrape endpoint using Playwright MCP (@tom) -- done 2026-09-04
@@ -59,7 +61,7 @@ Last updated: 2026-09-04
 
 ## Numbering
 
-Next free backlog/epic/task number: **032**
+Next free backlog/epic/task number: **033**
 
 <!-- Increment every time a numbered item is created in backlog/,
      in-progress/, epics/, or done/. Numbers are never reused. -->
