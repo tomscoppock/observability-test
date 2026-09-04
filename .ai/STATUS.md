@@ -6,15 +6,17 @@ Last updated: 2026-09-04
 
 | Assignee | Item | Epic | Since |
 |---|---|---|---|
-| @tom | 030 -- Streaming chat with markdown rendering (@tom) | -- | 2026-09-04 |
+| @tom | 027 -- Demo talk track | 025 | 2026-09-04 |
+| @tom | 028 -- Dashboard automation | 025 | 2026-09-04 |
 
 ## Recently completed
 
+- 030 -- Streaming chat with markdown rendering (@tom) -- done 2026-09-04
 - 029 -- Docker Desktop OTel automation (@tom) -- done 2026-09-04
-- Epic 025 -- Splunk demo and dashboard automation (@tom) -- done 2026-09-04
+- Epic 025 -- Splunk demo and dashboard automation (@tom) -- in progress
   - 026 -- Splunk docs review and MCP monitoring section (@tom) -- done 2026-09-04
-  - 027 -- Demo talk track (@tom) -- done 2026-09-04
-  - 028 -- Dashboard automation (@tom) -- done 2026-09-04
+  - 027 -- Demo talk track (@tom) -- in progress
+  - 028 -- Dashboard automation (@tom) -- in progress
 - 024 -- Admin tab with database management UI (@tom) -- done 2026-09-04
 - 018 -- Instrument LLM calls with gen_ai.* spans and token metrics (@tom) -- done 2026-09-04
 - 014 -- Implement web scrape endpoint using Playwright MCP (@tom) -- done 2026-09-04
