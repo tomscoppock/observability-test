@@ -10,6 +10,10 @@ Last updated: 2026-09-04
 
 ## Recently completed
 
+- Epic 025 -- Splunk demo and dashboard automation (@tom) -- done 2026-09-04
+  - 026 -- Splunk docs review and MCP monitoring section (@tom) -- done 2026-09-04
+  - 027 -- Demo talk track (@tom) -- done 2026-09-04
+  - 028 -- Dashboard automation (@tom) -- done 2026-09-04
 - 024 -- Admin tab with database management UI (@tom) -- done 2026-09-04
 - 018 -- Instrument LLM calls with gen_ai.* spans and token metrics (@tom) -- done 2026-09-04
 - 014 -- Implement web scrape endpoint using Playwright MCP (@tom) -- done 2026-09-04
@@ -43,7 +47,7 @@ Last updated: 2026-09-04
 
 ### llm-observability
 
-(none -- 018 done)
+(none -- 018, 026, 027, 028 done)
 
 ## Blockers
 
@@ -51,7 +55,7 @@ Last updated: 2026-09-04
 
 ## Numbering
 
-Next free backlog/epic/task number: **025**
+Next free backlog/epic/task number: **029**
 
 <!-- Increment every time a numbered item is created in backlog/,
      in-progress/, epics/, or done/. Numbers are never reused. -->

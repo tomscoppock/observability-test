@@ -41,8 +41,19 @@ Observability Cloud for the observability-test RAG Agent stack.
 
 18. [Create detectors (alerts)](#18-create-detectors-alerts)
 19. [Dashboard best practices](#19-dashboard-best-practices)
-20. [Next steps](#20-next-steps)
-21. [Quick reference](#21-quick-reference)
+
+### Cross-Service Monitoring (MCP)
+
+20. [MCP service monitoring](#20-mcp-service-monitoring)
+21. [Tutorial: MCP scrape latency chart](#21-tutorial-mcp-scrape-latency-chart)
+
+### Dashboard Automation
+
+22. [Automated dashboard setup](#22-automated-dashboard-setup)
+
+### Reference
+
+23. [Quick reference](#23-quick-reference)
 
 ---
 
@@ -849,8 +860,7 @@ total = histogram('service.request', filter=filter('sf_service', 'rag-api') and 
 ### AutoDetect detectors
 
 Splunk provides default detectors for service latency, error rate, and
-request rate. Check **Alerts & Detectors > AutoDetect** to review and
-enable them.
+request rate. Check **Alerts > AutoDetect** to review and enable them.
 
 ---
 
@@ -870,20 +880,172 @@ enable them.
 
 ---
 
-## 20. Next steps
+## 20. MCP service monitoring
 
-| Task | Description | Backlog |
+> **What:** Monitor the cross-service relationship between `rag-api` and
+> the external `playwright-mcp` server.
+> **Why:** The web scrape feature depends on an external MCP service.
+> Monitoring this dependency reveals connection failures, latency
+> bottlenecks, and helps attribute errors to the correct service.
+> **How:** Both services export traces to the same OTel Collector with
+> W3C trace context propagation, so Splunk APM automatically discovers
+> the dependency and shows it on the service map.
+
+### Viewing the MCP dependency on the service map
+
+1. Navigate to **APM > Service map**.
+2. Set **Environment** to `dev`.
+3. You should see two service nodes: `rag-api` and `playwright-mcp`,
+   connected by an edge.
+4. Click the edge between them to see RED metrics for the dependency:
+   - Request rate (scrape calls per minute)
+   - Error rate (failed MCP calls)
+   - Latency (round-trip time for MCP tool calls)
+5. Click `playwright-mcp` to see its service view with downstream
+   tool-level breakdown.
+
+> **Note:** The `playwright-mcp` service only appears on the service map
+> when it has sent traces recently. If it does not appear, verify:
+> - The Playwright MCP server is running and has
+>   `OTEL_EXPORTER_OTLP_ENDPOINT` set
+> - A scrape request has been made (to generate trace data)
+> - Both services export to the same collector or backend
+
+### Viewing distributed traces
+
+1. Navigate to **APM > Traces** (or select a trace from the service map).
+2. Filter by `sf_service` = `rag-api` and look for traces containing
+   `scrape.pipeline` or `mcp.scrape` operations.
+3. Click a trace to see the waterfall view spanning both services:
+
+```
+[rag-api] POST /api/scrape                    (Express auto-span)
+  [rag-api] scrape.pipeline                   (route handler)
+    [rag-api] mcp.scrape                      (mcp-client.js)
+      [rag-api] HTTP POST playwright-mcp/mcp  (auto-instrumented fetch)
+        [playwright-mcp] POST /mcp            (ASGI middleware)
+          [playwright-mcp] mcp.tool.session_create
+      [rag-api] HTTP POST playwright-mcp/mcp
+        [playwright-mcp] POST /mcp
+          [playwright-mcp] mcp.tool.browser_navigate
+      ...
+    [rag-api] scrape.chunk                    (chunker)
+    [rag-api] embeddings text-embedding-3-small
+    [rag-api] db.insertDocument
+    [rag-api] db.insertChunks
+```
+
+4. Use **Breakdown** on the `rag-api` node to split by `sf_operation`
+   and see which MCP tool calls are slowest.
+
+### Key span attributes for MCP monitoring
+
+| Attribute | Set by | Description |
 |---|---|---|
-| Add OTel SDK instrumentation | Custom spans and business metrics | 011 |
-| Add custom logger | Route app logs through OTel to Splunk | 012 |
-| Tag Spotlight | Analyse request/error rate by span tag | -- |
-| Trace Analyzer | Inspect individual trace waterfalls | -- |
-| SLO tracking | Define service level objectives | -- |
-| gen_ai instrumentation | LLM-specific spans and token metrics | 017-018 |
+| `mcp.server.url` | `rag-api` | URL of the MCP server |
+| `mcp.session_id` | `rag-api` | Browser session ID |
+| `scrape.target_url` | `rag-api` | URL being scraped |
+| `scrape.text_length` | `rag-api` | Extracted text length |
+| `mcp.tool.name` | `playwright-mcp` | Tool function name |
 
 ---
 
-## 21. Quick reference
+## 21. Tutorial: MCP scrape latency chart
+
+> **What:** Track the end-to-end latency of MCP scrape operations and
+> break it down by tool call.
+> **Why:** Scraping is the slowest operation in the RAG pipeline.
+> Understanding where time is spent (navigation vs. text extraction vs.
+> session management) helps optimise the pipeline.
+> **How:** Uses the `spans` histogram MMS filtered by MCP-related
+> operations.
+
+### Builder tab
+
+1. Click **Create (+) > Chart**.
+2. Variable **A**: `spans`, Analytics = **Median**, Filter =
+   `sf_service` = `rag-api`, `sf_operation` = `mcp.scrape`.
+3. Variable **B**: same, `sf_service` = `playwright-mcp`,
+   `sf_operation` = `mcp.tool.browser_navigate`.
+4. Variable **C**: same, `sf_service` = `playwright-mcp`,
+   `sf_operation` = `mcp.tool.browser_get_text`.
+5. In **Configuration**:
+   - **Chart title:** `MCP Scrape Latency`
+   - **Visualization type:** `Line`
+6. Click **Save**.
+
+### SignalFlow tab
+
+```signalflow
+filter_api = filter('sf_service', 'rag-api') and filter('sf_environment', 'dev')
+filter_mcp = filter('sf_service', 'playwright-mcp') and filter('sf_environment', 'dev')
+A = histogram('spans', filter=filter_api and filter('sf_operation', 'mcp.scrape')).median().publish(label='Total Scrape')
+B = histogram('spans', filter=filter_mcp and filter('sf_operation', 'mcp.tool.browser_navigate')).median().publish(label='Navigate')
+C = histogram('spans', filter=filter_mcp and filter('sf_operation', 'mcp.tool.browser_get_text')).median().publish(label='Get Text')
+```
+
+---
+
+## 22. Automated dashboard setup
+
+Instead of creating charts manually, you can use the provided automation
+script to create the entire demo dashboard via the Splunk Observability
+Cloud REST API.
+
+### Prerequisites
+
+- `SPLUNK_ACCESS_TOKEN` and `SPLUNK_REALM` set in your `.env` file
+- `curl` (Linux/macOS) or PowerShell (Windows)
+
+### Using the setup script
+
+**Linux/macOS:**
+
+```bash
+./scripts/setup-splunk-dashboard.sh
+```
+
+**Windows (PowerShell):**
+
+```powershell
+.\scripts\setup-splunk-dashboard.ps1
+```
+
+The script:
+
+1. Reads `SPLUNK_ACCESS_TOKEN` and `SPLUNK_REALM` from `.env`
+2. Creates a dashboard group named `RAG Agent -- Observability`
+3. Creates a dashboard named `Demo Dashboard`
+4. Creates all 14 charts (aligned to the demo talk track)
+5. Outputs the dashboard URL on success
+
+The script is idempotent -- it checks for existing resources before
+creating new ones.
+
+### Chart definitions
+
+The chart definitions are stored in `splunk/dashboard.json`. Each chart
+includes its SignalFlow program, visualization type, and filters. See
+the file for the complete list.
+
+### REST API reference
+
+The script uses these Splunk Observability Cloud API endpoints:
+
+| Resource | Endpoint | Method |
+|---|---|---|
+| Dashboard group | `https://api.{REALM}.signalfx.com/v2/dashboardgroup` | POST |
+| Dashboard | `https://api.{REALM}.signalfx.com/v2/dashboard` | POST |
+| Chart | `https://api.{REALM}.signalfx.com/v2/chart` | POST |
+
+All requests require the `X-SF-Token` header with your access token.
+
+See the [Splunk Observability Cloud API reference](https://dev.splunk.com/observability/reference/)
+for full documentation.
+
+---
+
+## 23. Quick reference
 
 | Action | Where |
 |---|---|
@@ -892,14 +1054,17 @@ enable them.
 | Create dashboard group | Create (+) > Dashboard Group |
 | Create chart | Create (+) > Chart |
 | Create detector | APM > Service map > select service > More (...) > Create Detector |
-| Find available metrics | Navigation > Metric Finder |
-| View/manage alerts | Alerts & Detectors |
-| View traces | APM > Trace Analyzer |
+| Find available metrics | Metrics (left nav) |
+| View/manage alerts | Alerts (left nav) |
+| View traces | APM > Traces |
 | Tag analysis | APM > Tag Spotlight |
-| Find SurrealDB metrics | Metric Finder > search `surrealdb` |
+| Find SurrealDB metrics | Metrics > search `surrealdb` |
 | SurrealDB infra metrics | `data('surrealdb.*')` in SignalFlow |
 | APM histogram metrics | `histogram('service.request')` in SignalFlow |
+| View MCP dependency | APM > Service map > look for `playwright-mcp` node |
+| MCP distributed traces | APM > Traces > filter `mcp.scrape` operation |
+| Automate dashboard | Run `scripts/setup-splunk-dashboard.sh` |
 
 ---
 
-*Last updated: 2026-08-26*
+*Last updated: 2026-09-04*
