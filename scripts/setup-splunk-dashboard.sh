@@ -161,6 +161,21 @@ fi
 echo ""
 echo "--- Step 3: Charts ---"
 
+# Build a map of chart names already on our target dashboard so we only
+# update those (not charts with the same name on other dashboards).
+CURRENT_DASH_FOR_CHARTS=$(api_call GET "/v2/dashboard/$DASH_ID")
+declare -A DASH_CHART_MAP
+DASH_CHART_IDS_RAW=$(echo "$CURRENT_DASH_FOR_CHARTS" | jq -r '.charts[]?.chartId // empty')
+for dcid in $DASH_CHART_IDS_RAW; do
+  CHART_DETAIL=$(api_call GET "/v2/chart/$dcid" 2>/dev/null || true)
+  if [ -n "$CHART_DETAIL" ]; then
+    CNAME=$(echo "$CHART_DETAIL" | jq -r '.name // empty')
+    if [ -n "$CNAME" ]; then
+      DASH_CHART_MAP["$CNAME"]="$dcid"
+    fi
+  fi
+done
+
 CHART_COUNT=$(jq '.charts | length' "$DASHBOARD_JSON")
 CHART_IDS=()
 
@@ -180,13 +195,6 @@ for i in $(seq 0 $((CHART_COUNT - 1))); do
     List) PLOT_TYPE="List" ;;
     SingleValue) PLOT_TYPE="SingleValue" ;;
   esac
-
-  # Check if chart already exists on this dashboard
-  EXISTING_CHART_ID=""
-  CHARTS_ON_DASH=$(api_call GET "/v2/chart?limit=200")
-  EXISTING_CHART_ID=$(echo "$CHARTS_ON_DASH" | jq -r \
-    --arg name "$CHART_NAME" \
-    '.results[]? | select(.name == $name) | .id' | head -1)
 
   if [ -n "$DEFAULT_PLOT_TYPE" ]; then
     CHART_BODY=$(jq -n \
@@ -220,6 +228,8 @@ for i in $(seq 0 $((CHART_COUNT - 1))); do
       }')
   fi
 
+  # Only update charts already on THIS dashboard (not other dashboards)
+  EXISTING_CHART_ID="${DASH_CHART_MAP[$CHART_NAME]:-}"
   if [ -n "$EXISTING_CHART_ID" ]; then
     echo "  Updating chart [$((i + 1))/$CHART_COUNT]: $CHART_NAME ($EXISTING_CHART_ID)"
     api_call PUT "/v2/chart/$EXISTING_CHART_ID" "$CHART_BODY" >/dev/null

@@ -175,6 +175,22 @@ else {
 Write-Host ''
 Write-Host '--- Step 3: Charts ---'
 
+# Build a map of chart names already on our target dashboard so we only
+# update those (not charts with the same name on other dashboards).
+$currentDashForCharts = Invoke-SplunkApi -Method GET -Endpoint "/v2/dashboard/$DashId"
+$dashChartMap = @{}
+if ($currentDashForCharts.charts) {
+    foreach ($dc in $currentDashForCharts.charts) {
+        try {
+            $chartDetail = Invoke-SplunkApi -Method GET -Endpoint "/v2/chart/$($dc.chartId)"
+            $dashChartMap[$chartDetail.name] = $dc.chartId
+        }
+        catch {
+            # Chart may have been deleted; skip
+        }
+    }
+}
+
 $ChartIds = @()
 $chartCount = $Config.charts.Count
 
@@ -201,16 +217,6 @@ for ($i = 0; $i -lt $chartCount; $i++) {
         $optionsObj['defaultPlotType'] = 'AreaChart'
     }
 
-    # Check if chart already exists
-    $existingChartId = $null
-    $chartsOnDash = Invoke-SplunkApi -Method GET -Endpoint '/v2/chart?limit=200'
-    if ($chartsOnDash.results) {
-        $existingChart = $chartsOnDash.results | Where-Object { $_.name -eq $chartName } | Select-Object -First 1
-        if ($existingChart) {
-            $existingChartId = $existingChart.id
-        }
-    }
-
     $chartBody = @{
         name        = $chartName
         description = $chartDesc
@@ -218,7 +224,9 @@ for ($i = 0; $i -lt $chartCount; $i++) {
         options     = $optionsObj
     } | ConvertTo-Json -Compress -Depth 3
 
-    if ($existingChartId) {
+    # Only update charts already on THIS dashboard (not other dashboards)
+    if ($dashChartMap.ContainsKey($chartName)) {
+        $existingChartId = $dashChartMap[$chartName]
         Write-Host "  Updating chart [$($i + 1)/$chartCount]: $chartName ($existingChartId)"
         Invoke-SplunkApi -Method PUT -Endpoint "/v2/chart/$existingChartId" -Body $chartBody | Out-Null
         $ChartIds += $existingChartId
