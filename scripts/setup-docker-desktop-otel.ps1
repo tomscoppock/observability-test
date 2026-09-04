@@ -23,10 +23,14 @@ $OtelProtocol = 'http/protobuf'
 # Locate settings-store.json
 # ---------------------------------------------------------------------------
 function Find-SettingsFile {
-    if ($IsWindows -or (-not (Test-Path variable:IsWindows) -and $env:OS -eq 'Windows_NT')) {
+    # $IsWindows / $IsMacOS exist in PS 6+; PS 5.1 only runs on Windows.
+    $isWin = if (Test-Path variable:IsWindows) { $IsWindows } else { $env:OS -eq 'Windows_NT' }
+    $isMac = if (Test-Path variable:IsMacOS)   { $IsMacOS }   else { $false }
+
+    if ($isWin) {
         $path = Join-Path (Join-Path $env:APPDATA 'Docker') 'settings-store.json'
     }
-    elseif ($IsMacOS) {
+    elseif ($isMac) {
         $path = Join-Path (Join-Path (Join-Path (Join-Path $HOME 'Library') 'Group Containers') 'group.com.docker') 'settings-store.json'
     }
     else {
