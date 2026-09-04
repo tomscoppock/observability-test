@@ -6,10 +6,11 @@ Last updated: 2026-09-04
 
 | Assignee | Item | Epic | Since |
 |---|---|---|---|
-| @tom | 029 -- Docker Desktop OTel automation | -- | 2026-09-04 |
+| @tom | 030 -- Streaming chat with markdown rendering (@tom) | -- | 2026-09-04 |
 
 ## Recently completed
 
+- 029 -- Docker Desktop OTel automation (@tom) -- done 2026-09-04
 - Epic 025 -- Splunk demo and dashboard automation (@tom) -- done 2026-09-04
   - 026 -- Splunk docs review and MCP monitoring section (@tom) -- done 2026-09-04
   - 027 -- Demo talk track (@tom) -- done 2026-09-04
@@ -55,7 +56,7 @@ Last updated: 2026-09-04
 
 ## Numbering
 
-Next free backlog/epic/task number: **030**
+Next free backlog/epic/task number: **031**
 
 <!-- Increment every time a numbered item is created in backlog/,
      in-progress/, epics/, or done/. Numbers are never reused. -->

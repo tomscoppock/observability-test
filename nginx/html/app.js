@@ -13,6 +13,11 @@ var sendBtn = document.getElementById('send-btn');
 var dropZone = document.getElementById('drop-zone');
 var fileInput = document.getElementById('file-input');
 
+// Conversation history -- sent to the backend for multi-turn context.
+// The backend caps this to CHAT_HISTORY_ROUNDS pairs; the frontend
+// keeps all rounds and lets the server trim.
+var chatHistory = [];
+
 // ---------------------------------------------------------------------------
 // Message display
 // ---------------------------------------------------------------------------
@@ -85,12 +90,63 @@ function escapeHtml(str) {
   return div.innerHTML;
 }
 
+/**
+ * Render markdown text as sanitised HTML using the marked library.
+ * Falls back to escaped plain text if marked is not loaded.
+ * @param {string} text - Raw markdown text
+ * @returns {string} HTML string
+ */
+function renderMarkdown(text) {
+  if (typeof marked !== 'undefined' && marked.parse) {
+    try {
+      return marked.parse(text, { breaks: true });
+    } catch (_e) {
+      return escapeHtml(text);
+    }
+  }
+  return escapeHtml(text);
+}
+
+/**
+ * Create an empty assistant message bubble and return an updater object.
+ * The updater has:
+ *   - append(text): add text to the accumulated content and re-render
+ *   - finish(sources): append source citations and finalise
+ *   - element: the DOM element
+ *
+ * @returns {{ append: function, finish: function, element: HTMLElement }}
+ */
+function createStreamingMessage() {
+  var content = '';
+  var div = document.createElement('div');
+  div.className = 'message assistant markdown-body';
+  messagesEl.appendChild(div);
+
+  return {
+    element: div,
+    /** Return the accumulated raw markdown content. */
+    getContent: function () { return content; },
+    append: function (text) {
+      content += text;
+      div.innerHTML = renderMarkdown(content);
+      messagesEl.scrollTop = messagesEl.scrollHeight;
+    },
+    finish: function (sources) {
+      // Final render
+      div.innerHTML = renderMarkdown(content) + formatSources(sources);
+      messagesEl.scrollTop = messagesEl.scrollHeight;
+    },
+  };
+}
+
 // ---------------------------------------------------------------------------
 // Chat
 // ---------------------------------------------------------------------------
 
 /**
- * Send the user's message to the API and display the response.
+ * Send the user's message to the streaming SSE endpoint and display
+ * tokens as they arrive, with markdown rendering.
+ * Falls back to the non-streaming endpoint if streaming fails to connect.
  * @param {string} message
  */
 async function sendMessage(message) {
@@ -99,16 +155,16 @@ async function sendMessage(message) {
   sendBtn.disabled = true;
   var hideThinking = showThinking('Thinking...');
 
-  console.log('[chat] Sending message:', message.substring(0, 80));
+  console.log('[chat] Sending message (stream):', message.substring(0, 80));
 
   try {
-    var res = await fetch('/api/chat', {
+    var res = await fetch('/api/chat/stream', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ message: message }),
+      body: JSON.stringify({ message: message, history: chatHistory }),
     });
 
-    console.log('[chat] Response status:', res.status);
+    console.log('[chat] Stream response status:', res.status);
 
     if (!res.ok) {
       var errBody = await res.text();
@@ -118,10 +174,72 @@ async function sendMessage(message) {
       throw new Error(err.error || 'HTTP ' + res.status);
     }
 
-    var data = await res.json();
-    console.log('[chat] Reply received, sources:', (data.sources || []).length);
-    var replyHtml = escapeHtml(data.reply) + formatSources(data.sources);
-    appendMessage(replyHtml, 'assistant', true);
+    // Remove thinking indicator once we start receiving
+    hideThinking();
+    hideThinking = function () {}; // no-op for finally block
+
+    var streaming = createStreamingMessage();
+    var sources = [];
+
+    // Read SSE stream using ReadableStream
+    var reader = res.body.getReader();
+    var decoder = new TextDecoder();
+    var buffer = '';
+
+    while (true) {
+      var result = await reader.read();
+      if (result.done) break;
+
+      buffer += decoder.decode(result.value, { stream: true });
+
+      // Process complete SSE events (double newline separated)
+      var parts = buffer.split('\n\n');
+      buffer = parts.pop() || '';
+
+      for (var i = 0; i < parts.length; i++) {
+        var eventBlock = parts[i].trim();
+        if (!eventBlock) continue;
+
+        var eventType = '';
+        var eventData = '';
+
+        var eventLines = eventBlock.split('\n');
+        for (var j = 0; j < eventLines.length; j++) {
+          var line = eventLines[j];
+          if (line.indexOf('event: ') === 0) {
+            eventType = line.substring(7);
+          } else if (line.indexOf('data: ') === 0) {
+            eventData = line.substring(6);
+          }
+        }
+
+        if (!eventType || !eventData) continue;
+
+        var parsed;
+        try { parsed = JSON.parse(eventData); } catch (_e) { continue; }
+
+        if (eventType === 'token' && parsed.content) {
+          streaming.append(parsed.content);
+        } else if (eventType === 'sources') {
+          sources = parsed;
+        } else if (eventType === 'error') {
+          throw new Error(parsed.error || 'Stream error');
+        } else if (eventType === 'done') {
+          console.log('[chat] Stream complete');
+        }
+      }
+    }
+
+    streaming.finish(sources);
+
+    // Record this exchange in conversation history
+    var replyContent = streaming.getContent();
+    if (replyContent) {
+      chatHistory.push({ role: 'user', content: message });
+      chatHistory.push({ role: 'assistant', content: replyContent });
+    }
+
+    console.log('[chat] Reply rendered, sources:', sources.length, 'history:', chatHistory.length);
   } catch (err) {
     console.error('[chat] Error:', err.message, err);
     appendMessage('Error: ' + err.message, 'error');

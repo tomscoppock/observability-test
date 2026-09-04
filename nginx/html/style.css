@@ -150,6 +150,109 @@ header {
   color: #333;
 }
 
+/* ------------------------------------------------------------------ */
+/* Markdown rendering inside assistant messages                       */
+/* ------------------------------------------------------------------ */
+
+.message.assistant.markdown-body {
+  white-space: normal;
+}
+
+.message.assistant.markdown-body h1,
+.message.assistant.markdown-body h2,
+.message.assistant.markdown-body h3,
+.message.assistant.markdown-body h4 {
+  margin: 0.6em 0 0.3em;
+  font-weight: 600;
+  line-height: 1.3;
+}
+
+.message.assistant.markdown-body h1 { font-size: 1.15rem; }
+.message.assistant.markdown-body h2 { font-size: 1.05rem; }
+.message.assistant.markdown-body h3 { font-size: 0.95rem; }
+.message.assistant.markdown-body h4 { font-size: 0.9rem; }
+
+.message.assistant.markdown-body p {
+  margin: 0.4em 0;
+}
+
+.message.assistant.markdown-body ul,
+.message.assistant.markdown-body ol {
+  margin: 0.4em 0 0.4em 1.4em;
+  padding: 0;
+}
+
+.message.assistant.markdown-body li {
+  margin-bottom: 0.2em;
+}
+
+.message.assistant.markdown-body code {
+  background: rgba(0, 0, 0, 0.08);
+  padding: 0.15em 0.35em;
+  border-radius: 3px;
+  font-family: "SFMono-Regular", Consolas, "Liberation Mono", Menlo, monospace;
+  font-size: 0.85em;
+}
+
+.message.assistant.markdown-body pre {
+  background: #2d2d2d;
+  color: #f8f8f2;
+  padding: 10px 12px;
+  border-radius: 6px;
+  overflow-x: auto;
+  margin: 0.5em 0;
+  font-size: 0.82rem;
+  line-height: 1.45;
+}
+
+.message.assistant.markdown-body pre code {
+  background: transparent;
+  padding: 0;
+  color: inherit;
+  font-size: inherit;
+}
+
+.message.assistant.markdown-body blockquote {
+  border-left: 3px solid #999;
+  margin: 0.5em 0;
+  padding: 0.3em 0 0.3em 12px;
+  color: #555;
+}
+
+.message.assistant.markdown-body table {
+  border-collapse: collapse;
+  margin: 0.5em 0;
+  font-size: 0.85em;
+  width: 100%;
+}
+
+.message.assistant.markdown-body th,
+.message.assistant.markdown-body td {
+  border: 1px solid #ccc;
+  padding: 4px 8px;
+  text-align: left;
+}
+
+.message.assistant.markdown-body th {
+  background: rgba(0, 0, 0, 0.06);
+  font-weight: 600;
+}
+
+.message.assistant.markdown-body a {
+  color: #1a73e8;
+  text-decoration: underline;
+}
+
+.message.assistant.markdown-body strong {
+  font-weight: 600;
+}
+
+.message.assistant.markdown-body hr {
+  border: none;
+  border-top: 1px solid #ccc;
+  margin: 0.6em 0;
+}
+
 .message.system {
   align-self: center;
   background: transparent;
