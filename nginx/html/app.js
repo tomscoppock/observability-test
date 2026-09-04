@@ -265,6 +265,7 @@ if (scrapeForm) {
     var url = scrapeUrlInput.value.trim();
     if (!url) return;
 
+    console.log('[scrape] Starting scrape:', url);
     appendMessage('Scraping: ' + url + '...', 'user');
     var hideThinking = showThinking('Fetching and processing page...');
     scrapeUrlInput.disabled = true;
@@ -277,12 +278,18 @@ if (scrapeForm) {
         body: JSON.stringify({ url: url }),
       });
 
-      var data = await res.json();
+      console.log('[scrape] Response status:', res.status);
 
       if (!res.ok) {
-        appendMessage('Scrape failed: ' + (data.error || res.statusText), 'error');
-        return;
+        var errBody = await res.text();
+        console.error('[scrape] Error response body:', errBody);
+        var err;
+        try { err = JSON.parse(errBody); } catch (_e) { err = { error: res.statusText }; }
+        throw new Error(err.error || 'HTTP ' + res.status);
       }
+
+      var data = await res.json();
+      console.log('[scrape] Success:', data.title, data.chunkCount, 'chunks,', data.contentLength, 'bytes');
 
       appendMessage(
         'Scraped "' + escapeHtml(data.title) + '" -- ' +
@@ -292,6 +299,7 @@ if (scrapeForm) {
       );
       scrapeUrlInput.value = '';
     } catch (err) {
+      console.error('[scrape] Error:', err.message, err);
       appendMessage('Scrape failed: ' + err.message, 'error');
     } finally {
       hideThinking();

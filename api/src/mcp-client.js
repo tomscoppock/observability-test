@@ -34,6 +34,13 @@ async function createClient() {
     throw new Error('MCP_PLAYWRIGHT_URL is not configured');
   }
 
+  // Warn about common misconfiguration: localhost doesn't work from inside Docker
+  if (MCP_PLAYWRIGHT_URL.includes('localhost') || MCP_PLAYWRIGHT_URL.includes('127.0.0.1')) {
+    logger.warn('MCP_PLAYWRIGHT_URL uses localhost -- this will not work from inside Docker. Use host.docker.internal instead.', {
+      url: MCP_PLAYWRIGHT_URL,
+    });
+  }
+
   const client = new Client({
     name: 'rag-api-mcp-client',
     version: '0.1.0',
@@ -49,7 +56,22 @@ async function createClient() {
     { requestInit: { headers } },
   );
 
-  await client.connect(transport);
+  try {
+    await client.connect(transport);
+  } catch (err) {
+    const msg = err.message || '';
+    // Improve error messages for common connection failures
+    if (msg.includes('fetch failed') || msg.includes('ECONNREFUSED')) {
+      const hint = MCP_PLAYWRIGHT_URL.includes('localhost')
+        ? ' (hint: use host.docker.internal instead of localhost when running in Docker)'
+        : '';
+      throw new Error(
+        `Cannot connect to Playwright MCP server at ${MCP_PLAYWRIGHT_URL}${hint}: ${msg}`,
+      );
+    }
+    throw err;
+  }
+
   logger.debug('MCP client connected', { url: MCP_PLAYWRIGHT_URL });
   return client;
 }
