@@ -60,19 +60,19 @@
     },
     {
       "name": "RAG Pipeline",
-      "description": "End-to-end RAG flow timing, operation breakdown, and session tracking.",
+      "description": "End-to-end RAG flow timing, operation breakdown, and session tracking. Requires Troubleshooting MetricSets (TMS) enabled for rag-api in Splunk APM.",
       "charts": [
         {
           "name": "RAG Chat Pipeline Latency",
           "description": "Duration breakdown of the chat pipeline by step.",
           "chartType": "Line",
-          "programText": "filter_ = filter('sf_service', 'rag-api') and filter('sf_environment', 'dev')\nA = histogram('spans', filter=filter_ and filter('sf_operation', 'chat.pipeline')).median().publish(label='Total Chat')\nB = histogram('spans', filter=filter_ and filter('sf_operation', 'embeddings.embedTexts')).median().publish(label='Query Embedding')\nC = histogram('spans', filter=filter_ and filter('sf_operation', 'db.vectorSearch')).median().publish(label='Vector Search')\nD = histogram('spans', filter=filter_ and filter('sf_operation', 'llm.chatCompletion')).median().publish(label='LLM Completion')"
+          "programText": "filter_ = filter('sf_service', 'rag-api') and filter('sf_environment', 'dev')\nA = histogram('spans', filter=filter_ and filter('sf_operation', 'chat.pipeline', 'chat.pipeline.stream')).median().publish(label='Total Chat')\nB = histogram('spans', filter=filter_ and filter('sf_operation', 'db.vectorSearch')).median().publish(label='Vector Search')\nC = histogram('spans', filter=filter_ and filter('gen_ai.operation.name', 'chat')).median().publish(label='LLM Completion')\nD = histogram('spans', filter=filter_ and filter('gen_ai.operation.name', 'embeddings')).median().publish(label='Query Embedding')"
         },
         {
           "name": "RAG Upload Pipeline Latency",
           "description": "Duration breakdown of the upload pipeline by step.",
           "chartType": "Line",
-          "programText": "filter_ = filter('sf_service', 'rag-api') and filter('sf_environment', 'dev')\nA = histogram('spans', filter=filter_ and filter('sf_operation', 'upload.pipeline')).median().publish(label='Total Upload')\nB = histogram('spans', filter=filter_ and filter('sf_operation', 'embeddings.embedTexts')).median().publish(label='Embedding')\nC = histogram('spans', filter=filter_ and filter('sf_operation', 'db.insertChunks')).median().publish(label='DB Insert')"
+          "programText": "filter_ = filter('sf_service', 'rag-api') and filter('sf_environment', 'dev')\nA = histogram('spans', filter=filter_ and filter('sf_operation', 'upload.pipeline')).median().publish(label='Total Upload')\nB = histogram('spans', filter=filter_ and filter('gen_ai.operation.name', 'embeddings')).median().publish(label='Embedding')\nC = histogram('spans', filter=filter_ and filter('sf_operation', 'db.insertChunks')).median().publish(label='DB Insert')"
         },
         {
           "name": "MCP Scrape Latency",
@@ -84,7 +84,7 @@
           "name": "Embedding Latency (P50/P90)",
           "description": "Embedding API call latency percentiles.",
           "chartType": "Line",
-          "programText": "filter_ = filter('sf_service', 'rag-api') and filter('sf_environment', 'dev')\nA = histogram('spans', filter=filter_ and filter('sf_operation', 'embeddings.embedTexts')).percentile(pct=50).publish(label='P50')\nB = histogram('spans', filter=filter_ and filter('sf_operation', 'embeddings.embedTexts')).percentile(pct=90).publish(label='P90')"
+          "programText": "filter_ = filter('sf_service', 'rag-api') and filter('sf_environment', 'dev')\nA = histogram('spans', filter=filter_ and filter('gen_ai.operation.name', 'embeddings')).percentile(pct=50).publish(label='P50')\nB = histogram('spans', filter=filter_ and filter('gen_ai.operation.name', 'embeddings')).percentile(pct=90).publish(label='P90')"
         },
         {
           "name": "DB Operation Breakdown",
@@ -108,7 +108,7 @@
     },
     {
       "name": "LLM and AI",
-      "description": "Token usage, model latency, and AI cost metrics.",
+      "description": "Token usage, model latency, and AI cost metrics. Latency charts require Troubleshooting MetricSets (TMS) enabled for rag-api in Splunk APM.",
       "charts": [
         {
           "name": "Total Input Tokens",
@@ -132,13 +132,13 @@
           "name": "LLM Call Latency (P50/P90/P99)",
           "description": "LLM completion call latency percentiles.",
           "chartType": "Line",
-          "programText": "filter_ = filter('sf_service', 'rag-api') and filter('sf_environment', 'dev')\nA = histogram('spans', filter=filter_ and filter('sf_operation', 'llm.chatCompletion')).percentile(pct=50).publish(label='P50')\nB = histogram('spans', filter=filter_ and filter('sf_operation', 'llm.chatCompletion')).percentile(pct=90).publish(label='P90')\nC = histogram('spans', filter=filter_ and filter('sf_operation', 'llm.chatCompletion')).percentile(pct=99).publish(label='P99')"
+          "programText": "filter_ = filter('sf_service', 'rag-api') and filter('sf_environment', 'dev')\nA = histogram('spans', filter=filter_ and filter('gen_ai.operation.name', 'chat')).percentile(pct=50).publish(label='P50')\nB = histogram('spans', filter=filter_ and filter('gen_ai.operation.name', 'chat')).percentile(pct=90).publish(label='P90')\nC = histogram('spans', filter=filter_ and filter('gen_ai.operation.name', 'chat')).percentile(pct=99).publish(label='P99')"
         },
         {
           "name": "Embedding API Latency",
           "description": "Embedding API call latency (median).",
           "chartType": "Line",
-          "programText": "filter_ = filter('sf_service', 'rag-api') and filter('sf_environment', 'dev')\nA = histogram('spans', filter=filter_ and filter('sf_operation', 'embeddings.embedTexts')).percentile(pct=50).publish(label='P50')"
+          "programText": "filter_ = filter('sf_service', 'rag-api') and filter('sf_environment', 'dev')\nA = histogram('spans', filter=filter_ and filter('gen_ai.operation.name', 'embeddings')).percentile(pct=50).publish(label='P50')"
         }
       ]
     },
