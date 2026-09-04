@@ -995,7 +995,7 @@ Cloud REST API.
 ### Prerequisites
 
 - `SPLUNK_ACCESS_TOKEN` and `SPLUNK_REALM` set in your `.env` file
-- `curl` (Linux/macOS) or PowerShell (Windows)
+- `curl` and `jq` (Linux/macOS) or PowerShell 5.1+ (Windows)
 
 ### Using the setup script
 
