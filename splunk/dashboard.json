@@ -10,9 +10,9 @@
   "charts": [
     {
       "name": "Service Health Overview",
-      "description": "Request count by service -- quick health check for all services.",
-      "chartType": "List",
-      "programText": "A = histogram('service.request', filter=filter('sf_environment', 'dev')).count().publish(label='Requests')"
+      "description": "Total request count by service -- quick health check for all services.",
+      "chartType": "SingleValue",
+      "programText": "A = histogram('service.request', filter=filter('sf_environment', 'dev')).count().sum().publish(label='Requests')"
     },
     {
       "name": "SurrealDB Process Health",
