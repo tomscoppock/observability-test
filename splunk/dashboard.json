@@ -86,12 +86,12 @@
           "chartType": "Line",
           "programText": "filter_ = filter('sf_service', 'rag-api') and filter('sf_environment', 'dev')\nA = histogram('spans', filter=filter_ and filter('gen_ai.operation.name', 'embeddings')).percentile(pct=50).publish(label='P50')\nB = histogram('spans', filter=filter_ and filter('gen_ai.operation.name', 'embeddings')).percentile(pct=90).publish(label='P90')"
         },
-        {
-          "name": "DB Operation Breakdown",
-          "description": "Request count by database operation type.",
-          "chartType": "List",
-          "programText": "A = histogram('spans', filter=filter('sf_service', 'rag-api') and filter('sf_environment', 'dev') and filter('sf_operation', 'db.*')).count().sum(by=['sf_operation']).publish(label='DB Operations')"
-        },
+       {
+         "name": "DB Operation Breakdown",
+         "description": "Request count by database operation type.",
+         "chartType": "List",
+         "programText": "A = histogram('spans', filter=filter('sf_service', 'rag-api') and filter('sf_environment', 'dev') and filter('sf_operation', 'db.vectorSearch', 'db.insertDocument', 'db.insertChunks', 'db.connect', 'db.getDocumentById', 'db.listDocuments', 'db.getStats', 'db.deleteDocument', 'db.deleteAllData', 'db.exportAll', 'db.importAll', 'db.applySchema', 'db.hasDocuments')).count().sum(by=['sf_operation']).publish(label='DB Operations')"
+       },
         {
           "name": "Vector Search Latency (P50/P90)",
           "description": "Vector search latency percentiles.",
