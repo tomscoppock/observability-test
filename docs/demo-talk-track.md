@@ -18,19 +18,31 @@ Each section includes:
 > simulation script:
 >
 > 1. Start the stack: `docker compose up -d`
-> 2. Run the traffic simulator (~5 minutes):
+> 2. Run the traffic simulator (default 2 rounds, ~8 minutes total):
 >    - **Linux/macOS:** `./scripts/simulate-demo-traffic.sh`
 >    - **Windows:** `.\scripts\simulate-demo-traffic.ps1`
-> 3. The script uploads sample documents, sends varied chat messages
->    across 3 simulated user sessions, scrapes a URL (if MCP is
->    configured), and generates a few deliberate errors so the service
->    map shows health colours instead of grey.
+> 3. The script uploads sample documents, sends 20 varied chat messages
+>    per round across 3 simulated user sessions, scrapes URLs (if MCP
+>    is configured), and generates deliberate errors so the service map
+>    shows health colours instead of grey.
 > 4. Wait ~2 minutes after the script finishes for metrics to flush
 >    through the OTel Collector to Splunk.
 > 5. In Splunk, set the time picker to **Last 15 minutes** (or a window
 >    that covers your recent activity). The service map and charts only
 >    show data within the selected time range -- if the window is too
 >    narrow or too old, nodes will appear grey or missing.
+>
+> **Options:**
+> - `--rounds N` / `-Rounds N` -- run N rounds (default 2)
+> - `--no-errors` / `-NoErrors` -- skip error traffic (all-green map)
+> - `--errors` -- include error traffic (default)
+>
+> **For Playwright MCP scrape traffic**, set in `.env` before running:
+> ```
+> MCP_PLAYWRIGHT_URL=http://host.docker.internal:8100/mcp
+> MCP_PLAYWRIGHT_API_KEY=<your-key>
+> ```
+> Then rebuild: `docker compose up -d --build`
 >
 > **Manual alternative:** Upload documents via the chat UI, send 3-5
 > chat messages, and optionally scrape a URL. The simulation script
