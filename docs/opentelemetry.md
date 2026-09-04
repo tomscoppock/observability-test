@@ -123,13 +123,99 @@ The project uses OTel JS SDK 2.x (stable API, experimental SDK):
 | `@opentelemetry/resources` | ^2.0.0 | Resource detection |
 | `@opentelemetry/semantic-conventions` | ^1.28.0 | Attribute constants |
 
+## gen_ai semantic conventions (Task 018)
+
+The API instruments all LLM and embedding calls with spans and metrics
+that follow the [gen_ai semantic conventions](https://github.com/open-telemetry/semantic-conventions-genai)
+-- the official OTel standard for generative AI observability.
+
+### Span naming and kind
+
+Span names follow the `{operation} {model}` pattern required by the spec:
+
+| Module | Span name example | SpanKind |
+|---|---|---|
+| `llm.js` | `chat gpt-4o-mini` | `CLIENT` |
+| `embeddings.js` | `embeddings text-embedding-3-small` | `CLIENT` |
+
+`SpanKind.CLIENT` is used because the API acts as a client calling an
+external LLM/embedding service.
+
+### Span attributes
+
+Both modules set the following attributes on every span:
+
+| Attribute | Type | Example | Notes |
+|---|---|---|---|
+| `gen_ai.operation.name` | string | `chat` / `embeddings` | Operation type |
+| `gen_ai.system` | string | `openai` | Legacy; kept for backward compat |
+| `gen_ai.provider.name` | string | `openai` | New semconv field (from `LLM_PROVIDER` env) |
+| `gen_ai.request.model` | string | `gpt-4o-mini` | Requested model |
+| `gen_ai.response.model` | string | `gpt-4o-mini-2024-07-18` | Actual model returned by API |
+| `gen_ai.request.temperature` | float | `0.3` | Chat only |
+| `gen_ai.request.message_count` | int | `3` | Chat only -- number of messages sent |
+| `gen_ai.request.input_count` | int | `5` | Embeddings only -- number of texts |
+| `gen_ai.response.id` | string | `chatcmpl-abc123` | Chat only -- completion ID |
+| `gen_ai.response.finish_reasons` | string[] | `["stop"]` | Chat only -- array per spec |
+| `gen_ai.response.dimensions` | int | `1536` | Embeddings only |
+| `gen_ai.usage.input_tokens` | int | `150` | Prompt / input tokens |
+| `gen_ai.usage.output_tokens` | int | `42` | Chat only -- completion tokens |
+| `gen_ai.usage.total_tokens` | int | `192` | Embeddings only (when available) |
+| `server.address` | string | `api.openai.com` | Target host |
+| `server.port` | int | `443` | Target port |
+| `error.type` | string | `Error` | Set on errors only |
+
+### Token usage metrics
+
+Both modules record token usage as OTel histogram metrics via
+`gen_ai.client.token.usage` (unit: `{token}`). This enables dashboards
+and alerts on token consumption without querying span data.
+
+| Metric | Dimensions | Recorded by |
+|---|---|---|
+| `gen_ai.client.token.usage` | `gen_ai.token.type=input` | `llm.js`, `embeddings.js` |
+| `gen_ai.client.token.usage` | `gen_ai.token.type=output` | `llm.js` only |
+
+Each metric data point carries these attributes:
+
+- `gen_ai.operation.name` -- `chat` or `embeddings`
+- `gen_ai.provider.name` -- e.g. `openai`
+- `gen_ai.request.model` -- requested model name
+- `gen_ai.response.model` -- actual model returned
+- `gen_ai.token.type` -- `input` or `output`
+
+The metrics are exported via the same OTLP pipeline as other application
+metrics (every 15 seconds to the OTel Collector).
+
+### Error handling
+
+On failure, spans are marked with status code `ERROR` and include:
+
+- `error.type` attribute (e.g. `TypeError`, `Error`)
+- Exception recorded via `span.recordException(err)`
+- Error message in span status
+
+### Verifying gen_ai spans
+
+After a chat request, check the collector debug output:
+
+```bash
+docker compose logs otel-collector | findstr "gen_ai"
+```
+
+In Splunk APM, filter traces by `gen_ai.operation.name = chat` or look
+for spans named `chat gpt-4o-mini`.
+
+For token metrics, check Infrastructure Monitoring for the
+`gen_ai.client.token.usage` histogram.
+
 ## gen_ai normalizer processor (Task 017)
 
 The `gen_ai.*` attributes are the official OTel semantic conventions for
-LLM observability. The API's OpenLLMetry (Traceloop) SDK emits spans
-with proprietary attribute names (`traceloop.entity.*`, `llm.*`). The
-`gen_ai_normalizer` processor in the OTel Collector converts these to
-the standard `gen_ai.*` format before export.
+LLM observability. The normalizer processor in the OTel Collector is
+configured to convert proprietary attribute names from auto-instrumentation
+SDKs (e.g. Traceloop/OpenLLMetry `traceloop.entity.*`, `llm.*`) to the
+standard `gen_ai.*` format before export.
 
 ### Configuration
 
@@ -232,7 +318,7 @@ A typical scrape request produces this span hierarchy:
           [playwright-mcp] mcp.tool.browser_get_text
       ...
     [rag-api] scrape.chunk                    (chunker)
-    [rag-api] embeddings.generate             (embedding API call)
+    [rag-api] embeddings text-embedding-3-small  (gen_ai semconv span)
     [rag-api] db.insertDocument               (SurrealDB)
     [rag-api] db.insertChunks                 (SurrealDB)
 ```

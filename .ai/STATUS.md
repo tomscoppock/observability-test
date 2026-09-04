@@ -10,6 +10,7 @@ Last updated: 2026-09-04
 
 ## Recently completed
 
+- 018 -- Instrument LLM calls with gen_ai.* spans and token metrics (@tom) -- done 2026-09-04
 - 014 -- Implement web scrape endpoint using Playwright MCP (@tom) -- done 2026-09-04
 - 017 -- Add gen_ai normalizer processor to OTel Collector (@tom) -- done 2026-09-03
 - 013+015+016 -- RAG Pipeline (@tom) -- done 2026-09-01
@@ -41,7 +42,7 @@ Last updated: 2026-09-04
 
 ### llm-observability
 
-- 018 -- Instrument LLM calls with gen_ai.* spans and token metrics (@tom, high)
+(none -- 018 done)
 
 ## Blockers
 
