@@ -24,8 +24,51 @@ const tracer = trace.getTracer('rag-api.mcp-client', '0.1.0');
 const MCP_PLAYWRIGHT_URL = process.env.MCP_PLAYWRIGHT_URL || '';
 const MCP_PLAYWRIGHT_API_KEY = process.env.MCP_PLAYWRIGHT_API_KEY || '';
 
+// Retry configuration for transient connection failures (e.g. server restart)
+const MCP_CONNECT_RETRIES = parseInt(process.env.MCP_CONNECT_RETRIES, 10) || 3;
+const MCP_CONNECT_RETRY_DELAY_MS = parseInt(process.env.MCP_CONNECT_RETRY_DELAY_MS, 10) || 1000;
+
+/**
+ * Patterns that indicate a transient connection error worth retrying.
+ * These occur when the MCP server is restarting or temporarily unreachable.
+ */
+const RETRYABLE_PATTERNS = [
+  'fetch failed',
+  'ECONNREFUSED',
+  'ECONNRESET',
+  'ETIMEDOUT',
+  'UND_ERR_CONNECT_TIMEOUT',
+  'socket hang up',
+];
+
+/**
+ * Check whether an error is a transient connection failure that should be retried.
+ *
+ * @param {Error} err
+ * @returns {boolean}
+ */
+function isRetryableConnectionError(err) {
+  const msg = (err.message || '') + (err.cause ? ` ${err.cause.message || ''}` : '');
+  return RETRYABLE_PATTERNS.some((p) => msg.includes(p));
+}
+
+/**
+ * Sleep for the given number of milliseconds.
+ *
+ * @param {number} ms
+ * @returns {Promise<void>}
+ */
+function sleep(ms) {
+  return new Promise((resolve) => setTimeout(resolve, ms));
+}
+
 /**
  * Create a connected MCP client to the Playwright server.
+ *
+ * Retries transient connection failures (fetch failed, ECONNREFUSED, etc.)
+ * with exponential backoff so that server restarts don't cause permanent
+ * scrape failures. Configure via MCP_CONNECT_RETRIES (default 3) and
+ * MCP_CONNECT_RETRY_DELAY_MS (default 1000).
  *
  * @returns {Promise<import('@modelcontextprotocol/sdk/client/index.js').Client>}
  */
@@ -41,39 +84,68 @@ async function createClient() {
     });
   }
 
-  const client = new Client({
-    name: 'rag-api-mcp-client',
-    version: '0.1.0',
-  });
-
   const headers = { 'Content-Type': 'application/json' };
   if (MCP_PLAYWRIGHT_API_KEY) {
     headers['x-api-key'] = MCP_PLAYWRIGHT_API_KEY;
   }
 
-  const transport = new StreamableHTTPClientTransport(
-    new URL(MCP_PLAYWRIGHT_URL),
-    { requestInit: { headers } },
-  );
+  let lastError;
 
-  try {
-    await client.connect(transport);
-  } catch (err) {
-    const msg = err.message || '';
-    // Improve error messages for common connection failures
-    if (msg.includes('fetch failed') || msg.includes('ECONNREFUSED')) {
-      const hint = MCP_PLAYWRIGHT_URL.includes('localhost')
-        ? ' (hint: use host.docker.internal instead of localhost when running in Docker)'
-        : '';
-      throw new Error(
-        `Cannot connect to Playwright MCP server at ${MCP_PLAYWRIGHT_URL}${hint}: ${msg}`,
-      );
+  for (let attempt = 0; attempt <= MCP_CONNECT_RETRIES; attempt++) {
+    // Each attempt needs a fresh Client + Transport (they are single-use)
+    const client = new Client({
+      name: 'rag-api-mcp-client',
+      version: '0.1.0',
+    });
+
+    const transport = new StreamableHTTPClientTransport(
+      new URL(MCP_PLAYWRIGHT_URL),
+      { requestInit: { headers } },
+    );
+
+    try {
+      await client.connect(transport);
+      if (attempt > 0) {
+        logger.info('MCP client connected after retry', {
+          url: MCP_PLAYWRIGHT_URL,
+          attempt: attempt + 1,
+        });
+      } else {
+        logger.debug('MCP client connected', { url: MCP_PLAYWRIGHT_URL });
+      }
+      return client;
+    } catch (err) {
+      lastError = err;
+
+      if (isRetryableConnectionError(err) && attempt < MCP_CONNECT_RETRIES) {
+        const delayMs = MCP_CONNECT_RETRY_DELAY_MS * Math.pow(2, attempt);
+        logger.warn('MCP connection failed, retrying', {
+          url: MCP_PLAYWRIGHT_URL,
+          attempt: attempt + 1,
+          maxRetries: MCP_CONNECT_RETRIES,
+          nextRetryMs: delayMs,
+          error: err.message,
+        });
+        await sleep(delayMs);
+        continue;
+      }
+
+      // Non-retryable or exhausted retries -- throw with helpful message
+      const msg = err.message || '';
+      if (isRetryableConnectionError(err)) {
+        const hint = MCP_PLAYWRIGHT_URL.includes('localhost')
+          ? ' (hint: use host.docker.internal instead of localhost when running in Docker)'
+          : '';
+        throw new Error(
+          `Cannot connect to Playwright MCP server at ${MCP_PLAYWRIGHT_URL} after ${attempt + 1} attempt(s)${hint}: ${msg}`,
+        );
+      }
+      throw err;
     }
-    throw err;
   }
 
-  logger.debug('MCP client connected', { url: MCP_PLAYWRIGHT_URL });
-  return client;
+  // Should not reach here, but just in case
+  throw lastError;
 }
 
 /**
@@ -214,4 +286,10 @@ async function scrapeUrl(url, options = {}) {
   });
 }
 
-module.exports = { createClient, callTool, scrapeUrl };
+module.exports = {
+  createClient,
+  callTool,
+  scrapeUrl,
+  // Exported for testing only
+  _isRetryableConnectionError: isRetryableConnectionError,
+};
