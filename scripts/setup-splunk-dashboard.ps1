@@ -186,12 +186,19 @@ for ($i = 0; $i -lt $chartCount; $i++) {
     $programText = $chart.programText
 
     # Map chart types to Splunk API options.type values
+    # Valid types: Event, Heatmap, List, SingleValue, Text, TimeSeriesChart
     $plotType = switch ($chartType) {
-        'Line'        { 'LineChart' }
-        'Area'        { 'AreaChart' }
+        'Line'        { 'TimeSeriesChart' }
+        'Area'        { 'TimeSeriesChart' }
         'List'        { 'List' }
         'SingleValue' { 'SingleValue' }
-        default       { 'LineChart' }
+        default       { 'TimeSeriesChart' }
+    }
+
+    # For Area charts, set the default plot type inside options
+    $optionsObj = @{ type = $plotType }
+    if ($chartType -eq 'Area') {
+        $optionsObj['defaultPlotType'] = 'AreaChart'
     }
 
     # Check if chart already exists
@@ -208,7 +215,7 @@ for ($i = 0; $i -lt $chartCount; $i++) {
         name        = $chartName
         description = $chartDesc
         programText = $programText
-        options     = @{ type = $plotType }
+        options     = $optionsObj
     } | ConvertTo-Json -Compress -Depth 3
 
     if ($existingChartId) {

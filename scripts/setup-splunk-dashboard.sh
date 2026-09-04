@@ -170,11 +170,13 @@ for i in $(seq 0 $((CHART_COUNT - 1))); do
   CHART_TYPE=$(jq -r ".charts[$i].chartType" "$DASHBOARD_JSON")
   PROGRAM_TEXT=$(jq -r ".charts[$i].programText" "$DASHBOARD_JSON")
 
-  # Map our chart types to Splunk API options.plotType values
-  PLOT_TYPE="LineChart"
+  # Map our chart types to Splunk API options.type values
+  # Valid types: Event, Heatmap, List, SingleValue, Text, TimeSeriesChart
+  PLOT_TYPE="TimeSeriesChart"
+  DEFAULT_PLOT_TYPE=""
   case "$CHART_TYPE" in
-    Line) PLOT_TYPE="LineChart" ;;
-    Area) PLOT_TYPE="AreaChart" ;;
+    Line) PLOT_TYPE="TimeSeriesChart" ;;
+    Area) PLOT_TYPE="TimeSeriesChart"; DEFAULT_PLOT_TYPE="AreaChart" ;;
     List) PLOT_TYPE="List" ;;
     SingleValue) PLOT_TYPE="SingleValue" ;;
   esac
@@ -186,19 +188,37 @@ for i in $(seq 0 $((CHART_COUNT - 1))); do
     --arg name "$CHART_NAME" \
     '.results[]? | select(.name == $name) | .id' | head -1)
 
-  CHART_BODY=$(jq -n \
-    --arg name "$CHART_NAME" \
-    --arg desc "$CHART_DESC" \
-    --arg programText "$PROGRAM_TEXT" \
-    --arg plotType "$PLOT_TYPE" \
-    '{
-      "name": $name,
-      "description": $desc,
-      "programText": $programText,
-      "options": {
-        "type": $plotType
-      }
-    }')
+  if [ -n "$DEFAULT_PLOT_TYPE" ]; then
+    CHART_BODY=$(jq -n \
+      --arg name "$CHART_NAME" \
+      --arg desc "$CHART_DESC" \
+      --arg programText "$PROGRAM_TEXT" \
+      --arg plotType "$PLOT_TYPE" \
+      --arg defaultPlotType "$DEFAULT_PLOT_TYPE" \
+      '{
+        "name": $name,
+        "description": $desc,
+        "programText": $programText,
+        "options": {
+          "type": $plotType,
+          "defaultPlotType": $defaultPlotType
+        }
+      }')
+  else
+    CHART_BODY=$(jq -n \
+      --arg name "$CHART_NAME" \
+      --arg desc "$CHART_DESC" \
+      --arg programText "$PROGRAM_TEXT" \
+      --arg plotType "$PLOT_TYPE" \
+      '{
+        "name": $name,
+        "description": $desc,
+        "programText": $programText,
+        "options": {
+          "type": $plotType
+        }
+      }')
+  fi
 
   if [ -n "$EXISTING_CHART_ID" ]; then
     echo "  Updating chart [$((i + 1))/$CHART_COUNT]: $CHART_NAME ($EXISTING_CHART_ID)"
