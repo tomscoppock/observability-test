@@ -70,6 +70,55 @@ header {
   position: relative;
 }
 
+/* ------------------------------------------------------------------ */
+/* Tab bar                                                            */
+/* ------------------------------------------------------------------ */
+
+.tab-bar {
+  display: flex;
+  border-bottom: 2px solid #e0e0e0;
+  background: #fafafa;
+}
+
+.tab-btn {
+  flex: 1;
+  padding: 10px 16px;
+  border: none;
+  background: transparent;
+  font-size: 0.9rem;
+  font-weight: 500;
+  color: #666;
+  cursor: pointer;
+  border-bottom: 2px solid transparent;
+  margin-bottom: -2px;
+  transition: color 0.2s, border-color 0.2s;
+}
+
+.tab-btn:hover {
+  color: #1a73e8;
+}
+
+.tab-btn.active {
+  color: #1a73e8;
+  border-bottom-color: #1a73e8;
+}
+
+/* Tab content panels */
+.tab-content {
+  display: none;
+  flex: 1;
+  flex-direction: column;
+  overflow: hidden;
+}
+
+.tab-content.active {
+  display: flex;
+}
+
+/* ------------------------------------------------------------------ */
+/* Chat tab                                                           */
+/* ------------------------------------------------------------------ */
+
 #messages {
   flex: 1;
   overflow-y: auto;
@@ -276,4 +325,239 @@ header {
 #send-btn:disabled {
   background: #aaa;
   cursor: not-allowed;
+}
+
+/* ------------------------------------------------------------------ */
+/* Admin tab                                                          */
+/* ------------------------------------------------------------------ */
+
+.admin-login {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  padding: 32px;
+  gap: 12px;
+}
+
+.admin-login h2 {
+  font-size: 1.1rem;
+  color: #333;
+}
+
+.admin-login p {
+  font-size: 0.85rem;
+  color: #666;
+}
+
+#admin-login-form {
+  display: flex;
+  gap: 8px;
+  margin-top: 8px;
+}
+
+#admin-password {
+  padding: 8px 12px;
+  border: 1px solid #ddd;
+  border-radius: 6px;
+  font-size: 0.9rem;
+  outline: none;
+  width: 200px;
+}
+
+#admin-password:focus {
+  border-color: #1a73e8;
+}
+
+#admin-login-form button {
+  padding: 8px 16px;
+  background: #1a73e8;
+  color: #fff;
+  border: none;
+  border-radius: 6px;
+  font-size: 0.9rem;
+  cursor: pointer;
+}
+
+#admin-login-form button:hover {
+  background: #1557b0;
+}
+
+.admin-error {
+  color: #c5221f;
+  font-size: 0.85rem;
+}
+
+/* Admin panel */
+.admin-panel {
+  flex: 1;
+  overflow-y: auto;
+  padding: 16px;
+  display: flex;
+  flex-direction: column;
+  gap: 20px;
+}
+
+.admin-section h2 {
+  font-size: 1rem;
+  font-weight: 600;
+  color: #333;
+  margin-bottom: 10px;
+  padding-bottom: 6px;
+  border-bottom: 1px solid #e0e0e0;
+}
+
+/* Stats cards */
+.admin-stats {
+  display: flex;
+  gap: 12px;
+  margin-bottom: 8px;
+}
+
+.stat-card {
+  flex: 1;
+  background: #f8f9fa;
+  border: 1px solid #e0e0e0;
+  border-radius: 8px;
+  padding: 16px;
+  text-align: center;
+}
+
+.stat-value {
+  display: block;
+  font-size: 1.8rem;
+  font-weight: 700;
+  color: #1a73e8;
+}
+
+.stat-label {
+  display: block;
+  font-size: 0.8rem;
+  color: #666;
+  margin-top: 4px;
+}
+
+/* Admin buttons */
+.admin-btn {
+  padding: 8px 16px;
+  border: 1px solid #ddd;
+  border-radius: 6px;
+  background: #fff;
+  font-size: 0.85rem;
+  cursor: pointer;
+  transition: background 0.2s;
+}
+
+.admin-btn:hover {
+  background: #f0f0f0;
+}
+
+.admin-btn-primary {
+  background: #1a73e8;
+  color: #fff;
+  border-color: #1a73e8;
+}
+
+.admin-btn-primary:hover {
+  background: #1557b0;
+}
+
+.admin-btn-danger {
+  background: #c5221f;
+  color: #fff;
+  border-color: #c5221f;
+}
+
+.admin-btn-danger:hover {
+  background: #a31b19;
+}
+
+.admin-actions {
+  display: flex;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+
+.admin-file-label {
+  display: inline-flex;
+  align-items: center;
+  cursor: pointer;
+}
+
+/* Document table */
+.admin-documents {
+  overflow-x: auto;
+}
+
+.admin-placeholder {
+  color: #888;
+  font-style: italic;
+  font-size: 0.85rem;
+  text-align: center;
+  padding: 16px;
+}
+
+.admin-table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 0.85rem;
+}
+
+.admin-table th,
+.admin-table td {
+  padding: 8px 10px;
+  text-align: left;
+  border-bottom: 1px solid #e0e0e0;
+}
+
+.admin-table th {
+  background: #f8f9fa;
+  font-weight: 600;
+  color: #555;
+  font-size: 0.8rem;
+  text-transform: uppercase;
+  letter-spacing: 0.03em;
+}
+
+.admin-table tr:hover {
+  background: #f8f9fa;
+}
+
+.admin-table .delete-btn {
+  padding: 4px 10px;
+  background: #fce8e6;
+  color: #c5221f;
+  border: 1px solid #f5c6c2;
+  border-radius: 4px;
+  font-size: 0.8rem;
+  cursor: pointer;
+}
+
+.admin-table .delete-btn:hover {
+  background: #c5221f;
+  color: #fff;
+}
+
+/* Admin status bar */
+.admin-status {
+  padding: 10px 16px;
+  border-radius: 6px;
+  font-size: 0.85rem;
+  text-align: center;
+}
+
+.admin-status.success {
+  background: #e8f5e9;
+  color: #2e7d32;
+}
+
+.admin-status.error {
+  background: #fce8e6;
+  color: #c5221f;
+}
+
+.admin-status.info {
+  background: #e3f2fd;
+  color: #1a73e8;
 }

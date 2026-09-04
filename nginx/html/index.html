@@ -14,38 +14,115 @@
       <button id="test-error-btn" class="test-error-btn" title="Generate a test error for OTel/Splunk verification">Test Error</button>
     </header>
 
-    <div id="messages" aria-live="polite" aria-label="Chat messages">
-      <div class="message system">
-        Welcome! Drag and drop HR policy files (.txt, .md) into this area to upload them, then ask questions about company policies.
+    <!-- Tab bar -->
+    <nav id="tab-bar" class="tab-bar">
+      <button class="tab-btn active" data-tab="chat">Chat</button>
+      <button class="tab-btn" data-tab="admin">Admin</button>
+    </nav>
+
+    <!-- ============================================================ -->
+    <!-- Chat tab -->
+    <!-- ============================================================ -->
+    <div id="tab-chat" class="tab-content active">
+      <div id="messages" aria-live="polite" aria-label="Chat messages">
+        <div class="message system">
+          Welcome! Drag and drop HR policy files (.txt, .md) into this area to upload them, then ask questions about company policies.
+        </div>
+      </div>
+
+      <div id="drop-zone" class="drop-zone" aria-label="File drop zone">
+        <p>Drag files here to upload, or <label for="file-input" class="file-label">browse</label></p>
+        <input type="file" id="file-input" multiple accept=".txt,.md" hidden>
+        <p class="drop-hint">Accepted: .txt, .md (max 5 MB each)</p>
+      </div>
+
+      <form id="scrape-form" autocomplete="off">
+        <input
+          type="url"
+          id="scrape-url"
+          placeholder="Paste a URL to scrape into the knowledge base..."
+          aria-label="URL to scrape"
+        >
+        <button type="submit" id="scrape-btn">Scrape</button>
+      </form>
+
+      <form id="chat-form" autocomplete="off">
+        <input
+          type="text"
+          id="message-input"
+          placeholder="Ask about company policies..."
+          aria-label="Message input"
+          required
+        >
+        <button type="submit" id="send-btn">Send</button>
+      </form>
+    </div>
+
+    <!-- ============================================================ -->
+    <!-- Admin tab -->
+    <!-- ============================================================ -->
+    <div id="tab-admin" class="tab-content">
+      <!-- Password prompt (shown when not authenticated) -->
+      <div id="admin-login" class="admin-login">
+        <h2>Admin Access</h2>
+        <p>Enter the admin password to manage the knowledge base.</p>
+        <form id="admin-login-form" autocomplete="off">
+          <input
+            type="password"
+            id="admin-password"
+            placeholder="Admin password"
+            aria-label="Admin password"
+            required
+          >
+          <button type="submit">Unlock</button>
+        </form>
+        <p id="admin-login-error" class="admin-error" hidden></p>
+      </div>
+
+      <!-- Admin panel (shown when authenticated) -->
+      <div id="admin-panel" class="admin-panel" hidden>
+        <!-- Stats -->
+        <div class="admin-section">
+          <h2>Database Stats</h2>
+          <div id="admin-stats" class="admin-stats">
+            <div class="stat-card">
+              <span class="stat-value" id="stat-documents">--</span>
+              <span class="stat-label">Documents</span>
+            </div>
+            <div class="stat-card">
+              <span class="stat-value" id="stat-chunks">--</span>
+              <span class="stat-label">Chunks</span>
+            </div>
+          </div>
+          <button id="admin-refresh-btn" class="admin-btn">Refresh</button>
+        </div>
+
+        <!-- Actions -->
+        <div class="admin-section">
+          <h2>Actions</h2>
+          <div class="admin-actions">
+            <button id="admin-export-btn" class="admin-btn admin-btn-primary">Export Database</button>
+            <label class="admin-btn admin-btn-primary admin-file-label">
+              Import Database
+              <input type="file" id="admin-import-file" accept=".json" hidden>
+            </label>
+            <button id="admin-delete-all-btn" class="admin-btn admin-btn-danger">Delete All</button>
+            <button id="admin-logout-btn" class="admin-btn">Lock</button>
+          </div>
+        </div>
+
+        <!-- Document list -->
+        <div class="admin-section">
+          <h2>Documents</h2>
+          <div id="admin-documents" class="admin-documents">
+            <p class="admin-placeholder">Loading...</p>
+          </div>
+        </div>
+
+        <!-- Status messages -->
+        <div id="admin-status" class="admin-status" hidden></div>
       </div>
     </div>
-
-    <div id="drop-zone" class="drop-zone" aria-label="File drop zone">
-      <p>Drag files here to upload, or <label for="file-input" class="file-label">browse</label></p>
-      <input type="file" id="file-input" multiple accept=".txt,.md" hidden>
-      <p class="drop-hint">Accepted: .txt, .md (max 5 MB each)</p>
-    </div>
-
-    <form id="scrape-form" autocomplete="off">
-      <input
-        type="url"
-        id="scrape-url"
-        placeholder="Paste a URL to scrape into the knowledge base..."
-        aria-label="URL to scrape"
-      >
-      <button type="submit" id="scrape-btn">Scrape</button>
-    </form>
-
-    <form id="chat-form" autocomplete="off">
-      <input
-        type="text"
-        id="message-input"
-        placeholder="Ask about company policies..."
-        aria-label="Message input"
-        required
-      >
-      <button type="submit" id="send-btn">Send</button>
-    </form>
   </div>
 
   <script src="app.js"></script>

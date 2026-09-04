@@ -7,6 +7,7 @@ const logger = require('./logger');
 const uploadRouter = require('./routes/upload');
 const chatRouter = require('./routes/chat');
 const scrapeRouter = require('./routes/scrape');
+const adminRouter = require('./routes/admin');
 
 const tracer = trace.getTracer('rag-api.test', '0.1.0');
 
@@ -36,6 +37,9 @@ app.use(chatRouter);
 
 // Web scrape -- fetch page via Playwright MCP, chunk, embed, store
 app.use(scrapeRouter);
+
+// Admin -- database management (password-gated)
+app.use('/api/admin', adminRouter);
 
 /**
  * Test error endpoint -- generates a deliberate exception wrapped in an

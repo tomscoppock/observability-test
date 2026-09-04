@@ -26,6 +26,12 @@ describe('db module', () => {
     assert.equal(typeof db.vectorSearch, 'function');
     assert.equal(typeof db.getDocumentById, 'function');
     assert.equal(typeof db.hasDocuments, 'function');
+    assert.equal(typeof db.listDocuments, 'function');
+    assert.equal(typeof db.getStats, 'function');
+    assert.equal(typeof db.deleteDocument, 'function');
+    assert.equal(typeof db.deleteAllData, 'function');
+    assert.equal(typeof db.exportAll, 'function');
+    assert.equal(typeof db.importAll, 'function');
     assert.equal(typeof db._reset, 'function');
   });
 

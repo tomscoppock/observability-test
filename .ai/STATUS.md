@@ -10,6 +10,7 @@ Last updated: 2026-09-04
 
 ## Recently completed
 
+- 024 -- Admin tab with database management UI (@tom) -- done 2026-09-04
 - 018 -- Instrument LLM calls with gen_ai.* spans and token metrics (@tom) -- done 2026-09-04
 - 014 -- Implement web scrape endpoint using Playwright MCP (@tom) -- done 2026-09-04
 - 017 -- Add gen_ai normalizer processor to OTel Collector (@tom) -- done 2026-09-03
@@ -34,7 +35,7 @@ Last updated: 2026-09-04
 
 ### database
 
-- 023 -- Add SurrealDB import/export for embeddings (@tom, medium)
+(none -- 023 absorbed into 024, 024 done)
 
 ### rag-agent / mcp-services
 
@@ -50,7 +51,7 @@ Last updated: 2026-09-04
 
 ## Numbering
 
-Next free backlog/epic/task number: **024**
+Next free backlog/epic/task number: **025**
 
 <!-- Increment every time a numbered item is created in backlog/,
      in-progress/, epics/, or done/. Numbers are never reused. -->

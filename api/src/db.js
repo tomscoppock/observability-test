@@ -324,6 +324,26 @@ async function vectorSearch(queryEmbedding, topK = 5) {
 }
 
 /**
+ * Extract the raw record identifier from various ID formats.
+ *
+ * Handles:
+ *  - SurrealDB RecordId objects (have an `id` property)
+ *  - Strings like "documents:abc123" (strips the table prefix)
+ *  - Plain strings like "abc123" (returned as-is)
+ *
+ * @param {string|object} id  The record ID in any supported format.
+ * @returns {string} The raw identifier portion (e.g. "abc123").
+ */
+function _extractRid(id) {
+  if (id && typeof id === 'object' && id.id !== undefined) {
+    return String(id.id);
+  }
+  const str = String(id);
+  const colonIdx = str.indexOf(':');
+  return colonIdx >= 0 ? str.slice(colonIdx + 1) : str;
+}
+
+/**
  * Fetch a document by its record ID.
  *
  * @param {string|object} id  SurrealDB record ID.
@@ -332,10 +352,12 @@ async function vectorSearch(queryEmbedding, topK = 5) {
 async function getDocumentById(id) {
   return tracer.startActiveSpan('db.getDocumentById', async (span) => {
     try {
+      const rid = _extractRid(id);
+      span.setAttribute('db.document.rid', rid);
       const result = await _withRetry(async (session) => {
         const [rows] = await session.query(
-          'SELECT * FROM $id',
-          { id }
+          'SELECT * FROM type::record("documents", $rid)',
+          { rid }
         );
         return rows[0] || null;
       });
@@ -378,6 +400,241 @@ async function hasDocuments() {
   });
 }
 
+/**
+ * List all documents, newest first.
+ *
+ * @returns {Promise<object[]>}
+ */
+async function listDocuments() {
+  return tracer.startActiveSpan('db.listDocuments', async (span) => {
+    try {
+      const results = await _withRetry(async (session) => {
+        const [rows] = await session.query(
+          'SELECT * FROM documents ORDER BY created_at DESC'
+        );
+        return rows;
+      });
+      span.setAttribute('db.results_count', results.length);
+      span.setStatus({ code: 1 });
+      return results;
+    } catch (err) {
+      span.setStatus({ code: 2, message: err.message });
+      span.recordException(err);
+      throw err;
+    } finally {
+      span.end();
+    }
+  });
+}
+
+/**
+ * Get aggregate stats: document count and chunk count.
+ *
+ * @returns {Promise<{ documentCount: number, chunkCount: number }>}
+ */
+async function getStats() {
+  return tracer.startActiveSpan('db.getStats', async (span) => {
+    try {
+      const stats = await _withRetry(async (session) => {
+        const [docRows] = await session.query(
+          'SELECT count() AS total FROM documents GROUP ALL'
+        );
+        const [chunkRows] = await session.query(
+          'SELECT count() AS total FROM chunks GROUP ALL'
+        );
+        return {
+          documentCount: docRows?.[0]?.total ?? 0,
+          chunkCount: chunkRows?.[0]?.total ?? 0,
+        };
+      });
+      span.setAttributes({
+        'db.document_count': stats.documentCount,
+        'db.chunk_count': stats.chunkCount,
+      });
+      span.setStatus({ code: 1 });
+      return stats;
+    } catch (err) {
+      span.setStatus({ code: 2, message: err.message });
+      span.recordException(err);
+      throw err;
+    } finally {
+      span.end();
+    }
+  });
+}
+
+/**
+ * Delete a document and all its related chunks.
+ *
+ * @param {string|object} id  SurrealDB record ID (e.g. "documents:abc123").
+ * @returns {Promise<void>}
+ */
+async function deleteDocument(id) {
+  return tracer.startActiveSpan('db.deleteDocument', async (span) => {
+    try {
+      const rid = _extractRid(id);
+      span.setAttribute('db.document.id', rid);
+      await _withRetry(async (session) => {
+        // Delete chunks that reference this document
+        await session.query(
+          'DELETE chunks WHERE document = type::record("documents", $rid)',
+          { rid }
+        );
+        // Delete the document itself
+        await session.query(
+          'DELETE type::record("documents", $rid)',
+          { rid }
+        );
+      });
+      span.setStatus({ code: 1 });
+    } catch (err) {
+      span.setStatus({ code: 2, message: err.message });
+      span.recordException(err);
+      throw err;
+    } finally {
+      span.end();
+    }
+  });
+}
+
+/**
+ * Delete all documents and chunks (truncate both tables).
+ *
+ * @returns {Promise<void>}
+ */
+async function deleteAllData() {
+  return tracer.startActiveSpan('db.deleteAllData', async (span) => {
+    try {
+      await _withRetry(async (session) => {
+        await session.query('DELETE chunks');
+        await session.query('DELETE documents');
+      });
+      logger.info('All documents and chunks deleted');
+      span.setStatus({ code: 1 });
+    } catch (err) {
+      span.setStatus({ code: 2, message: err.message });
+      span.recordException(err);
+      throw err;
+    } finally {
+      span.end();
+    }
+  });
+}
+
+/**
+ * Export all documents and chunks as a JSON-serialisable object.
+ *
+ * @returns {Promise<{ documents: object[], chunks: object[] }>}
+ */
+async function exportAll() {
+  return tracer.startActiveSpan('db.exportAll', async (span) => {
+    try {
+      const data = await _withRetry(async (session) => {
+        const [docs] = await session.query(
+          'SELECT * FROM documents ORDER BY created_at ASC'
+        );
+        const [chks] = await session.query(
+          'SELECT * FROM chunks ORDER BY document ASC, chunk_index ASC'
+        );
+        return { documents: docs, chunks: chks };
+      });
+      span.setAttributes({
+        'db.export.document_count': data.documents.length,
+        'db.export.chunk_count': data.chunks.length,
+      });
+      span.setStatus({ code: 1 });
+      return data;
+    } catch (err) {
+      span.setStatus({ code: 2, message: err.message });
+      span.recordException(err);
+      throw err;
+    } finally {
+      span.end();
+    }
+  });
+}
+
+/**
+ * Import documents and chunks from a previously exported JSON object.
+ * Clears all existing data first (full replace).
+ *
+ * @param {{ documents: object[], chunks: object[] }} data
+ * @returns {Promise<{ documentCount: number, chunkCount: number }>}
+ */
+async function importAll(data) {
+  return tracer.startActiveSpan('db.importAll', async (span) => {
+    try {
+      const docs = data.documents || [];
+      const chks = data.chunks || [];
+      span.setAttributes({
+        'db.import.document_count': docs.length,
+        'db.import.chunk_count': chks.length,
+      });
+
+      await _withRetry(async (session) => {
+        // Clear existing data
+        await session.query('DELETE chunks');
+        await session.query('DELETE documents');
+
+        // Insert documents
+        for (const doc of docs) {
+          await session.query(
+            `CREATE type::record("documents", $rid) SET
+               title = $title,
+               filename = $filename,
+               source_type = $source_type,
+               content_length = $content_length,
+               chunk_count = $chunk_count,
+               created_at = $created_at`,
+            {
+              rid: typeof doc.id === 'object' ? doc.id.id : String(doc.id).replace('documents:', ''),
+              title: doc.title,
+              filename: doc.filename,
+              source_type: doc.source_type || 'upload',
+              content_length: doc.content_length || 0,
+              chunk_count: doc.chunk_count || 0,
+              created_at: doc.created_at || new Date().toISOString(),
+            }
+          );
+        }
+
+        // Insert chunks
+        for (const chunk of chks) {
+          await session.query(
+            `CREATE type::record("chunks", $rid) SET
+               document = $document,
+               text = $text,
+               embedding = $embedding,
+               chunk_index = $chunk_index,
+               created_at = $created_at`,
+            {
+              rid: typeof chunk.id === 'object' ? chunk.id.id : String(chunk.id).replace('chunks:', ''),
+              document: chunk.document,
+              text: chunk.text,
+              embedding: chunk.embedding,
+              chunk_index: chunk.chunk_index || 0,
+              created_at: chunk.created_at || new Date().toISOString(),
+            }
+          );
+        }
+      });
+
+      logger.info('Database imported', {
+        documentCount: docs.length,
+        chunkCount: chks.length,
+      });
+      span.setStatus({ code: 1 });
+      return { documentCount: docs.length, chunkCount: chks.length };
+    } catch (err) {
+      span.setStatus({ code: 2, message: err.message });
+      span.recordException(err);
+      throw err;
+    } finally {
+      span.end();
+    }
+  });
+}
+
 // Expose for testing -- allows resetting the singleton
 function _reset() {
   _surreal = null;
@@ -392,5 +649,11 @@ module.exports = {
   vectorSearch,
   getDocumentById,
   hasDocuments,
+  listDocuments,
+  getStats,
+  deleteDocument,
+  deleteAllData,
+  exportAll,
+  importAll,
   _reset,
 };

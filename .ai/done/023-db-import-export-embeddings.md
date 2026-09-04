@@ -1,6 +1,6 @@
 # 023 -- Add SurrealDB import/export for embeddings
 
-Status: backlog
+Status: done (absorbed into 024)
 Priority: medium
 Assignee: @tom
 Epic: 004

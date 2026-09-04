@@ -43,6 +43,7 @@ services:
       - OTEL_RESOURCE_ATTRIBUTES=${OTEL_RESOURCE_ATTRIBUTES:-deployment.environment=dev}
       - MCP_PLAYWRIGHT_URL=${MCP_PLAYWRIGHT_URL:-}
       - MCP_PLAYWRIGHT_API_KEY=${MCP_PLAYWRIGHT_API_KEY:-}
+      - ADMIN_PASSWORD=${ADMIN_PASSWORD:-}
     depends_on:
       surrealdb:
         condition: service_started
