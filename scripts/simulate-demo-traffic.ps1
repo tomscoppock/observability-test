@@ -113,7 +113,8 @@ function Send-Upload {
         $client.DefaultRequestHeaders.Add("X-Session-Id", $Session)
         $content = New-Object System.Net.Http.MultipartFormDataContent
         $fileBytes = [System.IO.File]::ReadAllBytes($FilePath)
-        $fileContent = New-Object System.Net.Http.ByteArrayContent($fileBytes)
+        # Comma operator prevents PS 5.1 from splattering byte[] as individual args
+        $fileContent = New-Object System.Net.Http.ByteArrayContent(,$fileBytes)
         $fileContent.Headers.ContentType = [System.Net.Http.Headers.MediaTypeHeaderValue]::Parse("application/octet-stream")
         $content.Add($fileContent, "files", $filename)
         $response = $client.PostAsync("$BaseUrl/api/upload", $content).Result
