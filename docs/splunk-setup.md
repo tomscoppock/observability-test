@@ -49,11 +49,12 @@ Observability Cloud for the observability-test RAG Agent stack.
 
 ### Dashboard Automation
 
-22. [Automated dashboard setup](#22-automated-dashboard-setup)
+22. [Custom MetricSet setup (TMS prerequisite)](#22-custom-metricset-setup-tms-prerequisite)
+23. [Automated dashboard setup](#23-automated-dashboard-setup)
 
 ### Reference
 
-23. [Quick reference](#23-quick-reference)
+24. [Quick reference](#24-quick-reference)
 
 ---
 
@@ -85,7 +86,7 @@ Node.js API (rag-api)               SurrealDB 3.2+ (surrealdb)
                     |
                     |  APM derives Monitoring MetricSets (MMS) from traces:
                     |    service.request  -- histogram containing count + duration
-                    |    spans            -- per-span histogram
+                    |    spans            -- per-span histogram (requires TMS)
                     |    traces           -- per-trace histogram
                     |
                     |  Infrastructure Monitoring receives direct metrics:
@@ -95,12 +96,13 @@ Node.js API (rag-api)               SurrealDB 3.2+ (surrealdb)
             Dashboards, Alerts, Service Map
 ```
 
-**Key concept -- Monitoring MetricSets (MMS):**
+**Key concept -- Monitoring MetricSets (MMS) and Troubleshooting MetricSets (TMS):**
 
 Splunk APM automatically creates histogram metrics from your trace data.
-The primary one is `service.request`. Because it is a histogram, a single
-metric contains both the request **count** and the request **duration**
-(latency). You extract different values by applying different functions:
+The primary one is `service.request` (an MMS metric). Because it is a
+histogram, a single metric contains both the request **count** and the
+request **duration** (latency). You extract different values by applying
+different functions:
 
 | What you want | Function to apply | Example SignalFlow |
 |---|---|---|
@@ -110,6 +112,13 @@ metric contains both the request **count** and the request **duration**
 | Latency P99 | `percentile(pct=99)` | `histogram('service.request').percentile(pct=99)` |
 | Min latency | `min()` | `histogram('service.request').min()` |
 | Max latency | `max()` | `histogram('service.request').max()` |
+
+The `spans` histogram is also available but requires **Troubleshooting
+MetricSets (TMS)** to be enabled for the service. TMS lets you filter
+`histogram('spans', ...)` queries by custom span attributes such as
+`gen_ai.operation.name`. Without TMS, only `service.request` queries
+return data. See [Section 22](#22-custom-metricset-setup-tms-prerequisite)
+for setup instructions.
 
 **Dimension names:** APM dimensions use the `sf_` prefix:
 
@@ -626,8 +635,14 @@ D = data('surrealdb.network.sent', filter=filter('service.name', 'surrealdb')).r
 > chunking, embedding, and database insertion take for each upload.
 > **Why:** Identifies which step is the bottleneck (usually embedding).
 > **How:** Uses custom spans from the upload route: `upload.pipeline`,
-> `upload.chunk`, `embeddings.embedTexts`, `db.insertDocument`,
+> `upload.chunk`, `embeddings <model>`, `db.insertDocument`,
 > `db.insertChunks`.
+>
+> **Note:** Embedding span names follow the gen_ai semantic convention
+> `{operation} {model}` (e.g. `embeddings text-embedding-3-small`).
+> The automated dashboard uses `gen_ai.operation.name` = `embeddings`
+> to filter model-independently. The `histogram('spans', ...)` queries
+> below require [TMS to be enabled](#22-custom-metricset-setup-tms-prerequisite).
 
 ### Finding upload traces
 
@@ -643,8 +658,9 @@ D = data('surrealdb.network.sent', filter=filter('service.name', 'surrealdb')).r
 4. In **Filter**, add:
    - `sf_service` = `rag-api`
    - `sf_operation` = `upload.pipeline`
-5. Click **Add plot** for variable **B**: same metric, filter
-   `sf_operation` = `embeddings.embedTexts`.
+5. Click **Add plot** for variable **B**: same metric, filter by
+   `gen_ai.operation.name` = `embeddings` (or `sf_operation` =
+   `embeddings text-embedding-3-small` for the exact span).
 6. Click **Add plot** for variable **C**: same metric, filter
    `sf_operation` = `db.insertChunks`.
 7. In **Configuration**:
@@ -657,7 +673,7 @@ D = data('surrealdb.network.sent', filter=filter('service.name', 'surrealdb')).r
 ```signalflow
 filter_ = filter('sf_service', 'rag-api') and filter('sf_environment', 'dev')
 A = histogram('spans', filter=filter_ and filter('sf_operation', 'upload.pipeline')).median().publish(label='Total Upload')
-B = histogram('spans', filter=filter_ and filter('sf_operation', 'embeddings.embedTexts')).median().publish(label='Embedding')
+B = histogram('spans', filter=filter_ and filter('gen_ai.operation.name', 'embeddings')).median().publish(label='Embedding')
 C = histogram('spans', filter=filter_ and filter('sf_operation', 'db.insertChunks')).median().publish(label='DB Insert')
 ```
 
@@ -670,16 +686,24 @@ C = histogram('spans', filter=filter_ and filter('sf_operation', 'db.insertChunk
 > **Why:** Shows where chat latency comes from. LLM completion is usually
 > the slowest step; vector search should be fast.
 > **How:** Uses custom spans from the chat route: `chat.pipeline`,
-> `embeddings.embedTexts`, `db.vectorSearch`, `llm.chatCompletion`.
+> `chat.pipeline.stream`, `embeddings <model>`, `db.vectorSearch`,
+> `chat <model>`.
+>
+> **Note:** LLM and embedding span names follow the gen_ai semantic
+> convention `{operation} {model}` (e.g. `chat gpt-4o-mini`,
+> `embeddings text-embedding-3-small`). The automated dashboard uses
+> `gen_ai.operation.name` to filter model-independently. The
+> `histogram('spans', ...)` queries below require
+> [TMS to be enabled](#22-custom-metricset-setup-tms-prerequisite).
 
 ### Builder tab (chat latency by step)
 
 1. Click **Create (+) > Chart**.
 2. Variable **A**: `spans`, Analytics = **Median**, Filter =
    `sf_service` = `rag-api`, `sf_operation` = `chat.pipeline`.
-3. Variable **B**: same, `sf_operation` = `embeddings.embedTexts`.
+3. Variable **B**: same, filter `gen_ai.operation.name` = `embeddings`.
 4. Variable **C**: same, `sf_operation` = `db.vectorSearch`.
-5. Variable **D**: same, `sf_operation` = `llm.chatCompletion`.
+5. Variable **D**: same, filter `gen_ai.operation.name` = `chat`.
 6. In **Configuration**:
    - **Chart title:** `RAG Chat Pipeline Latency`
    - **Visualization type:** `Line`
@@ -690,9 +714,9 @@ C = histogram('spans', filter=filter_ and filter('sf_operation', 'db.insertChunk
 ```signalflow
 filter_ = filter('sf_service', 'rag-api') and filter('sf_environment', 'dev')
 A = histogram('spans', filter=filter_ and filter('sf_operation', 'chat.pipeline')).median().publish(label='Total Chat')
-B = histogram('spans', filter=filter_ and filter('sf_operation', 'embeddings.embedTexts')).median().publish(label='Query Embedding')
+B = histogram('spans', filter=filter_ and filter('gen_ai.operation.name', 'embeddings')).median().publish(label='Query Embedding')
 C = histogram('spans', filter=filter_ and filter('sf_operation', 'db.vectorSearch')).median().publish(label='Vector Search')
-D = histogram('spans', filter=filter_ and filter('sf_operation', 'llm.chatCompletion')).median().publish(label='LLM Completion')
+D = histogram('spans', filter=filter_ and filter('gen_ai.operation.name', 'chat')).median().publish(label='LLM Completion')
 ```
 
 ---
@@ -718,7 +742,8 @@ D = histogram('spans', filter=filter_ and filter('sf_operation', 'llm.chatComple
 1. Navigate to **APM > Traces**.
 2. Filter by `sf_service` = `rag-api`.
 3. Click any chat trace.
-4. In the waterfall, click the `llm.chatCompletion` span.
+4. In the waterfall, click the LLM span (named `chat <model>`, e.g.
+   `chat gpt-4o-mini`).
 5. In the span details panel, look for:
    - `gen_ai.usage.prompt_tokens`
    - `gen_ai.usage.completion_tokens`
@@ -727,20 +752,17 @@ D = histogram('spans', filter=filter_ and filter('sf_operation', 'llm.chatComple
 
 ### Custom chart (requires Troubleshooting MetricSets)
 
-To chart token usage over time, you need to index the `gen_ai.*` span
-tags as Troubleshooting MetricSets (TMS):
+To chart token usage over time or filter `histogram('spans', ...)` by
+custom span attributes, you need a Custom MetricSet (TMS) configured.
+See [Section 22](#22-custom-metricset-setup-tms-prerequisite) for the
+full setup procedure.
 
-1. Navigate to **APM > APM Configuration > Troubleshooting MetricSets**.
-2. Click **+ New MetricSet Rule**.
-3. **Service:** `rag-api`
-4. **Span tags to index:** `gen_ai.usage.prompt_tokens`,
-   `gen_ai.usage.completion_tokens`
-5. Click **Save**.
-
-Once indexed (takes a few minutes), you can create charts using:
+Once the `gen_ai.operation.name` Custom MetricSet is active, you can
+create charts using:
 
 ```signalflow
-A = histogram('spans', filter=filter('sf_service', 'rag-api') and filter('sf_operation', 'llm.chatCompletion')).sum(by=['gen_ai.usage.prompt_tokens']).publish(label='Prompt Tokens')
+filter_ = filter('sf_service', 'rag-api') and filter('sf_environment', 'dev')
+A = histogram('spans', filter=filter_ and filter('gen_ai.operation.name', 'chat')).median().publish(label='LLM Latency')
 ```
 
 ---
@@ -986,16 +1008,91 @@ C = histogram('spans', filter=filter_mcp and filter('sf_operation', 'mcp.tool.br
 
 ---
 
-## 22. Automated dashboard setup
+## 22. Custom MetricSet setup (TMS prerequisite)
+
+> **What:** Configure a Custom MetricSet so that `histogram('spans', ...)`
+> queries can filter by the `gen_ai.operation.name` span attribute.
+> **Why:** The **RAG Pipeline** and **LLM and AI** dashboard tabs use
+> `histogram('spans', ...)` with `gen_ai.operation.name` filters. Without
+> a Custom MetricSet, these charts show no data -- only `service.request`
+> queries (used on the Service Overview tab) work out of the box.
+> **How:** Splunk indexes span tags as Troubleshooting MetricSets (TMS)
+> when you create a Custom MetricSet rule. This is a one-time manual step
+> in the Splunk UI -- there is no REST API for it.
+
+### When is this needed?
+
+| Dashboard tab | Metric type | TMS required? |
+|---|---|---|
+| Service Overview | `histogram('service.request', ...)` (MMS) | No |
+| RAG Pipeline | `histogram('spans', ...)` with `gen_ai.operation.name` | **Yes** |
+| LLM and AI | `histogram('spans', ...)` with `gen_ai.operation.name` | **Yes** |
+| Infrastructure | `data('surrealdb.*')`, `data('container.*')` | No |
+
+### Step-by-step setup
+
+1. Sign in to [Splunk Observability Cloud](https://app.signalfx.com).
+2. Click **Settings** (gear icon, bottom-left).
+3. Under **Product Settings**, click **APM & RUM MetricSets**.
+4. Make sure the **APM** sub-tab is selected (not RUM).
+5. In the **Custom MetricSets** section, click **+ Add Custom MetricSet**.
+6. In the **Add Custom MetricSet** dialog:
+   - **Tag:** Select `gen_ai.operation.name` from the dropdown.
+   - **Scope:** Select **Service**.
+   - **Services in scope:** Select `rag-api` (or **All Services** if you
+     want it available for all services).
+   - Leave **Create Monitoring MetricSet (MMS)** unchecked unless you
+     also want 13-month retention.
+7. Click **Start Analysis**. Splunk will analyse the cardinality of the
+   tag (typically very low for `gen_ai.operation.name` -- just `chat`
+   and `embeddings`).
+8. Once analysis completes, click **Create** to activate the MetricSet.
+
+### Verifying the MetricSet is active
+
+After creation, the **Custom MetricSets** table on the APM & RUM
+MetricSets page should show:
+
+| Name | Scope | MMS (MMS ID) | Status |
+|---|---|---|---|
+| `gen_ai.operation.name` | `rag-api` | MMS not configured | Active |
+
+The status must show a green dot and **Active** before the RAG Pipeline
+and LLM dashboard charts will populate. Activation typically takes 1-2
+minutes.
+
+### Optional: additional Custom MetricSets
+
+For deeper analysis, you can also index these span tags:
+
+| Tag | Purpose |
+|---|---|
+| `gen_ai.request.model` | Break down latency/tokens by model |
+| `gen_ai.usage.prompt_tokens` | Chart token counts directly |
+| `gen_ai.usage.completion_tokens` | Chart completion token counts |
+| `gen_ai.response.finish_reason` | Detect truncated responses |
+
+Follow the same steps above for each additional tag.
+
+---
+
+## 23. Automated dashboard setup
 
 Instead of creating charts manually, you can use the provided automation
-script to create the entire demo dashboard via the Splunk Observability
+script to create the entire dashboard group via the Splunk Observability
 Cloud REST API.
+
+> **Important:** Before running the script, complete the
+> [Custom MetricSet setup](#22-custom-metricset-setup-tms-prerequisite)
+> above. The script creates all 4 dashboard tabs, but the RAG Pipeline
+> and LLM and AI tabs will show empty charts until TMS is active.
 
 ### Prerequisites
 
 - `SPLUNK_ACCESS_TOKEN` and `SPLUNK_REALM` set in your `.env` file
 - `curl` and `jq` (Linux/macOS) or PowerShell 5.1+ (Windows)
+- Custom MetricSet for `gen_ai.operation.name` active (see
+  [Section 22](#22-custom-metricset-setup-tms-prerequisite))
 
 ### Using the setup script
 
@@ -1014,19 +1111,33 @@ Cloud REST API.
 The script:
 
 1. Reads `SPLUNK_ACCESS_TOKEN` and `SPLUNK_REALM` from `.env`
-2. Creates a dashboard group named `RAG Agent -- Observability`
-3. Creates a dashboard named `Demo Dashboard`
-4. Creates all 17 charts (aligned to the demo talk track)
-5. Outputs the dashboard URL on success
+2. Creates (or reuses) a dashboard group named `RAG Agent -- Observability`
+3. Deletes any existing dashboards in the group (clean slate)
+4. Creates 4 dashboard tabs:
+   - **Service Overview** (8 charts) -- request counters, error rate,
+     latency, top endpoints
+   - **RAG Pipeline** (7 charts) -- chat/upload/scrape latency,
+     embedding latency, DB operations, vector search, sessions
+   - **LLM and AI** (5 charts) -- token counters, token usage over
+     time, LLM call latency, embedding API latency
+   - **Infrastructure** (6 charts) -- container CPU/memory/network,
+     SurrealDB process health, transactions, HTTP activity
+5. Deletes the empty auto-created default dashboard
+6. Outputs the dashboard group URL on success
 
-The script is idempotent -- it checks for existing resources before
-creating new ones.
+**Total: 26 charts across 4 dashboards** (aligned to the demo talk
+track).
+
+The script is idempotent -- running it again deletes and recreates all
+dashboards cleanly.
 
 ### Chart definitions
 
-The chart definitions are stored in `splunk/dashboard.json`. Each chart
-includes its SignalFlow program, visualization type, and filters. See
-the file for the complete list.
+The chart definitions are stored in [`splunk/dashboard.json`](../splunk/dashboard.json).
+The file contains a `dashboardGroup` object with a `dashboards` array.
+Each dashboard has a `name`, optional `description`, and a `charts`
+array. Each chart includes its SignalFlow program, visualization type,
+and layout width.
 
 ### REST API reference
 
@@ -1034,8 +1145,8 @@ The script uses these Splunk Observability Cloud API endpoints:
 
 | Resource | Endpoint | Method |
 |---|---|---|
-| Dashboard group | `https://api.{REALM}.signalfx.com/v2/dashboardgroup` | POST |
-| Dashboard | `https://api.{REALM}.signalfx.com/v2/dashboard` | POST |
+| Dashboard group | `https://api.{REALM}.signalfx.com/v2/dashboardgroup` | GET, POST |
+| Dashboard | `https://api.{REALM}.signalfx.com/v2/dashboard` | GET, POST, DELETE |
 | Chart | `https://api.{REALM}.signalfx.com/v2/chart` | POST |
 
 All requests require the `X-SF-Token` header with your access token.
@@ -1043,9 +1154,13 @@ All requests require the `X-SF-Token` header with your access token.
 See the [Splunk Observability Cloud API reference](https://dev.splunk.com/observability/reference/)
 for full documentation.
 
+> **Note:** Custom MetricSet (TMS) configuration cannot be automated via
+> the REST API. It must be done manually through the Splunk UI as
+> described in [Section 22](#22-custom-metricset-setup-tms-prerequisite).
+
 ---
 
-## 23. Quick reference
+## 24. Quick reference
 
 | Action | Where |
 |---|---|
@@ -1063,6 +1178,7 @@ for full documentation.
 | APM histogram metrics | `histogram('service.request')` in SignalFlow |
 | View MCP dependency | APM > Service map > look for `playwright-mcp` node |
 | MCP distributed traces | APM > Traces > filter `mcp.scrape` operation |
+| Configure Custom MetricSets | Settings > APM & RUM MetricSets |
 | Automate dashboard | Run `scripts/setup-splunk-dashboard.sh` |
 
 ---
