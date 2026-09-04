@@ -11,6 +11,26 @@ Each section includes:
 
 ---
 
+## Pre-demo preparation
+
+> **Before presenting**, generate some telemetry data so the service map
+> and dashboard charts have data to show:
+>
+> 1. Start the stack: `docker compose up -d`
+> 2. Upload at least one document (drag a file into the chat area or use
+>    the Admin tab's import feature).
+> 3. Send 3-5 chat messages to generate traces, token metrics, and DB
+>    spans.
+> 4. Optionally scrape a URL to generate MCP cross-service traces.
+> 5. Wait ~2 minutes for metrics to flush through the OTel Collector to
+>    Splunk.
+> 6. In Splunk, set the time picker to **Last 15 minutes** (or a window
+>    that covers your recent activity). The service map and charts only
+>    show data within the selected time range -- if the window is too
+>    narrow or too old, nodes will appear grey or missing.
+
+---
+
 ## Opening (~30 seconds)
 
 **[SHOW]** Open Splunk Observability Cloud. Navigate to the `RAG Agent
@@ -29,16 +49,33 @@ Splunk Observability Cloud. Let me walk you through what this gives us."
 ## Section 1: Service Map and Infrastructure (~2 minutes)
 
 **[SHOW]** Navigate to **APM > Service map**. Set environment to `dev`.
+Adjust the time picker to cover the period when you generated traffic
+(e.g. **Last 15 minutes**).
 
 **[SAY]** "The service map is auto-generated from trace data -- we
 didn't configure it, Splunk built it from the parent-child span
 relationships. You can see `rag-api` at the centre, with edges to
 `surrealdb` for database operations and `playwright-mcp` for web
-scraping. The colour coding shows health at a glance -- green means
-healthy, yellow is elevated errors, red is critical."
+scraping."
+
+> **Presenter note -- node colours:** Splunk colour-codes nodes by
+> health: green = healthy, yellow = elevated errors, red = critical.
+> Nodes appear **grey** when there is insufficient data in the selected
+> time window to calculate error rates. If all nodes are grey, widen
+> the time picker or generate more traffic. After a few chat messages
+> and a scrape, `rag-api` should turn green.
+
+> **Presenter note -- SurrealDB edge:** The `rag-api` -> `surrealdb`
+> edge appears because our DB spans use `SpanKind.CLIENT` with
+> `server.address` and `peer.service` attributes pointing to the
+> SurrealDB host. If the edge is missing, ensure you have sent at
+> least one chat message (which triggers `db.vectorSearch` and
+> `db.hasDocuments` spans) and that the time window covers that
+> activity.
 
 **[HIGHLIGHT]** Point out the edge between `rag-api` and
-`playwright-mcp` -- this is the cross-service MCP dependency.
+`playwright-mcp` -- this is the cross-service MCP dependency. If you
+ran a scrape, this edge will be visible.
 
 **[SHOW]** Click the `rag-api` node to open the service view.
 

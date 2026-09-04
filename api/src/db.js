@@ -19,7 +19,7 @@
 
 const fs = require('node:fs');
 const path = require('node:path');
-const { trace } = require('@opentelemetry/api');
+const { trace, SpanKind } = require('@opentelemetry/api');
 const logger = require('./logger');
 
 const tracer = trace.getTracer('rag-api.db', '0.1.0');
@@ -33,6 +33,26 @@ let _surreal = null;
 /** @type {object | null} SurrealSession (has query/create/select) */
 let _session = null;
 let _ready = false;
+
+/** Parsed from the connection URL during connect(). */
+let _serverAddress = 'surrealdb';
+let _serverPort = 8000;
+
+/**
+ * Returns span options for a CLIENT-kind DB span with common attributes.
+ * Splunk APM uses SpanKind.CLIENT + server.address to draw service map edges.
+ */
+function _dbSpanOpts(name) {
+  return {
+    kind: SpanKind.CLIENT,
+    attributes: {
+      'db.system': 'surrealdb',
+      'server.address': _serverAddress,
+      'server.port': _serverPort,
+      'peer.service': 'surrealdb',
+    },
+  };
+}
 
 // ---------------------------------------------------------------------------
 // Connection
@@ -76,7 +96,7 @@ function _isRetryableError(err) {
 async function connect() {
   if (_session && _ready) return _session;
 
-  return tracer.startActiveSpan('db.connect', async (span) => {
+  return tracer.startActiveSpan('db.connect', _dbSpanOpts(), async (span) => {
     try {
       // Dynamic import -- surrealdb is ESM-only in v2 (named export)
       const { Surreal } = await import('surrealdb');
@@ -89,11 +109,21 @@ async function connect() {
       const ns = process.env.SURREAL_NS || 'observability';
       const db = process.env.SURREAL_DB || 'rag';
 
+      // Parse host/port for service map edge detection
+      try {
+        const parsed = new URL(rawUrl);
+        _serverAddress = parsed.hostname || 'surrealdb';
+        _serverPort = parseInt(parsed.port, 10) || 8000;
+      } catch (_e) {
+        // keep defaults
+      }
+
       span.setAttributes({
-        'db.system': 'surrealdb',
         'db.connection_string': url,
         'db.namespace': ns,
         'db.name': db,
+        'server.address': _serverAddress,
+        'server.port': _serverPort,
       });
 
       _surreal = new Surreal();
@@ -130,7 +160,7 @@ async function connect() {
  * IF NOT EXISTS so this is safe to run on every startup.
  */
 async function applySchema() {
-  return tracer.startActiveSpan('db.applySchema', async (span) => {
+  return tracer.startActiveSpan('db.applySchema', _dbSpanOpts(), async (span) => {
     try {
       // In Docker: /app/src -> /app/db/schema.surql (../db/schema.surql)
       // Locally:   api/src  -> db/schema.surql (../../db/schema.surql)
@@ -197,7 +227,7 @@ async function _withRetry(fn) {
  * @returns {Promise<object>} The created record (with id).
  */
 async function insertDocument(doc) {
-  return tracer.startActiveSpan('db.insertDocument', async (span) => {
+  return tracer.startActiveSpan('db.insertDocument', _dbSpanOpts(), async (span) => {
     try {
       const result = await _withRetry(async (session) => {
         const [rows] = await session.query(
@@ -239,7 +269,7 @@ async function insertDocument(doc) {
  * @returns {Promise<object[]>} The created chunk records.
  */
 async function insertChunks(documentId, chunks) {
-  return tracer.startActiveSpan('db.insertChunks', async (span) => {
+  return tracer.startActiveSpan('db.insertChunks', _dbSpanOpts(), async (span) => {
     try {
       span.setAttribute('db.chunk_count', chunks.length);
 
@@ -288,7 +318,7 @@ async function insertChunks(documentId, chunks) {
  * @returns {Promise<object[]>}     Chunks with similarity scores.
  */
 async function vectorSearch(queryEmbedding, topK = 5) {
-  return tracer.startActiveSpan('db.vectorSearch', async (span) => {
+  return tracer.startActiveSpan('db.vectorSearch', _dbSpanOpts(), async (span) => {
     try {
       span.setAttributes({
         'db.vector.dimensions': queryEmbedding.length,
@@ -350,7 +380,7 @@ function _extractRid(id) {
  * @returns {Promise<object|null>}
  */
 async function getDocumentById(id) {
-  return tracer.startActiveSpan('db.getDocumentById', async (span) => {
+  return tracer.startActiveSpan('db.getDocumentById', _dbSpanOpts(), async (span) => {
     try {
       const rid = _extractRid(id);
       span.setAttribute('db.document.rid', rid);
@@ -379,7 +409,7 @@ async function getDocumentById(id) {
  * @returns {Promise<boolean>}
  */
 async function hasDocuments() {
-  return tracer.startActiveSpan('db.hasDocuments', async (span) => {
+  return tracer.startActiveSpan('db.hasDocuments', _dbSpanOpts(), async (span) => {
     try {
       const total = await _withRetry(async (session) => {
         const [results] = await session.query(
@@ -406,7 +436,7 @@ async function hasDocuments() {
  * @returns {Promise<object[]>}
  */
 async function listDocuments() {
-  return tracer.startActiveSpan('db.listDocuments', async (span) => {
+  return tracer.startActiveSpan('db.listDocuments', _dbSpanOpts(), async (span) => {
     try {
       const results = await _withRetry(async (session) => {
         const [rows] = await session.query(
@@ -433,7 +463,7 @@ async function listDocuments() {
  * @returns {Promise<{ documentCount: number, chunkCount: number }>}
  */
 async function getStats() {
-  return tracer.startActiveSpan('db.getStats', async (span) => {
+  return tracer.startActiveSpan('db.getStats', _dbSpanOpts(), async (span) => {
     try {
       const stats = await _withRetry(async (session) => {
         const [docRows] = await session.query(
@@ -470,7 +500,7 @@ async function getStats() {
  * @returns {Promise<void>}
  */
 async function deleteDocument(id) {
-  return tracer.startActiveSpan('db.deleteDocument', async (span) => {
+  return tracer.startActiveSpan('db.deleteDocument', _dbSpanOpts(), async (span) => {
     try {
       const rid = _extractRid(id);
       span.setAttribute('db.document.id', rid);
@@ -503,7 +533,7 @@ async function deleteDocument(id) {
  * @returns {Promise<void>}
  */
 async function deleteAllData() {
-  return tracer.startActiveSpan('db.deleteAllData', async (span) => {
+  return tracer.startActiveSpan('db.deleteAllData', _dbSpanOpts(), async (span) => {
     try {
       await _withRetry(async (session) => {
         await session.query('DELETE chunks');
@@ -527,7 +557,7 @@ async function deleteAllData() {
  * @returns {Promise<{ documents: object[], chunks: object[] }>}
  */
 async function exportAll() {
-  return tracer.startActiveSpan('db.exportAll', async (span) => {
+  return tracer.startActiveSpan('db.exportAll', _dbSpanOpts(), async (span) => {
     try {
       const data = await _withRetry(async (session) => {
         const [docs] = await session.query(
@@ -562,7 +592,7 @@ async function exportAll() {
  * @returns {Promise<{ documentCount: number, chunkCount: number }>}
  */
 async function importAll(data) {
-  return tracer.startActiveSpan('db.importAll', async (span) => {
+  return tracer.startActiveSpan('db.importAll', _dbSpanOpts(), async (span) => {
     try {
       const docs = data.documents || [];
       const chks = data.chunks || [];
