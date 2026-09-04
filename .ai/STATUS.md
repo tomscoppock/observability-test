@@ -1,6 +1,6 @@
 # Project Status
 
-Last updated: 2026-09-03
+Last updated: 2026-09-04
 
 ## Active work (per person)
 
@@ -10,6 +10,7 @@ Last updated: 2026-09-03
 
 ## Recently completed
 
+- 014 -- Implement web scrape endpoint using Playwright MCP (@tom) -- done 2026-09-04
 - 017 -- Add gen_ai normalizer processor to OTel Collector (@tom) -- done 2026-09-03
 - 013+015+016 -- RAG Pipeline (@tom) -- done 2026-09-01
 - 022 -- Add Express error-handling middleware (@tom) -- done 2026-08-26
@@ -32,18 +33,14 @@ Last updated: 2026-09-03
 
 ### database
 
-- 013 -- Set up SurrealDB schema (in-progress, part of RAG pipeline)
-- 023 -- Add SurrealDB import/export for embeddings (@tom, medium) -- after RAG pipeline
+- 023 -- Add SurrealDB import/export for embeddings (@tom, medium)
 
 ### rag-agent / mcp-services
 
-- 014 -- Implement web scrape endpoint using Playwright MCP (@tom, medium) -- deferred
-- 015 -- File upload endpoint for TXT/MD (in-progress, part of RAG pipeline)
-- 016 -- RAG chat endpoint with swappable LLM (in-progress, part of RAG pipeline)
+(none -- 014 done, 013+015+016 done)
 
 ### llm-observability
 
-- 017 -- done (gen_ai normalizer processor added to collector)
 - 018 -- Instrument LLM calls with gen_ai.* spans and token metrics (@tom, high)
 
 ## Blockers

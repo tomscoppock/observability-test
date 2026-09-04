@@ -265,4 +265,100 @@ backend) for traces to be correlated:
    docker compose logs otel-collector | findstr "playwright-mcp"
    ```
 3. In Splunk APM, search for traces containing both `rag-api` and
-   `playwright-mcp` service names.
+    `playwright-mcp` service names.
+
+## Collector receiver authentication (design decision)
+
+The OTLP receiver in `otel-collector-config.yaml` does **not** require
+authentication (no API key, no bearer token). This is a deliberate
+design decision for this dev/learning stack:
+
+### Why no auth on the receiver
+
+1. **Standard default** -- the upstream OTel Collector ships with no
+   receiver auth. This is the configuration used in most tutorials,
+   quickstarts, and dev setups.
+2. **Internal infrastructure** -- the collector is an internal component
+   (like a database or message queue) that sits inside the Docker network
+   or on localhost. It's not exposed to the public internet.
+3. **Auth at the boundary** -- security is applied where data leaves the
+   trusted network: the collector uses `SPLUNK_ACCESS_TOKEN` to
+   authenticate with Splunk's cloud ingest endpoints. Services inside the
+   network talk to the collector unauthenticated.
+4. **Simplicity** -- adding auth to the receiver would require every
+   service (Node.js API, SurrealDB, Playwright MCP) to carry and manage
+   a token, adding complexity with no security benefit in a local dev
+   environment.
+
+### When to add receiver auth
+
+Add authentication to the collector's OTLP receiver if:
+
+- The collector is exposed to the **public internet** or a shared/untrusted
+  network
+- You're running a **multi-tenant** environment where you need to verify
+  which service is sending data
+- Your organisation requires **zero-trust** architecture where every hop
+  needs authentication
+- The collector is deployed as a **shared service** across teams
+
+### How to add receiver auth (future reference)
+
+The OTel Collector Contrib image includes the `bearertokenauth` extension.
+To enable it:
+
+1. Add the extension to `otel-collector-config.yaml`:
+
+   ```yaml
+   extensions:
+     bearertokenauth:
+       token: "${OTEL_COLLECTOR_AUTH_TOKEN}"
+
+   receivers:
+     otlp:
+       protocols:
+         grpc:
+           endpoint: 0.0.0.0:4317
+           auth:
+             authenticator: bearertokenauth
+         http:
+           endpoint: 0.0.0.0:4318
+           auth:
+             authenticator: bearertokenauth
+
+   service:
+     extensions: [bearertokenauth]
+     pipelines:
+       # ... existing pipeline config unchanged
+   ```
+
+2. Add `OTEL_COLLECTOR_AUTH_TOKEN` to `.env` and `docker-compose.yml`
+   (otel-collector service environment).
+
+3. Configure each sending service to include the token:
+
+   **Node.js API** (`api/src/instrumentation.js`):
+   ```javascript
+   // Add to OTLP exporter headers
+   const exporter = new OTLPTraceExporter({
+     headers: { Authorization: 'Bearer ' + process.env.OTEL_AUTH_TOKEN },
+   });
+   ```
+
+   **Playwright MCP server** (`server.py`):
+   ```python
+   # Add to OTLPSpanExporter headers
+   exporter = OTLPSpanExporter(
+       headers={"Authorization": f"Bearer {os.getenv('OTEL_AUTH_TOKEN', '')}"},
+   )
+   ```
+
+   **SurrealDB**: SurrealDB's built-in OTel exporter does not support
+   custom headers. You would need to run a local collector sidecar
+   without auth that forwards to the authenticated central collector.
+
+4. Add `OTEL_AUTH_TOKEN` to each service's `.env.example` and
+   `docker-compose.yml` environment section.
+
+See the [OTel Collector bearertokenauth docs](https://github.com/open-telemetry/opentelemetry-collector-contrib/tree/main/extension/bearertokenauthextension)
+for full configuration reference.
