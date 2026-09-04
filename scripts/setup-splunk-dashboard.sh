@@ -140,10 +140,20 @@ echo ""
 echo "--- Step 2: Clean up old dashboards ---"
 
 DASH_LIST=$(api_call GET "/v2/dashboard?limit=100&groupId=$GROUP_ID")
+
+# Delete old single "Demo Dashboard" if it exists
 OLD_DASH_ID=$(echo "$DASH_LIST" | jq -r '.results[]? | select(.name == "Demo Dashboard") | .id' | head -1)
 if [ -n "$OLD_DASH_ID" ]; then
   echo "Deleting old 'Demo Dashboard': $OLD_DASH_ID"
   api_call DELETE "/v2/dashboard/$OLD_DASH_ID" >/dev/null 2>&1 || echo "  (could not delete -- may be the default dashboard)"
+fi
+
+# Delete the empty auto-created default dashboard (same name as the group)
+DEFAULT_DASH_ID=$(echo "$DASH_LIST" | jq -r --arg name "$GROUP_NAME" \
+  '.results[]? | select(.name == $name) | .id' | head -1)
+if [ -n "$DEFAULT_DASH_ID" ]; then
+  echo "Deleting empty default dashboard: $DEFAULT_DASH_ID"
+  api_call DELETE "/v2/dashboard/$DEFAULT_DASH_ID" >/dev/null 2>&1 || echo "  (could not delete -- Splunk may protect the default)"
 fi
 
 # ---------------------------------------------------------------------------
@@ -155,7 +165,6 @@ chart_width() {
   local chart_type="$1"
   case "$chart_type" in
     SingleValue) echo 3 ;;
-    List)        echo 4 ;;
     *)           echo 6 ;;
   esac
 }

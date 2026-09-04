@@ -108,7 +108,6 @@ function Get-ChartWidth {
     param([string]$ChartType)
     switch ($ChartType) {
         'SingleValue' { return 3 }
-        'List'        { return 4 }
         default       { return 6 }
     }
 }
@@ -161,6 +160,7 @@ Write-Host '--- Step 2: Clean up old dashboards ---'
 
 $dashList = Invoke-SplunkApi -Method GET -Endpoint "/v2/dashboard?limit=100&groupId=$GroupId"
 if ($dashList.results) {
+    # Delete old single "Demo Dashboard" if it exists
     $oldDash = $dashList.results | Where-Object { $_.name -eq 'Demo Dashboard' } | Select-Object -First 1
     if ($oldDash) {
         Write-Host "Deleting old 'Demo Dashboard': $($oldDash.id)"
@@ -173,6 +173,18 @@ if ($dashList.results) {
     }
     else {
         Write-Host "No old 'Demo Dashboard' found."
+    }
+
+    # Delete the empty auto-created default dashboard (same name as the group)
+    $defaultDash = $dashList.results | Where-Object { $_.name -eq $GroupName } | Select-Object -First 1
+    if ($defaultDash) {
+        Write-Host "Deleting empty default dashboard: $($defaultDash.id)"
+        try {
+            Invoke-SplunkApi -Method DELETE -Endpoint "/v2/dashboard/$($defaultDash.id)" | Out-Null
+        }
+        catch {
+            Write-Host "  (could not delete -- Splunk may protect the default)"
+        }
     }
 }
 
