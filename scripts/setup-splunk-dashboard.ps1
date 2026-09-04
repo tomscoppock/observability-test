@@ -16,7 +16,7 @@ $ErrorActionPreference = 'Stop'
 
 $ScriptDir = Split-Path -Parent $MyInvocation.MyCommand.Path
 $ProjectRoot = Split-Path -Parent $ScriptDir
-$DashboardJson = Join-Path $ProjectRoot 'splunk' 'dashboard.json'
+$DashboardJson = Join-Path (Join-Path $ProjectRoot 'splunk') 'dashboard.json'
 
 # ---------------------------------------------------------------------------
 # Load .env if present (does not override already-set env vars)
