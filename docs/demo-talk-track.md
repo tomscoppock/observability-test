@@ -13,21 +13,28 @@ Each section includes:
 
 ## Pre-demo preparation
 
-> **Before presenting**, generate some telemetry data so the service map
-> and dashboard charts have data to show:
+> **Before presenting**, generate telemetry data so the service map and
+> dashboard charts have data to show. The easiest way is the automated
+> simulation script:
 >
 > 1. Start the stack: `docker compose up -d`
-> 2. Upload at least one document (drag a file into the chat area or use
->    the Admin tab's import feature).
-> 3. Send 3-5 chat messages to generate traces, token metrics, and DB
->    spans.
-> 4. Optionally scrape a URL to generate MCP cross-service traces.
-> 5. Wait ~2 minutes for metrics to flush through the OTel Collector to
->    Splunk.
-> 6. In Splunk, set the time picker to **Last 15 minutes** (or a window
+> 2. Run the traffic simulator (~5 minutes):
+>    - **Linux/macOS:** `./scripts/simulate-demo-traffic.sh`
+>    - **Windows:** `.\scripts\simulate-demo-traffic.ps1`
+> 3. The script uploads sample documents, sends varied chat messages
+>    across 3 simulated user sessions, scrapes a URL (if MCP is
+>    configured), and generates a few deliberate errors so the service
+>    map shows health colours instead of grey.
+> 4. Wait ~2 minutes after the script finishes for metrics to flush
+>    through the OTel Collector to Splunk.
+> 5. In Splunk, set the time picker to **Last 15 minutes** (or a window
 >    that covers your recent activity). The service map and charts only
 >    show data within the selected time range -- if the window is too
 >    narrow or too old, nodes will appear grey or missing.
+>
+> **Manual alternative:** Upload documents via the chat UI, send 3-5
+> chat messages, and optionally scrape a URL. The simulation script
+> simply automates this with realistic timing and multiple sessions.
 
 ---
 

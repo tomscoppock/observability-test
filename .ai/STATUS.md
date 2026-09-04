@@ -8,6 +8,7 @@ Last updated: 2026-09-04
 |---|---|---|---|
 | @tom | 027 -- Demo talk track | 025 | 2026-09-04 |
 | @tom | 028 -- Dashboard automation | 025 | 2026-09-04 |
+| @tom | 031 -- Demo traffic simulation script | 025 | 2026-09-04 |
 
 ## Recently completed
 
@@ -58,7 +59,7 @@ Last updated: 2026-09-04
 
 ## Numbering
 
-Next free backlog/epic/task number: **031**
+Next free backlog/epic/task number: **032**
 
 <!-- Increment every time a numbered item is created in backlog/,
      in-progress/, epics/, or done/. Numbers are never reused. -->
