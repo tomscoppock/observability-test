@@ -1,6 +1,6 @@
 # Project Status
 
-Last updated: 2026-09-04
+Last updated: 2026-09-06
 
 ## Active work (per person)
 
@@ -10,6 +10,7 @@ Last updated: 2026-09-04
 | @tom | 028 -- Dashboard automation | 025 | 2026-09-04 |
 | @tom | 031 -- Demo traffic simulation script | 025 | 2026-09-04 |
 | @tom | 032 -- Dashboard 4-tab split | 025 | 2026-09-04 |
+| @tom | 033 -- Spanmetrics connector for custom span charts | 025 | 2026-09-06 |
 
 ## Recently completed
 
@@ -61,7 +62,7 @@ Last updated: 2026-09-04
 
 ## Numbering
 
-Next free backlog/epic/task number: **033**
+Next free backlog/epic/task number: **034**
 
 <!-- Increment every time a numbered item is created in backlog/,
      in-progress/, epics/, or done/. Numbers are never reused. -->

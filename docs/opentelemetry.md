@@ -55,14 +55,59 @@ project root. It is mounted into the container at
 ### Current config
 
 The collector uses three separate exporters for Splunk, one per signal
-type, plus the debug exporter for local troubleshooting:
+type, plus the debug exporter for local troubleshooting. The
+**spanmetrics connector** bridges the traces and metrics pipelines,
+generating duration and call-count metrics from all spans.
 
 | Signal | Exporter | Splunk destination |
 |---|---|---|
 | **Traces** | `otlp_http/splunk` | Splunk APM (`/v2/trace/otlp`) |
+| **Traces** | `spanmetrics` (connector) | Metrics pipeline (generates `duration` + `calls`) |
 | **Metrics** | `signalfx` | Splunk Infrastructure Monitoring |
 | **Logs** | `otlp_http/splunk_logs` | Splunk Log Observer (`/v2/log/otlp`) |
 | **All** | `debug` | Collector stdout (always on) |
+
+### Spanmetrics connector
+
+The `spanmetrics` connector generates RED (Request/Error/Duration)
+metrics from trace spans. Unlike Splunk's built-in MMS (which only
+covers `SERVER`/`CONSUMER` spans), the connector processes ALL spans
+including `INTERNAL` and `CLIENT` -- making custom span latency
+available in dashboard charts.
+
+**Metrics generated:**
+
+| Metric | Type | Description |
+|---|---|---|
+| `duration` | Histogram | Span duration in milliseconds |
+| `calls` | Counter | Number of span invocations |
+
+**Dimensions (available as SignalFlow filters):**
+
+| Dimension | Source | Example |
+|---|---|---|
+| `service.name` | Resource attribute | `rag-api` |
+| `span.name` | Span name | `chat.pipeline`, `db.vectorSearch` |
+| `span.kind` | Span kind | `SPAN_KIND_INTERNAL`, `SPAN_KIND_CLIENT` |
+| `status.code` | Span status | `STATUS_CODE_OK`, `STATUS_CODE_ERROR` |
+| `deployment.environment` | Resource attribute | `dev` |
+| `gen_ai.operation.name` | Span attribute (custom dimension) | `chat`, `embeddings` |
+
+**SignalFlow examples:**
+
+```signalflow
+# Chat pipeline latency (P50)
+A = histogram('duration', filter=filter('service.name', 'rag-api') and filter('span.name', 'chat.pipeline')).percentile(pct=50).publish(label='P50')
+
+# LLM call latency by gen_ai operation
+A = histogram('duration', filter=filter('service.name', 'rag-api') and filter('gen_ai.operation.name', 'chat')).percentile(pct=50).publish(label='LLM P50')
+
+# DB operation call counts
+A = data('calls', filter=filter('service.name', 'rag-api') and filter('span.name', 'db.vectorSearch')).sum().publish(label='Vector Searches')
+```
+
+The signalfx exporter must have `send_otlp_histograms: true` to
+forward the `duration` histogram to Splunk. This is already configured.
 
 ### Required environment variables
 

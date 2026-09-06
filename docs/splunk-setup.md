@@ -49,7 +49,7 @@ Observability Cloud for the observability-test RAG Agent stack.
 
 ### Dashboard Automation
 
-22. [Custom MetricSet setup (TMS prerequisite)](#22-custom-metricset-setup-tms-prerequisite)
+22. [Spanmetrics connector and Custom MetricSets](#22-spanmetrics-connector-and-custom-metricsets)
 23. [Automated dashboard setup](#23-automated-dashboard-setup)
 
 ### Reference
@@ -81,22 +81,28 @@ Node.js API (rag-api)               SurrealDB 3.2+ (surrealdb)
                     |    Metrics --> signalfx           --> Splunk IM
                     |    Logs    --> otlp_http/splunk_logs --> Splunk Log Observer
                     |
+                    |  The spanmetrics connector generates metrics
+                    |  from ALL spans (including INTERNAL/CLIENT):
+                    |    duration  -- histogram of span durations (ms)
+                    |    calls     -- counter of span invocations
+                    |
                     v
             Splunk Observability Cloud
                     |
                     |  APM derives Monitoring MetricSets (MMS) from traces:
                     |    service.request  -- histogram containing count + duration
-                    |    spans            -- per-span histogram (requires TMS)
+                    |    spans            -- per-span histogram (SERVER/CONSUMER only)
                     |    traces           -- per-trace histogram
                     |
                     |  Infrastructure Monitoring receives direct metrics:
                     |    surrealdb.*      -- gauges, counters, histograms
+                    |    duration/calls   -- from spanmetrics connector
                     |
                     v
             Dashboards, Alerts, Service Map
 ```
 
-**Key concept -- Monitoring MetricSets (MMS) and Troubleshooting MetricSets (TMS):**
+**Key concept -- Monitoring MetricSets (MMS) and spanmetrics:**
 
 Splunk APM automatically creates histogram metrics from your trace data.
 The primary one is `service.request` (an MMS metric). Because it is a
@@ -113,12 +119,18 @@ different functions:
 | Min latency | `min()` | `histogram('service.request').min()` |
 | Max latency | `max()` | `histogram('service.request').max()` |
 
-The `spans` histogram is also available but requires **Troubleshooting
-MetricSets (TMS)** to be enabled for the service. TMS lets you filter
-`histogram('spans', ...)` queries by custom span attributes such as
-`gen_ai.operation.name`. Without TMS, only `service.request` queries
-return data. See [Section 22](#22-custom-metricset-setup-tms-prerequisite)
-for setup instructions.
+**Important:** MMS only covers spans with `span.kind = SERVER` or
+`CONSUMER` (i.e. HTTP endpoint spans). Custom spans like
+`chat.pipeline`, `db.vectorSearch`, and `chat <model>` have
+`span.kind = INTERNAL` or `CLIENT` and are invisible to MMS.
+
+To get latency and call-count metrics for ALL spans, this project uses
+the **spanmetrics connector** in the OTel Collector. It generates two
+metrics -- `duration` (histogram) and `calls` (counter) -- with
+dimensions `service.name`, `span.name`, `gen_ai.operation.name`, etc.
+These are queryable in SignalFlow with `histogram('duration', ...)` and
+`data('calls', ...)`. See [opentelemetry.md](opentelemetry.md#spanmetrics-connector)
+for full details.
 
 **Dimension names:** APM dimensions use the `sf_` prefix:
 
@@ -641,8 +653,9 @@ D = data('surrealdb.network.sent', filter=filter('service.name', 'surrealdb')).r
 > **Note:** Embedding span names follow the gen_ai semantic convention
 > `{operation} {model}` (e.g. `embeddings text-embedding-3-small`).
 > The automated dashboard uses `gen_ai.operation.name` = `embeddings`
-> to filter model-independently. The `histogram('spans', ...)` queries
-> below require [TMS to be enabled](#22-custom-metricset-setup-tms-prerequisite).
+> to filter model-independently. The queries below use the
+> `duration` histogram from the spanmetrics connector (see
+> [opentelemetry.md](opentelemetry.md#spanmetrics-connector)).
 
 ### Finding upload traces
 
@@ -653,16 +666,15 @@ D = data('surrealdb.network.sent', filter=filter('service.name', 'surrealdb')).r
 ### Builder tab (upload latency by step)
 
 1. Click **Create (+) > Chart**.
-2. In **Data selection** for variable **A**, select `spans`.
-3. In **Analytics**, select **Median**.
+2. In **Data selection** for variable **A**, select `duration`.
+3. In **Analytics**, select **Percentile (50)**.
 4. In **Filter**, add:
-   - `sf_service` = `rag-api`
-   - `sf_operation` = `upload.pipeline`
+   - `service.name` = `rag-api`
+   - `span.name` = `upload.pipeline`
 5. Click **Add plot** for variable **B**: same metric, filter by
-   `gen_ai.operation.name` = `embeddings` (or `sf_operation` =
-   `embeddings text-embedding-3-small` for the exact span).
+   `gen_ai.operation.name` = `embeddings`.
 6. Click **Add plot** for variable **C**: same metric, filter
-   `sf_operation` = `db.insertChunks`.
+   `span.name` = `db.insertChunks`.
 7. In **Configuration**:
    - **Chart title:** `RAG Upload Pipeline Latency`
    - **Visualization type:** `Line`
@@ -671,10 +683,10 @@ D = data('surrealdb.network.sent', filter=filter('service.name', 'surrealdb')).r
 ### SignalFlow tab
 
 ```signalflow
-filter_ = filter('sf_service', 'rag-api') and filter('sf_environment', 'dev')
-A = histogram('spans', filter=filter_ and filter('sf_operation', 'upload.pipeline')).median().publish(label='Total Upload')
-B = histogram('spans', filter=filter_ and filter('gen_ai.operation.name', 'embeddings')).median().publish(label='Embedding')
-C = histogram('spans', filter=filter_ and filter('sf_operation', 'db.insertChunks')).median().publish(label='DB Insert')
+filter_ = filter('service.name', 'rag-api') and filter('deployment.environment', 'dev')
+A = histogram('duration', filter=filter_ and filter('span.name', 'upload.pipeline')).percentile(pct=50).publish(label='Total Upload')
+B = histogram('duration', filter=filter_ and filter('gen_ai.operation.name', 'embeddings')).percentile(pct=50).publish(label='Embedding')
+C = histogram('duration', filter=filter_ and filter('span.name', 'db.insertChunks')).percentile(pct=50).publish(label='DB Insert')
 ```
 
 ---
@@ -692,17 +704,17 @@ C = histogram('spans', filter=filter_ and filter('sf_operation', 'db.insertChunk
 > **Note:** LLM and embedding span names follow the gen_ai semantic
 > convention `{operation} {model}` (e.g. `chat gpt-4o-mini`,
 > `embeddings text-embedding-3-small`). The automated dashboard uses
-> `gen_ai.operation.name` to filter model-independently. The
-> `histogram('spans', ...)` queries below require
-> [TMS to be enabled](#22-custom-metricset-setup-tms-prerequisite).
+> `gen_ai.operation.name` to filter model-independently. The queries
+> below use the `duration` histogram from the spanmetrics connector
+> (see [opentelemetry.md](opentelemetry.md#spanmetrics-connector)).
 
 ### Builder tab (chat latency by step)
 
 1. Click **Create (+) > Chart**.
-2. Variable **A**: `spans`, Analytics = **Median**, Filter =
-   `sf_service` = `rag-api`, `sf_operation` = `chat.pipeline`.
+2. Variable **A**: `duration`, Analytics = **Percentile (50)**, Filter =
+   `service.name` = `rag-api`, `span.name` = `chat.pipeline`.
 3. Variable **B**: same, filter `gen_ai.operation.name` = `embeddings`.
-4. Variable **C**: same, `sf_operation` = `db.vectorSearch`.
+4. Variable **C**: same, `span.name` = `db.vectorSearch`.
 5. Variable **D**: same, filter `gen_ai.operation.name` = `chat`.
 6. In **Configuration**:
    - **Chart title:** `RAG Chat Pipeline Latency`
@@ -712,11 +724,11 @@ C = histogram('spans', filter=filter_ and filter('sf_operation', 'db.insertChunk
 ### SignalFlow tab
 
 ```signalflow
-filter_ = filter('sf_service', 'rag-api') and filter('sf_environment', 'dev')
-A = histogram('spans', filter=filter_ and filter('sf_operation', 'chat.pipeline')).median().publish(label='Total Chat')
-B = histogram('spans', filter=filter_ and filter('gen_ai.operation.name', 'embeddings')).median().publish(label='Query Embedding')
-C = histogram('spans', filter=filter_ and filter('sf_operation', 'db.vectorSearch')).median().publish(label='Vector Search')
-D = histogram('spans', filter=filter_ and filter('gen_ai.operation.name', 'chat')).median().publish(label='LLM Completion')
+filter_ = filter('service.name', 'rag-api') and filter('deployment.environment', 'dev')
+A = histogram('duration', filter=filter_ and filter('span.name', 'chat.pipeline')).percentile(pct=50).publish(label='Total Chat')
+B = histogram('duration', filter=filter_ and filter('gen_ai.operation.name', 'embeddings')).percentile(pct=50).publish(label='Query Embedding')
+C = histogram('duration', filter=filter_ and filter('span.name', 'db.vectorSearch')).percentile(pct=50).publish(label='Vector Search')
+D = histogram('duration', filter=filter_ and filter('gen_ai.operation.name', 'chat')).percentile(pct=50).publish(label='LLM Completion')
 ```
 
 ---
@@ -750,20 +762,18 @@ D = histogram('spans', filter=filter_ and filter('gen_ai.operation.name', 'chat'
    - `gen_ai.request.model`
    - `gen_ai.response.finish_reason`
 
-### Custom chart (requires Troubleshooting MetricSets)
+### Custom chart (using spanmetrics duration)
 
-To chart token usage over time or filter `histogram('spans', ...)` by
-custom span attributes, you need a Custom MetricSet (TMS) configured.
-See [Section 22](#22-custom-metricset-setup-tms-prerequisite) for the
-full setup procedure.
-
-Once the `gen_ai.operation.name` Custom MetricSet is active, you can
-create charts using:
+With the spanmetrics connector enabled, you can chart LLM latency
+using the `duration` histogram metric:
 
 ```signalflow
-filter_ = filter('sf_service', 'rag-api') and filter('sf_environment', 'dev')
-A = histogram('spans', filter=filter_ and filter('gen_ai.operation.name', 'chat')).median().publish(label='LLM Latency')
+filter_ = filter('service.name', 'rag-api') and filter('deployment.environment', 'dev')
+A = histogram('duration', filter=filter_ and filter('gen_ai.operation.name', 'chat')).percentile(pct=50).publish(label='LLM Latency')
 ```
+
+No manual Splunk UI configuration is needed -- the spanmetrics
+connector generates these metrics automatically from trace spans.
 
 ---
 
@@ -999,80 +1009,69 @@ request rate. Check **Alerts > AutoDetect** to review and enable them.
 ### SignalFlow tab
 
 ```signalflow
-filter_api = filter('sf_service', 'rag-api') and filter('sf_environment', 'dev')
-filter_mcp = filter('sf_service', 'playwright-mcp') and filter('sf_environment', 'dev')
-A = histogram('spans', filter=filter_api and filter('sf_operation', 'mcp.scrape')).median().publish(label='Total Scrape')
-B = histogram('spans', filter=filter_mcp and filter('sf_operation', 'mcp.tool.browser_navigate')).median().publish(label='Navigate')
-C = histogram('spans', filter=filter_mcp and filter('sf_operation', 'mcp.tool.browser_get_text')).median().publish(label='Get Text')
+filter_api = filter('service.name', 'rag-api') and filter('deployment.environment', 'dev')
+filter_mcp = filter('service.name', 'playwright-mcp') and filter('deployment.environment', 'dev')
+A = histogram('duration', filter=filter_api and filter('span.name', 'mcp.scrape')).percentile(pct=50).publish(label='Total Scrape')
+B = histogram('duration', filter=filter_mcp and filter('span.name', 'mcp.tool.browser_navigate')).percentile(pct=50).publish(label='Navigate')
+C = histogram('duration', filter=filter_mcp and filter('span.name', 'mcp.tool.browser_get_text')).percentile(pct=50).publish(label='Get Text')
 ```
 
 ---
 
-## 22. Custom MetricSet setup (TMS prerequisite)
+## 22. Spanmetrics connector and Custom MetricSets
 
-> **What:** Configure a Custom MetricSet so that `histogram('spans', ...)`
-> queries can filter by the `gen_ai.operation.name` span attribute.
-> **Why:** The **RAG Pipeline** and **LLM and AI** dashboard tabs use
-> `histogram('spans', ...)` with `gen_ai.operation.name` filters. Without
-> a Custom MetricSet, these charts show no data -- only `service.request`
-> queries (used on the Service Overview tab) work out of the box.
-> **How:** Splunk indexes span tags as Troubleshooting MetricSets (TMS)
-> when you create a Custom MetricSet rule. This is a one-time manual step
-> in the Splunk UI -- there is no REST API for it.
+> **What:** The spanmetrics connector in the OTel Collector generates
+> `duration` and `calls` metrics from ALL trace spans, making custom
+> span latency available in dashboard charts without manual Splunk
+> configuration.
+> **Why:** Splunk's built-in MMS (`histogram('service.request', ...)`)
+> only covers spans with `span.kind = SERVER` or `CONSUMER`. Custom
+> spans like `chat.pipeline`, `db.vectorSearch`, and `chat <model>`
+> have `span.kind = INTERNAL` or `CLIENT` and are invisible to MMS.
+> **How:** The spanmetrics connector is configured in
+> `otel-collector-config.yaml` and runs automatically. No manual
+> Splunk UI steps are needed for the dashboard to work.
 
-### When is this needed?
+### How it works
 
-| Dashboard tab | Metric type | TMS required? |
+| Metric source | Covers | Manual setup? |
 |---|---|---|
-| Service Overview | `histogram('service.request', ...)` (MMS) | No |
-| RAG Pipeline | `histogram('spans', ...)` with `gen_ai.operation.name` | **Yes** |
-| LLM and AI | `histogram('spans', ...)` with `gen_ai.operation.name` | **Yes** |
-| Infrastructure | `data('surrealdb.*')`, `data('container.*')` | No |
+| `histogram('service.request', ...)` (MMS) | SERVER/CONSUMER spans only | No (automatic) |
+| `histogram('duration', ...)` (spanmetrics) | ALL spans (INTERNAL, CLIENT, SERVER) | No (automatic) |
+| `data('calls', ...)` (spanmetrics) | ALL spans | No (automatic) |
 
-### Step-by-step setup
+The spanmetrics connector is wired as an exporter in the traces
+pipeline and a receiver in the metrics pipeline:
 
-1. Sign in to [Splunk Observability Cloud](https://app.signalfx.com).
-2. Click **Settings** (gear icon, bottom-left).
-3. Under **Product Settings**, click **APM & RUM MetricSets**.
-4. Make sure the **APM** sub-tab is selected (not RUM).
-5. In the **Custom MetricSets** section, click **+ Add Custom MetricSet**.
-6. In the **Add Custom MetricSet** dialog:
-   - **Tag:** Select `gen_ai.operation.name` from the dropdown.
-   - **Scope:** Select **Service**.
-   - **Services in scope:** Select `rag-api` (or **All Services** if you
-     want it available for all services).
-   - Leave **Create Monitoring MetricSet (MMS)** unchecked unless you
-     also want 13-month retention.
-7. Click **Start Analysis**. Splunk will analyse the cardinality of the
-   tag (typically very low for `gen_ai.operation.name` -- just `chat`
-   and `embeddings`).
-8. Once analysis completes, click **Create** to activate the MetricSet.
+```
+Traces pipeline --> spanmetrics connector --> Metrics pipeline --> signalfx --> Splunk
+```
 
-### Verifying the MetricSet is active
+The signalfx exporter has `send_otlp_histograms: true` to forward the
+`duration` histogram metric to Splunk.
 
-After creation, the **Custom MetricSets** table on the APM & RUM
-MetricSets page should show:
+### Dashboard metric sources
 
-| Name | Scope | MMS (MMS ID) | Status |
-|---|---|---|---|
-| `gen_ai.operation.name` | `rag-api` | MMS not configured | Active |
+| Dashboard tab | Metric | Source |
+|---|---|---|
+| Service Overview | `histogram('service.request', ...)` | Splunk MMS (automatic) |
+| RAG Pipeline | `histogram('duration', ...)`, `data('calls', ...)` | Spanmetrics connector |
+| LLM and AI | `histogram('duration', ...)`, `data('gen_ai.client.token.usage', ...)` | Spanmetrics + OTel SDK |
+| Infrastructure | `data('container.*')`, `data('surrealdb.*')` | Docker stats + SurrealDB |
 
-The status must show a green dot and **Active** before the RAG Pipeline
-and LLM dashboard charts will populate. Activation typically takes 1-2
-minutes.
+### Optional: Custom MetricSets for Tag Spotlight
 
-### Optional: additional Custom MetricSets
+Custom MetricSets (TMS) are **not required** for the dashboard to work.
+However, if you want to use Splunk's **Tag Spotlight** feature to
+analyse span tags interactively, you can optionally create a Custom
+MetricSet:
 
-For deeper analysis, you can also index these span tags:
+1. Navigate to **Settings > APM & RUM MetricSets**.
+2. Click **+ Add Custom MetricSet**.
+3. Select tag `gen_ai.operation.name`, scope = `rag-api`.
+4. Click **Start Analysis**, then **Create**.
 
-| Tag | Purpose |
-|---|---|
-| `gen_ai.request.model` | Break down latency/tokens by model |
-| `gen_ai.usage.prompt_tokens` | Chart token counts directly |
-| `gen_ai.usage.completion_tokens` | Chart completion token counts |
-| `gen_ai.response.finish_reason` | Detect truncated responses |
-
-Follow the same steps above for each additional tag.
+This is purely optional -- the dashboard charts work without it.
 
 ---
 
@@ -1082,17 +1081,16 @@ Instead of creating charts manually, you can use the provided automation
 script to create the entire dashboard group via the Splunk Observability
 Cloud REST API.
 
-> **Important:** Before running the script, complete the
-> [Custom MetricSet setup](#22-custom-metricset-setup-tms-prerequisite)
-> above. The script creates all 4 dashboard tabs, but the RAG Pipeline
-> and LLM and AI tabs will show empty charts until TMS is active.
+> **Important:** The RAG Pipeline and LLM tabs require the spanmetrics
+> connector to be running in the OTel Collector. This is already
+> configured in `otel-collector-config.yaml` -- just ensure the
+> collector is running (`docker compose up -d`).
 
 ### Prerequisites
 
 - `SPLUNK_ACCESS_TOKEN` and `SPLUNK_REALM` set in your `.env` file
 - `curl` and `jq` (Linux/macOS) or PowerShell 5.1+ (Windows)
-- Custom MetricSet for `gen_ai.operation.name` active (see
-  [Section 22](#22-custom-metricset-setup-tms-prerequisite))
+- OTel Collector running with spanmetrics connector (default config)
 
 ### Using the setup script
 
@@ -1154,9 +1152,9 @@ All requests require the `X-SF-Token` header with your access token.
 See the [Splunk Observability Cloud API reference](https://dev.splunk.com/observability/reference/)
 for full documentation.
 
-> **Note:** Custom MetricSet (TMS) configuration cannot be automated via
-> the REST API. It must be done manually through the Splunk UI as
-> described in [Section 22](#22-custom-metricset-setup-tms-prerequisite).
+> **Note:** All dashboard metrics are fully automated -- no manual
+> Splunk UI configuration is needed. The spanmetrics connector generates
+> `duration` and `calls` metrics from trace spans automatically.
 
 ---
 
@@ -1176,11 +1174,12 @@ for full documentation.
 | Find SurrealDB metrics | Metrics > search `surrealdb` |
 | SurrealDB infra metrics | `data('surrealdb.*')` in SignalFlow |
 | APM histogram metrics | `histogram('service.request')` in SignalFlow |
+| Spanmetrics duration | `histogram('duration')` in SignalFlow |
+| Spanmetrics calls | `data('calls')` in SignalFlow |
 | View MCP dependency | APM > Service map > look for `playwright-mcp` node |
 | MCP distributed traces | APM > Traces > filter `mcp.scrape` operation |
-| Configure Custom MetricSets | Settings > APM & RUM MetricSets |
 | Automate dashboard | Run `scripts/setup-splunk-dashboard.sh` |
 
 ---
 
-*Last updated: 2026-09-04*
+*Last updated: 2026-09-06*
