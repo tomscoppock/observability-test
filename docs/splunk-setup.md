@@ -126,11 +126,14 @@ different functions:
 
 To get latency and call-count metrics for ALL spans, this project uses
 the **spanmetrics connector** in the OTel Collector. It generates two
-metrics -- `duration` (histogram) and `calls` (counter) -- with
-dimensions `service.name`, `span.name`, `gen_ai.operation.name`, etc.
-These are queryable in SignalFlow with `histogram('duration', ...)` and
-`data('calls', ...)`. See [opentelemetry.md](opentelemetry.md#spanmetrics-connector)
-for full details.
+metrics -- `traces.span.metrics.duration` (histogram) and
+`traces.span.metrics.calls` (counter) -- with dimensions
+`service.name`, `span.name`, `gen_ai.operation.name`, etc. These are
+queryable in SignalFlow with
+`histogram('traces.span.metrics.duration', ...)` and
+`data('traces.span.metrics.calls', ...)`. See
+[opentelemetry.md](opentelemetry.md#spanmetrics-connector) for full
+details.
 
 **Dimension names:** APM dimensions use the `sf_` prefix:
 
@@ -684,9 +687,9 @@ D = data('surrealdb.network.sent', filter=filter('service.name', 'surrealdb')).r
 
 ```signalflow
 filter_ = filter('service.name', 'rag-api') and filter('deployment.environment', 'dev')
-A = histogram('duration', filter=filter_ and filter('span.name', 'upload.pipeline')).percentile(pct=50).publish(label='Total Upload')
-B = histogram('duration', filter=filter_ and filter('gen_ai.operation.name', 'embeddings')).percentile(pct=50).publish(label='Embedding')
-C = histogram('duration', filter=filter_ and filter('span.name', 'db.insertChunks')).percentile(pct=50).publish(label='DB Insert')
+A = histogram('traces.span.metrics.duration', filter=filter_ and filter('span.name', 'upload.pipeline')).percentile(pct=50).publish(label='Total Upload')
+B = histogram('traces.span.metrics.duration', filter=filter_ and filter('gen_ai.operation.name', 'embeddings')).percentile(pct=50).publish(label='Embedding')
+C = histogram('traces.span.metrics.duration', filter=filter_ and filter('span.name', 'db.insertChunks')).percentile(pct=50).publish(label='DB Insert')
 ```
 
 ---
@@ -725,10 +728,10 @@ C = histogram('duration', filter=filter_ and filter('span.name', 'db.insertChunk
 
 ```signalflow
 filter_ = filter('service.name', 'rag-api') and filter('deployment.environment', 'dev')
-A = histogram('duration', filter=filter_ and filter('span.name', 'chat.pipeline')).percentile(pct=50).publish(label='Total Chat')
-B = histogram('duration', filter=filter_ and filter('gen_ai.operation.name', 'embeddings')).percentile(pct=50).publish(label='Query Embedding')
-C = histogram('duration', filter=filter_ and filter('span.name', 'db.vectorSearch')).percentile(pct=50).publish(label='Vector Search')
-D = histogram('duration', filter=filter_ and filter('gen_ai.operation.name', 'chat')).percentile(pct=50).publish(label='LLM Completion')
+A = histogram('traces.span.metrics.duration', filter=filter_ and filter('span.name', 'chat.pipeline')).percentile(pct=50).publish(label='Total Chat')
+B = histogram('traces.span.metrics.duration', filter=filter_ and filter('gen_ai.operation.name', 'embeddings')).percentile(pct=50).publish(label='Query Embedding')
+C = histogram('traces.span.metrics.duration', filter=filter_ and filter('span.name', 'db.vectorSearch')).percentile(pct=50).publish(label='Vector Search')
+D = histogram('traces.span.metrics.duration', filter=filter_ and filter('gen_ai.operation.name', 'chat')).percentile(pct=50).publish(label='LLM Completion')
 ```
 
 ---
@@ -769,7 +772,7 @@ using the `duration` histogram metric:
 
 ```signalflow
 filter_ = filter('service.name', 'rag-api') and filter('deployment.environment', 'dev')
-A = histogram('duration', filter=filter_ and filter('gen_ai.operation.name', 'chat')).percentile(pct=50).publish(label='LLM Latency')
+A = histogram('traces.span.metrics.duration', filter=filter_ and filter('gen_ai.operation.name', 'chat')).percentile(pct=50).publish(label='LLM Latency')
 ```
 
 No manual Splunk UI configuration is needed -- the spanmetrics
@@ -1011,9 +1014,9 @@ request rate. Check **Alerts > AutoDetect** to review and enable them.
 ```signalflow
 filter_api = filter('service.name', 'rag-api') and filter('deployment.environment', 'dev')
 filter_mcp = filter('service.name', 'playwright-mcp') and filter('deployment.environment', 'dev')
-A = histogram('duration', filter=filter_api and filter('span.name', 'mcp.scrape')).percentile(pct=50).publish(label='Total Scrape')
-B = histogram('duration', filter=filter_mcp and filter('span.name', 'mcp.tool.browser_navigate')).percentile(pct=50).publish(label='Navigate')
-C = histogram('duration', filter=filter_mcp and filter('span.name', 'mcp.tool.browser_get_text')).percentile(pct=50).publish(label='Get Text')
+A = histogram('traces.span.metrics.duration', filter=filter_api and filter('span.name', 'mcp.scrape')).percentile(pct=50).publish(label='Total Scrape')
+B = histogram('traces.span.metrics.duration', filter=filter_mcp and filter('span.name', 'mcp.tool.browser_navigate')).percentile(pct=50).publish(label='Navigate')
+C = histogram('traces.span.metrics.duration', filter=filter_mcp and filter('span.name', 'mcp.tool.browser_get_text')).percentile(pct=50).publish(label='Get Text')
 ```
 
 ---
@@ -1037,8 +1040,8 @@ C = histogram('duration', filter=filter_mcp and filter('span.name', 'mcp.tool.br
 | Metric source | Covers | Manual setup? |
 |---|---|---|
 | `histogram('service.request', ...)` (MMS) | SERVER/CONSUMER spans only | No (automatic) |
-| `histogram('duration', ...)` (spanmetrics) | ALL spans (INTERNAL, CLIENT, SERVER) | No (automatic) |
-| `data('calls', ...)` (spanmetrics) | ALL spans | No (automatic) |
+| `histogram('traces.span.metrics.duration', ...)` (spanmetrics) | ALL spans (INTERNAL, CLIENT, SERVER) | No (automatic) |
+| `data('traces.span.metrics.calls', ...)` (spanmetrics) | ALL spans | No (automatic) |
 
 The spanmetrics connector is wired as an exporter in the traces
 pipeline and a receiver in the metrics pipeline:
@@ -1055,8 +1058,8 @@ The signalfx exporter has `send_otlp_histograms: true` to forward the
 | Dashboard tab | Metric | Source |
 |---|---|---|
 | Service Overview | `histogram('service.request', ...)` | Splunk MMS (automatic) |
-| RAG Pipeline | `histogram('duration', ...)`, `data('calls', ...)` | Spanmetrics connector |
-| LLM and AI | `histogram('duration', ...)`, `data('gen_ai.client.token.usage', ...)` | Spanmetrics + OTel SDK |
+| RAG Pipeline | `histogram('traces.span.metrics.duration', ...)`, `data('traces.span.metrics.calls', ...)` | Spanmetrics connector |
+| LLM and AI | `histogram('traces.span.metrics.duration', ...)`, `data('gen_ai.client.token.usage', ...)` | Spanmetrics + OTel SDK |
 | Infrastructure | `data('container.*')`, `data('surrealdb.*')` | Docker stats + SurrealDB |
 
 ### Optional: Custom MetricSets for Tag Spotlight
@@ -1174,8 +1177,8 @@ for full documentation.
 | Find SurrealDB metrics | Metrics > search `surrealdb` |
 | SurrealDB infra metrics | `data('surrealdb.*')` in SignalFlow |
 | APM histogram metrics | `histogram('service.request')` in SignalFlow |
-| Spanmetrics duration | `histogram('duration')` in SignalFlow |
-| Spanmetrics calls | `data('calls')` in SignalFlow |
+| Spanmetrics duration | `histogram('traces.span.metrics.duration')` in SignalFlow |
+| Spanmetrics calls | `data('traces.span.metrics.calls')` in SignalFlow |
 | View MCP dependency | APM > Service map > look for `playwright-mcp` node |
 | MCP distributed traces | APM > Traces > filter `mcp.scrape` operation |
 | Automate dashboard | Run `scripts/setup-splunk-dashboard.sh` |

@@ -79,8 +79,8 @@ available in dashboard charts.
 
 | Metric | Type | Description |
 |---|---|---|
-| `duration` | Histogram | Span duration in milliseconds |
-| `calls` | Counter | Number of span invocations |
+| `traces.span.metrics.duration` | Histogram | Span duration in milliseconds |
+| `traces.span.metrics.calls` | Counter | Number of span invocations |
 
 **Dimensions (available as SignalFlow filters):**
 
@@ -97,17 +97,18 @@ available in dashboard charts.
 
 ```signalflow
 # Chat pipeline latency (P50)
-A = histogram('duration', filter=filter('service.name', 'rag-api') and filter('span.name', 'chat.pipeline')).percentile(pct=50).publish(label='P50')
+A = histogram('traces.span.metrics.duration', filter=filter('service.name', 'rag-api') and filter('span.name', 'chat.pipeline')).percentile(pct=50).publish(label='P50')
 
 # LLM call latency by gen_ai operation
-A = histogram('duration', filter=filter('service.name', 'rag-api') and filter('gen_ai.operation.name', 'chat')).percentile(pct=50).publish(label='LLM P50')
+A = histogram('traces.span.metrics.duration', filter=filter('service.name', 'rag-api') and filter('gen_ai.operation.name', 'chat')).percentile(pct=50).publish(label='LLM P50')
 
 # DB operation call counts
-A = data('calls', filter=filter('service.name', 'rag-api') and filter('span.name', 'db.vectorSearch')).sum().publish(label='Vector Searches')
+A = data('traces.span.metrics.calls', filter=filter('service.name', 'rag-api') and filter('span.name', 'db.vectorSearch')).sum().publish(label='Vector Searches')
 ```
 
 The signalfx exporter must have `send_otlp_histograms: true` to
-forward the `duration` histogram to Splunk. This is already configured.
+forward the `traces.span.metrics.duration` histogram to Splunk. This is
+already configured. The default namespace prefix is `traces.span.metrics`.
 
 ### Required environment variables
 

@@ -66,37 +66,37 @@
           "name": "RAG Chat Pipeline Latency",
           "description": "Duration breakdown of the chat pipeline by step.",
           "chartType": "Line",
-          "programText": "filter_ = filter('service.name', 'rag-api') and filter('deployment.environment', 'dev')\nA = histogram('duration', filter=filter_ and filter('span.name', 'chat.pipeline', 'chat.pipeline.stream')).percentile(pct=50).publish(label='Total Chat')\nB = histogram('duration', filter=filter_ and filter('span.name', 'db.vectorSearch')).percentile(pct=50).publish(label='Vector Search')\nC = histogram('duration', filter=filter_ and filter('gen_ai.operation.name', 'chat')).percentile(pct=50).publish(label='LLM Completion')\nD = histogram('duration', filter=filter_ and filter('gen_ai.operation.name', 'embeddings')).percentile(pct=50).publish(label='Query Embedding')"
+          "programText": "filter_ = filter('service.name', 'rag-api') and filter('deployment.environment', 'dev')\nA = histogram('traces.span.metrics.duration', filter=filter_ and filter('span.name', 'chat.pipeline', 'chat.pipeline.stream')).percentile(pct=50).publish(label='Total Chat')\nB = histogram('traces.span.metrics.duration', filter=filter_ and filter('span.name', 'db.vectorSearch')).percentile(pct=50).publish(label='Vector Search')\nC = histogram('traces.span.metrics.duration', filter=filter_ and filter('gen_ai.operation.name', 'chat')).percentile(pct=50).publish(label='LLM Completion')\nD = histogram('traces.span.metrics.duration', filter=filter_ and filter('gen_ai.operation.name', 'embeddings')).percentile(pct=50).publish(label='Query Embedding')"
         },
         {
           "name": "RAG Upload Pipeline Latency",
           "description": "Duration breakdown of the upload pipeline by step.",
           "chartType": "Line",
-          "programText": "filter_ = filter('service.name', 'rag-api') and filter('deployment.environment', 'dev')\nA = histogram('duration', filter=filter_ and filter('span.name', 'upload.pipeline')).percentile(pct=50).publish(label='Total Upload')\nB = histogram('duration', filter=filter_ and filter('gen_ai.operation.name', 'embeddings')).percentile(pct=50).publish(label='Embedding')\nC = histogram('duration', filter=filter_ and filter('span.name', 'db.insertChunks')).percentile(pct=50).publish(label='DB Insert')"
+          "programText": "filter_ = filter('service.name', 'rag-api') and filter('deployment.environment', 'dev')\nA = histogram('traces.span.metrics.duration', filter=filter_ and filter('span.name', 'upload.pipeline')).percentile(pct=50).publish(label='Total Upload')\nB = histogram('traces.span.metrics.duration', filter=filter_ and filter('gen_ai.operation.name', 'embeddings')).percentile(pct=50).publish(label='Embedding')\nC = histogram('traces.span.metrics.duration', filter=filter_ and filter('span.name', 'db.insertChunks')).percentile(pct=50).publish(label='DB Insert')"
         },
         {
           "name": "MCP Scrape Latency",
           "description": "End-to-end MCP scrape latency broken down by tool call.",
           "chartType": "Line",
-          "programText": "filter_api = filter('service.name', 'rag-api') and filter('deployment.environment', 'dev')\nfilter_mcp = filter('service.name', 'playwright-mcp') and filter('deployment.environment', 'dev')\nA = histogram('duration', filter=filter_api and filter('span.name', 'mcp.scrape')).percentile(pct=50).publish(label='Total Scrape')\nB = histogram('duration', filter=filter_mcp and filter('span.name', 'mcp.tool.browser_navigate')).percentile(pct=50).publish(label='Navigate')\nC = histogram('duration', filter=filter_mcp and filter('span.name', 'mcp.tool.browser_get_text')).percentile(pct=50).publish(label='Get Text')"
+          "programText": "filter_api = filter('service.name', 'rag-api') and filter('deployment.environment', 'dev')\nfilter_mcp = filter('service.name', 'playwright-mcp') and filter('deployment.environment', 'dev')\nA = histogram('traces.span.metrics.duration', filter=filter_api and filter('span.name', 'mcp.scrape')).percentile(pct=50).publish(label='Total Scrape')\nB = histogram('traces.span.metrics.duration', filter=filter_mcp and filter('span.name', 'mcp.tool.browser_navigate')).percentile(pct=50).publish(label='Navigate')\nC = histogram('traces.span.metrics.duration', filter=filter_mcp and filter('span.name', 'mcp.tool.browser_get_text')).percentile(pct=50).publish(label='Get Text')"
         },
         {
           "name": "Embedding Latency (P50/P90)",
           "description": "Embedding API call latency percentiles.",
           "chartType": "Line",
-          "programText": "filter_ = filter('service.name', 'rag-api') and filter('deployment.environment', 'dev')\nA = histogram('duration', filter=filter_ and filter('gen_ai.operation.name', 'embeddings')).percentile(pct=50).publish(label='P50')\nB = histogram('duration', filter=filter_ and filter('gen_ai.operation.name', 'embeddings')).percentile(pct=90).publish(label='P90')"
+          "programText": "filter_ = filter('service.name', 'rag-api') and filter('deployment.environment', 'dev')\nA = histogram('traces.span.metrics.duration', filter=filter_ and filter('gen_ai.operation.name', 'embeddings')).percentile(pct=50).publish(label='P50')\nB = histogram('traces.span.metrics.duration', filter=filter_ and filter('gen_ai.operation.name', 'embeddings')).percentile(pct=90).publish(label='P90')"
         },
         {
           "name": "DB Operation Breakdown",
           "description": "Request count by database operation type.",
           "chartType": "List",
-          "programText": "A = data('calls', filter=filter('service.name', 'rag-api') and filter('deployment.environment', 'dev') and filter('span.name', 'db.vectorSearch', 'db.insertDocument', 'db.insertChunks', 'db.connect', 'db.getDocumentById', 'db.listDocuments', 'db.getStats', 'db.deleteDocument', 'db.deleteAllData', 'db.exportAll', 'db.importAll', 'db.applySchema', 'db.hasDocuments')).sum(by=['span.name']).publish(label='DB Operations')"
+          "programText": "A = data('traces.span.metrics.calls', filter=filter('service.name', 'rag-api') and filter('deployment.environment', 'dev') and filter('span.name', 'db.vectorSearch', 'db.insertDocument', 'db.insertChunks', 'db.connect', 'db.getDocumentById', 'db.listDocuments', 'db.getStats', 'db.deleteDocument', 'db.deleteAllData', 'db.exportAll', 'db.importAll', 'db.applySchema', 'db.hasDocuments')).sum(by=['span.name']).publish(label='DB Operations')"
         },
         {
           "name": "Vector Search Latency (P50/P90)",
           "description": "Vector search latency percentiles.",
           "chartType": "Line",
-          "programText": "filter_ = filter('service.name', 'rag-api') and filter('deployment.environment', 'dev')\nA = histogram('duration', filter=filter_ and filter('span.name', 'db.vectorSearch')).percentile(pct=50).publish(label='P50')\nB = histogram('duration', filter=filter_ and filter('span.name', 'db.vectorSearch')).percentile(pct=90).publish(label='P90')"
+          "programText": "filter_ = filter('service.name', 'rag-api') and filter('deployment.environment', 'dev')\nA = histogram('traces.span.metrics.duration', filter=filter_ and filter('span.name', 'db.vectorSearch')).percentile(pct=50).publish(label='P50')\nB = histogram('traces.span.metrics.duration', filter=filter_ and filter('span.name', 'db.vectorSearch')).percentile(pct=90).publish(label='P90')"
         },
         {
           "name": "Active Sessions",
@@ -132,13 +132,13 @@
           "name": "LLM Call Latency (P50/P90/P99)",
           "description": "LLM completion call latency percentiles.",
           "chartType": "Line",
-          "programText": "filter_ = filter('service.name', 'rag-api') and filter('deployment.environment', 'dev')\nA = histogram('duration', filter=filter_ and filter('gen_ai.operation.name', 'chat')).percentile(pct=50).publish(label='P50')\nB = histogram('duration', filter=filter_ and filter('gen_ai.operation.name', 'chat')).percentile(pct=90).publish(label='P90')\nC = histogram('duration', filter=filter_ and filter('gen_ai.operation.name', 'chat')).percentile(pct=99).publish(label='P99')"
+          "programText": "filter_ = filter('service.name', 'rag-api') and filter('deployment.environment', 'dev')\nA = histogram('traces.span.metrics.duration', filter=filter_ and filter('gen_ai.operation.name', 'chat')).percentile(pct=50).publish(label='P50')\nB = histogram('traces.span.metrics.duration', filter=filter_ and filter('gen_ai.operation.name', 'chat')).percentile(pct=90).publish(label='P90')\nC = histogram('traces.span.metrics.duration', filter=filter_ and filter('gen_ai.operation.name', 'chat')).percentile(pct=99).publish(label='P99')"
         },
         {
           "name": "Embedding API Latency",
           "description": "Embedding API call latency (median).",
           "chartType": "Line",
-          "programText": "filter_ = filter('service.name', 'rag-api') and filter('deployment.environment', 'dev')\nA = histogram('duration', filter=filter_ and filter('gen_ai.operation.name', 'embeddings')).percentile(pct=50).publish(label='P50')"
+          "programText": "filter_ = filter('service.name', 'rag-api') and filter('deployment.environment', 'dev')\nA = histogram('traces.span.metrics.duration', filter=filter_ and filter('gen_ai.operation.name', 'embeddings')).percentile(pct=50).publish(label='P50')"
         }
       ]
     },
