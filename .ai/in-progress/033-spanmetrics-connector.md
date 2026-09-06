@@ -195,7 +195,7 @@ gauge metrics -- verify during implementation.
 - [x] Update `docs/opentelemetry.md` with spanmetrics connector docs
 - [x] Update `docs/demo-talk-track.md` if needed (no TMS references found -- no changes needed)
 - [x] Run test suite (63 tests) -- all 63 pass, 0 fail
-- [ ] Commit and push
+- [x] Commit and push (a3a0dd4)
 
 ## Review notes
 
