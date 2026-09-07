@@ -226,20 +226,25 @@ Both modules set the following attributes on every span:
 | `gen_ai.usage.input_tokens` | int | `150` | Prompt / input tokens |
 | `gen_ai.usage.output_tokens` | int | `42` | Chat only -- completion tokens |
 | `gen_ai.usage.total_tokens` | int | `192` | Embeddings only (when available) |
+| `gen_ai.response.length` | int | `847` | Chat only -- character count of response |
 | `server.address` | string | `api.openai.com` | Target host |
 | `server.port` | int | `443` | Target port |
 | `error.type` | string | `Error` | Set on errors only |
 
-### Token usage metrics
+### Token usage and response length metrics
 
 Both modules record token usage as OTel histogram metrics via
-`gen_ai.client.token.usage` (unit: `{token}`). This enables dashboards
-and alerts on token consumption without querying span data.
+`gen_ai.client.token.usage` (unit: `{token}`). The LLM module also
+records response character length via `gen_ai.client.response.length`
+(unit: `{character}`) for drift detection. This enables dashboards
+and alerts on token consumption and response quality without querying
+span data.
 
 | Metric | Dimensions | Recorded by |
 |---|---|---|
 | `gen_ai.client.token.usage` | `gen_ai.token.type=input` | `llm.js`, `embeddings.js` |
 | `gen_ai.client.token.usage` | `gen_ai.token.type=output` | `llm.js` only |
+| `gen_ai.client.response.length` | (none) | `llm.js` only |
 
 Each metric data point carries these attributes:
 

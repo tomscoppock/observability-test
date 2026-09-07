@@ -314,6 +314,7 @@ router.post('/api/chat/stream', async (req, res) => {
         promptTokens,
         completionTokens,
         finishReason,
+        responseLength: fullContent.length,
       });
       llmSpan.end();
       llmSpan = null;

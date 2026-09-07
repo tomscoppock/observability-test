@@ -163,6 +163,12 @@
           "description": "Embedding API call latency (median).",
           "chartType": "Line",
           "programText": "filter_ = filter('service.name', 'rag-api') and filter('deployment.environment', 'dev')\nA = histogram('traces.span.metrics.duration', filter=filter_ and filter('gen_ai.operation.name', 'embeddings')).percentile(pct=50).publish(label='P50')"
+        },
+        {
+          "name": "Response Length Over Time",
+          "description": "Character length of LLM responses (P50/P90). Sudden changes may indicate model drift or prompt regression.",
+          "chartType": "Line",
+          "programText": "filter_ = filter('service.name', 'rag-api')\nA = data('gen_ai.client.response.length', filter=filter_).mean().publish(label='Mean Length')\nB = data('gen_ai.client.response.length', filter=filter_).percentile(pct=90).publish(label='P90 Length')"
         }
       ]
     },

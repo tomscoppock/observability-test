@@ -46,6 +46,14 @@ const tokenCounter = meter.createCounter('gen_ai.client.token.count', {
   unit: '{token}',
 });
 
+// Response length histogram -- tracks character count of LLM responses.
+// Sudden changes in response length distribution can signal model drift
+// or prompt regression. Used by Splunk detectors for anomaly alerting.
+const responseLengthHistogram = meter.createHistogram('gen_ai.client.response.length', {
+  description: 'Character length of LLM responses',
+  unit: '{character}',
+});
+
 /**
  * Send a chat completion request to the LLM.
  *
@@ -107,6 +115,7 @@ async function chatCompletion(messages) {
       const completionTokens = data.usage?.completion_tokens ?? 0;
 
       // Response attributes per gen_ai semconv
+      const responseLength = content.length;
       span.setAttributes({
         'gen_ai.response.model': data.model || model,
         'gen_ai.response.id': data.id || '',
@@ -116,6 +125,7 @@ async function chatCompletion(messages) {
         // OpenAI-style aliases for Splunk MetricSet compatibility
         'gen_ai.usage.prompt_tokens': promptTokens,
         'gen_ai.usage.completion_tokens': completionTokens,
+        'gen_ai.response.length': responseLength,
       });
 
       // gen_ai.response.finish_reasons is an array per the spec
@@ -149,6 +159,7 @@ async function chatCompletion(messages) {
         ...metricAttrs,
         'gen_ai.token.type': 'output',
       });
+      responseLengthHistogram.record(responseLength, metricAttrs);
 
       logger.info('LLM completion received', {
         model: data.model || model,
@@ -256,8 +267,10 @@ async function chatCompletionStream(messages) {
  * @param {number} opts.promptTokens
  * @param {number} opts.completionTokens
  * @param {string} [opts.finishReason]
+ * @param {number} [opts.responseLength] - Character length of the full response
  */
 function recordStreamUsage(span, opts) {
+  const responseLength = opts.responseLength || 0;
   span.setAttributes({
     'gen_ai.response.model': opts.responseModel || opts.model,
     'gen_ai.response.id': opts.responseId || '',
@@ -268,6 +281,7 @@ function recordStreamUsage(span, opts) {
     'gen_ai.usage.prompt_tokens': opts.promptTokens,
     'gen_ai.usage.completion_tokens': opts.completionTokens,
     'gen_ai.response.finish_reasons': [opts.finishReason || 'stop'],
+    'gen_ai.response.length': responseLength,
   });
   span.setStatus({ code: 1 });
 
@@ -293,6 +307,7 @@ function recordStreamUsage(span, opts) {
     ...metricAttrs,
     'gen_ai.token.type': 'output',
   });
+  responseLengthHistogram.record(responseLength, metricAttrs);
 
   logger.info('LLM streaming completion finished', {
     model: opts.responseModel || opts.model,

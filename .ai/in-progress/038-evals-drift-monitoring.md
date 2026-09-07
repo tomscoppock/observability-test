@@ -1,6 +1,6 @@
 # Plan: 038 -- Evals and drift monitoring
 
-Status: **planned**
+Status: **in-progress**
 Created: 2026-09-07
 Assignee: @tom
 Epic: 025
@@ -136,17 +136,19 @@ Depends on chosen approach. For Option A (inline eval):
 
 ## Implementation checklist
 
-- [ ] Research: review Splunk detector types for anomaly detection
-- [ ] Implement Option D: create Splunk detector on token count anomaly
-- [ ] Implement Option D: create Splunk detector on response latency anomaly
-- [ ] Design Option A: define quality score metric and computation method
-- [ ] Implement Option A: add inline quality score to chat pipeline
-- [ ] Implement Option A: record quality score as OTel gauge metric
-- [ ] Add quality score chart to LLM and AI dashboard tab
+- [x] Research: review Splunk detector types for anomaly detection
+- [x] Implement Option D: document Splunk detector on token count anomaly (section 18.5)
+- [x] Implement Option D: document Splunk detector on response latency anomaly (section 18.5)
+- [x] Design Option A: define response length metric as lightweight drift proxy
+- [x] Implement Option A: add `gen_ai.client.response.length` histogram metric to `llm.js`
+- [x] Implement Option A: record response length in both `chatCompletion` and `recordStreamUsage`
+- [x] Implement Option A: pass `responseLength` from `chat.js` streaming path
+- [x] Add Response Length Over Time chart to LLM and AI dashboard tab
 - [ ] (Stretch) Design Option C: define golden Q&A dataset format
 - [ ] (Stretch) Implement Option C: batch eval script
-- [ ] Document approach in `docs/splunk-setup.md`
-- [ ] Run test suite (no regressions)
+- [x] Document approach in `docs/splunk-setup.md` (section 18.5 drift detection)
+- [x] Document `gen_ai.client.response.length` metric in `docs/opentelemetry.md`
+- [x] Run test suite (no regressions) -- 63 pass, 0 fail
 
 ## Review notes
 

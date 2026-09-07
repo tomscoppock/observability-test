@@ -40,6 +40,7 @@ Observability Cloud for the observability-test RAG Agent stack.
 ### Alerts and Operations
 
 18. [Create detectors (alerts)](#18-create-detectors-alerts)
+    - [18.5 LLM drift detection detectors](#185-llm-drift-detection-detectors)
 19. [Dashboard best practices](#19-dashboard-best-practices)
 
 ### Cross-Service Monitoring (MCP)
@@ -924,6 +925,82 @@ total = histogram('service.request', filter=filter('sf_service', 'rag-api') and 
 Splunk provides default detectors for service latency, error rate, and
 request rate. Check **Alerts > AutoDetect** to review and enable them.
 
+### 18.5 LLM drift detection detectors
+
+Use proxy metrics to detect when LLM behaviour changes unexpectedly.
+These detectors do not measure quality directly but signal when the
+model's output characteristics shift -- which often correlates with
+model updates, prompt regressions, or upstream API changes.
+
+#### Response length anomaly detector
+
+Monitors the `gen_ai.client.response.length` histogram metric for
+sudden changes in response length distribution.
+
+1. Click **Create (+) > Detector**.
+2. **Name:** `LLM -- Response Length Anomaly`
+3. **Signal:** Enter SignalFlow:
+
+```signalflow
+data('gen_ai.client.response.length', filter=filter('service.name', 'rag-api')).mean().publish(label='Mean Response Length')
+```
+
+4. **Condition:** Historical anomaly -- deviation from normal pattern
+   over the past 7 days
+5. **Sensitivity:** Medium (adjust based on false-positive rate)
+6. **Severity:** Warning
+7. Add notification, click **Activate**.
+
+> **Why this works:** A well-tuned RAG system produces responses of
+> relatively consistent length for similar queries. A sudden increase
+> may indicate the model is hallucinating or over-explaining; a sudden
+> decrease may indicate truncation or degraded context retrieval.
+
+#### Token count anomaly detector
+
+Monitors output token consumption for unexpected changes.
+
+1. Click **Create (+) > Detector**.
+2. **Name:** `LLM -- Output Token Anomaly`
+3. **Signal:** Enter SignalFlow:
+
+```signalflow
+data('gen_ai.client.token.count', filter=filter('gen_ai.token.type', 'output') and filter('service.name', 'rag-api')).mean().publish(label='Mean Output Tokens')
+```
+
+4. **Condition:** Historical anomaly -- deviation from 7-day baseline
+5. **Sensitivity:** Medium
+6. **Severity:** Warning
+7. Add notification, click **Activate**.
+
+#### Latency anomaly detector
+
+Monitors LLM call latency for sudden changes that may indicate model
+swaps or API degradation.
+
+1. Click **Create (+) > Detector**.
+2. **Name:** `LLM -- Latency Anomaly`
+3. **Signal:** Enter SignalFlow:
+
+```signalflow
+histogram('traces.span.metrics.duration', filter=filter('service.name', 'rag-api') and filter('gen_ai.operation.name', 'chat')).percentile(pct=50).publish(label='P50 Latency')
+```
+
+4. **Condition:** Historical anomaly -- deviation from 7-day baseline
+5. **Sensitivity:** Medium
+6. **Severity:** Warning
+7. Add notification, click **Activate**.
+
+#### Interpreting drift alerts
+
+| Signal change | Possible cause | Investigation |
+|---|---|---|
+| Response length increases suddenly | Model update, prompt change, hallucination | Check recent prompt changes, compare response quality |
+| Response length decreases suddenly | Context retrieval failure, model truncation | Check embedding/vector search, verify document store |
+| Output tokens spike | Model verbosity change, system prompt issue | Review system prompt, check model version |
+| Latency increases | Model swap, API throttling, larger context | Check provider status, review token counts |
+| Multiple signals change together | Upstream model update | Compare before/after responses manually |
+
 ---
 
 ## 19. Dashboard best practices
@@ -1086,7 +1163,7 @@ The signalfx exporter has `send_otlp_histograms: true` to forward the
 |---|---|---|
 | Service Overview | `histogram('service.request', ...)` | Splunk MMS (automatic) |
 | RAG Pipeline | `histogram('traces.span.metrics.duration', ...)`, `data('traces.span.metrics.calls', ...)` | Spanmetrics connector |
-| LLM and AI | `histogram('traces.span.metrics.duration', ...)`, `histogram('gen_ai.client.token.usage', ...)` | Spanmetrics + OTel SDK |
+| LLM and AI | `histogram('traces.span.metrics.duration', ...)`, `histogram('gen_ai.client.token.usage', ...)`, `data('gen_ai.client.response.length', ...)` | Spanmetrics + OTel SDK |
 | Infrastructure | `data('container.*')`, `data('surrealdb.*')` | Docker stats + SurrealDB |
 
 ### Optional: Custom MetricSets for Tag Spotlight
