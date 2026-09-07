@@ -67,6 +67,24 @@ generating duration and call-count metrics from all spans.
 | **Logs** | `otlp_http/splunk_logs` | Splunk Log Observer (`/v2/log/otlp`) |
 | **All** | `debug` | Collector stdout (always on) |
 
+**Receivers:**
+
+| Receiver | Signal | Purpose |
+|---|---|---|
+| `otlp` (gRPC + HTTP) | Traces, Metrics, Logs | App telemetry from Node.js API and SurrealDB |
+| `docker_stats` | Metrics | Container CPU/memory/network via Docker socket |
+| `hostmetrics` | Metrics | Host-level CPU, memory, filesystem, network |
+| `spanmetrics` (connector) | Metrics | RED metrics derived from trace spans |
+
+**Processors:**
+
+| Processor | Pipelines | Purpose |
+|---|---|---|
+| `gen_ai_normalizer` | Traces | Normalise OpenLLMetry spans to gen_ai.* semconv |
+| `resourcedetection` | All | Set `host.name` for Splunk Related Content correlation |
+| `batch` | All | Batch telemetry for efficient export |
+| `resource/splunk` | All | Add `deployment.environment` resource attribute |
+
 ### Spanmetrics connector
 
 The `spanmetrics` connector generates RED (Request/Error/Duration)

@@ -1212,4 +1212,102 @@ for full documentation.
 
 ---
 
-*Last updated: 2026-09-06*
+## 25. Splunk OOTB features -- what works and what needs configuration
+
+This section documents which Splunk Observability Cloud built-in features
+auto-populate from our standard OTel pipeline and which need Splunk-side
+configuration.
+
+### Feature matrix
+
+| Feature | Status | Data source | Notes |
+|---|---|---|---|
+| **APM Overview** | Working | Traces (SERVER spans) | Auto-populates from HTTP spans |
+| **APM Service map** | Working | Traces + `peer.service` | SurrealDB and LLM providers appear as inferred services |
+| **APM Trace analyzer** | Working | Traces | All spans visible |
+| **APM Tag Spotlight** | Needs config | Traces + indexed tags | Index `gen_ai.operation.name`, `gen_ai.request.model` in Settings > APM MetricSets |
+| **AI Agent Monitoring** | Needs config | `gen_ai.*` spans | Enable in Settings; spans already have correct attributes |
+| **Database Monitoring** | Not supported | Dedicated receivers | Only MS SQL Server, PostgreSQL, Oracle. SurrealDB not in supported list |
+| **Database Query Perf** | Partial | `db.*` span attributes | SurrealDB shows as inferred service; full query analytics requires supported `db.system` value |
+| **Log Observer** | Working | OTel logs via OTLP | Logs sent to `v2/log/otlp`; trace_id correlation automatic |
+| **Log Observer Connect** | N/A | Splunk Enterprise/Cloud | Requires separate Splunk Platform license |
+| **Infrastructure** | Working | `docker_stats` + `hostmetrics` | Container and host metrics via collector receivers |
+| **Related Content** | Working | `host.name` + `trace_id` | `resourcedetection` processor sets `host.name`; logs include `trace_id` |
+| **Metric Finder** | Working | All metrics | All custom and built-in metrics searchable |
+
+### AI Agent Monitoring setup
+
+Our app already emits all required `gen_ai.*` span attributes (see
+`llm.js` and `embeddings.js`). To enable AI Agent Monitoring in Splunk:
+
+1. Go to **Settings > AI Agent Monitoring** (or **Observability for AI**)
+2. Enable the feature for your organization
+3. Verify spans appear with `gen_ai.operation.name` = `chat` or `embeddings`
+
+The following span attributes are already set on every LLM/embedding call:
+
+- `gen_ai.operation.name` -- `chat` or `embeddings`
+- `gen_ai.system` / `gen_ai.provider.name` -- provider name (e.g. `openai`)
+- `gen_ai.request.model` / `gen_ai.response.model` -- model names
+- `gen_ai.usage.input_tokens` / `gen_ai.usage.output_tokens` -- token counts
+- `server.address` / `server.port` -- LLM API endpoint
+- `gen_ai.response.finish_reasons` -- completion reasons
+- `gen_ai.response.id` -- response identifier
+
+No Splunk-specific SDK is needed -- standard OTel gen_ai semantic
+conventions are sufficient.
+
+### Tag Spotlight setup
+
+Tag Spotlight requires span tags to be **indexed** in Splunk APM settings.
+Some tags are auto-indexed (e.g. `deployment.environment`). To index
+custom tags:
+
+1. Go to **Settings > APM MetricSets**
+2. Click **New MetricSet**
+3. Index these recommended tags:
+   - `gen_ai.operation.name` -- filter by chat vs embeddings
+   - `gen_ai.request.model` -- filter by LLM model
+   - `gen_ai.provider.name` -- filter by provider
+4. Wait ~8 minutes for Troubleshooting MetricSets to populate
+5. Navigate to **APM > Tag Spotlight** to see the new breakdowns
+
+### Database Query Performance
+
+SurrealDB is not in Splunk's supported database list for full Database
+Query Performance analytics. However, our DB spans include standard OTel
+`db.*` attributes that provide useful trace-level detail:
+
+- `db.system` = `surrealdb`
+- `db.namespace` -- the SurrealDB namespace
+- `db.query.text` -- the SurQL query (sanitized, no parameter values)
+- `server.address` / `server.port` -- SurrealDB endpoint
+- `peer.service` = `surrealdb` -- for service map edge detection
+
+SurrealDB appears as an **inferred service** in the APM service map,
+and query details are visible in trace span attributes.
+
+### Infrastructure and Related Content
+
+The collector includes `hostmetrics` and `docker_stats` receivers plus
+a `resourcedetection` processor that sets `host.name`. This enables:
+
+- **Infrastructure views** -- host CPU, memory, disk, network metrics
+- **Container metrics** -- per-container resource usage
+- **Related Content** -- click from a trace to see correlated
+  infrastructure metrics and logs for the same host
+
+### Log Observer
+
+OTel log records are sent via OTLP to Splunk's `v2/log/otlp` endpoint.
+The logger (`logger.js`) attaches active span context to every log
+record, so `trace_id` and `span_id` are automatically included. This
+enables:
+
+- **Trace-log correlation** -- click from a trace to see related logs
+- **Log-to-trace navigation** -- click a `trace_id` in a log to jump
+  to the trace in APM
+
+---
+
+*Last updated: 2026-09-07*

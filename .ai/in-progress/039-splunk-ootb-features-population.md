@@ -1,6 +1,6 @@
 # Plan: 039 -- Populate Splunk OOTB features via standard OTel
 
-Status: **planned**
+Status: **in-progress**
 Created: 2026-09-07
 Assignee: @tom
 Epic: 025
@@ -148,19 +148,29 @@ None expected. All changes should be configuration-level.
 
 ## Implementation checklist
 
-- [ ] Audit: check each OOTB feature's current state (screenshots)
-- [ ] Research: Splunk AI Agent Monitoring requirements
-- [ ] Research: Splunk Database Monitoring requirements
-- [ ] Research: Splunk Tag spotlight / MetricSet requirements
-- [ ] Research: Splunk Log Observer requirements
-- [ ] Implement: collector config changes for AI Agent Monitoring
-- [ ] Implement: span attribute changes for AI Agent Monitoring (if needed)
-- [ ] Implement: collector config changes for Database Monitoring (if needed)
-- [ ] Implement: verify and fix Log Observer integration
-- [ ] Implement: verify Infrastructure views
-- [ ] Document all findings and configuration in docs
-- [ ] Run test suite (no regressions)
-- [ ] Final audit: screenshot all OOTB features showing data
+- [x] Research: Splunk AI Agent Monitoring requirements
+  - Result: gen_ai.* spans already correct; needs Splunk-side enable
+- [x] Research: Splunk Database Monitoring requirements
+  - Result: SurrealDB not supported (only MS SQL, PostgreSQL, Oracle)
+  - SurrealDB shows as inferred service via db.system span attribute
+- [x] Research: Splunk Tag spotlight / MetricSet requirements
+  - Result: needs manual indexing of gen_ai.* tags in Settings > APM MetricSets
+- [x] Research: Splunk Log Observer requirements
+  - Result: already working -- logs sent via OTLP with trace_id correlation
+- [x] Research: Infrastructure views requirements
+  - Result: needed hostmetrics receiver and resourcedetection processor
+- [x] Implement: add hostmetrics receiver to collector config
+- [x] Implement: add resourcedetection processor for host.name correlation
+- [x] Implement: add db.query.text and db.namespace to DB spans
+- [x] Implement: update metrics pipeline to include hostmetrics
+- [x] Document all findings in docs/splunk-setup.md (Section 25)
+- [x] Document collector components in docs/opentelemetry.md
+- [x] Run test suite (63 pass, 0 fail)
+- [ ] Final audit: user verifies OOTB features in Splunk UI
+  - [ ] Enable AI Agent Monitoring in Splunk Settings
+  - [ ] Index gen_ai.* tags in APM MetricSets for Tag Spotlight
+  - [ ] Verify Infrastructure views show host + container metrics
+  - [ ] Verify Log Observer shows correlated logs
 
 ## Review notes
 

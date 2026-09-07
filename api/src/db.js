@@ -41,16 +41,22 @@ let _serverPort = 8000;
 /**
  * Returns span options for a CLIENT-kind DB span with common attributes.
  * Splunk APM uses SpanKind.CLIENT + server.address to draw service map edges.
+ * db.system + db.namespace are standard OTel semconv for database spans.
  */
-function _dbSpanOpts(name) {
+function _dbSpanOpts(queryText) {
+  const attrs = {
+    'db.system': 'surrealdb',
+    'db.namespace': process.env.SURREAL_NS || 'observability',
+    'server.address': _serverAddress,
+    'server.port': _serverPort,
+    'peer.service': 'surrealdb',
+  };
+  if (queryText) {
+    attrs['db.query.text'] = queryText;
+  }
   return {
     kind: SpanKind.CLIENT,
-    attributes: {
-      'db.system': 'surrealdb',
-      'server.address': _serverAddress,
-      'server.port': _serverPort,
-      'peer.service': 'surrealdb',
-    },
+    attributes: attrs,
   };
 }
 
@@ -227,7 +233,8 @@ async function _withRetry(fn) {
  * @returns {Promise<object>} The created record (with id).
  */
 async function insertDocument(doc) {
-  return tracer.startActiveSpan('db.insertDocument', _dbSpanOpts(), async (span) => {
+  const sql = 'CREATE documents SET title=$title, filename=$filename, ...';
+  return tracer.startActiveSpan('db.insertDocument', _dbSpanOpts(sql), async (span) => {
     try {
       const result = await _withRetry(async (session) => {
         const [rows] = await session.query(
@@ -269,7 +276,7 @@ async function insertDocument(doc) {
  * @returns {Promise<object[]>} The created chunk records.
  */
 async function insertChunks(documentId, chunks) {
-  return tracer.startActiveSpan('db.insertChunks', _dbSpanOpts(), async (span) => {
+  return tracer.startActiveSpan('db.insertChunks', _dbSpanOpts('CREATE chunks SET document=$doc_id, text=$text, ...'), async (span) => {
     try {
       span.setAttribute('db.chunk_count', chunks.length);
 
@@ -318,7 +325,8 @@ async function insertChunks(documentId, chunks) {
  * @returns {Promise<object[]>}     Chunks with similarity scores.
  */
 async function vectorSearch(queryEmbedding, topK = 5) {
-  return tracer.startActiveSpan('db.vectorSearch', _dbSpanOpts(), async (span) => {
+  const sql = 'SELECT *, vector::similarity::cosine(embedding, $query_vec) AS score FROM chunks WHERE embedding <|K,EF|> $query_vec ORDER BY score DESC';
+  return tracer.startActiveSpan('db.vectorSearch', _dbSpanOpts(sql), async (span) => {
     try {
       span.setAttributes({
         'db.vector.dimensions': queryEmbedding.length,
@@ -380,7 +388,7 @@ function _extractRid(id) {
  * @returns {Promise<object|null>}
  */
 async function getDocumentById(id) {
-  return tracer.startActiveSpan('db.getDocumentById', _dbSpanOpts(), async (span) => {
+  return tracer.startActiveSpan('db.getDocumentById', _dbSpanOpts('SELECT * FROM type::record("documents", $rid)'), async (span) => {
     try {
       const rid = _extractRid(id);
       span.setAttribute('db.document.rid', rid);
@@ -409,7 +417,7 @@ async function getDocumentById(id) {
  * @returns {Promise<boolean>}
  */
 async function hasDocuments() {
-  return tracer.startActiveSpan('db.hasDocuments', _dbSpanOpts(), async (span) => {
+  return tracer.startActiveSpan('db.hasDocuments', _dbSpanOpts('SELECT count() AS total FROM documents GROUP ALL'), async (span) => {
     try {
       const total = await _withRetry(async (session) => {
         const [results] = await session.query(
@@ -436,7 +444,7 @@ async function hasDocuments() {
  * @returns {Promise<object[]>}
  */
 async function listDocuments() {
-  return tracer.startActiveSpan('db.listDocuments', _dbSpanOpts(), async (span) => {
+  return tracer.startActiveSpan('db.listDocuments', _dbSpanOpts('SELECT * FROM documents ORDER BY created_at DESC'), async (span) => {
     try {
       const results = await _withRetry(async (session) => {
         const [rows] = await session.query(
@@ -463,7 +471,7 @@ async function listDocuments() {
  * @returns {Promise<{ documentCount: number, chunkCount: number }>}
  */
 async function getStats() {
-  return tracer.startActiveSpan('db.getStats', _dbSpanOpts(), async (span) => {
+  return tracer.startActiveSpan('db.getStats', _dbSpanOpts('SELECT count() AS total FROM documents|chunks GROUP ALL'), async (span) => {
     try {
       const stats = await _withRetry(async (session) => {
         const [docRows] = await session.query(
@@ -500,7 +508,7 @@ async function getStats() {
  * @returns {Promise<void>}
  */
 async function deleteDocument(id) {
-  return tracer.startActiveSpan('db.deleteDocument', _dbSpanOpts(), async (span) => {
+  return tracer.startActiveSpan('db.deleteDocument', _dbSpanOpts('DELETE chunks WHERE document=$rid; DELETE documents:$rid'), async (span) => {
     try {
       const rid = _extractRid(id);
       span.setAttribute('db.document.id', rid);
@@ -533,7 +541,7 @@ async function deleteDocument(id) {
  * @returns {Promise<void>}
  */
 async function deleteAllData() {
-  return tracer.startActiveSpan('db.deleteAllData', _dbSpanOpts(), async (span) => {
+  return tracer.startActiveSpan('db.deleteAllData', _dbSpanOpts('DELETE chunks; DELETE documents'), async (span) => {
     try {
       await _withRetry(async (session) => {
         await session.query('DELETE chunks');
@@ -557,7 +565,7 @@ async function deleteAllData() {
  * @returns {Promise<{ documents: object[], chunks: object[] }>}
  */
 async function exportAll() {
-  return tracer.startActiveSpan('db.exportAll', _dbSpanOpts(), async (span) => {
+  return tracer.startActiveSpan('db.exportAll', _dbSpanOpts('SELECT * FROM documents; SELECT * FROM chunks'), async (span) => {
     try {
       const data = await _withRetry(async (session) => {
         const [docs] = await session.query(
@@ -592,7 +600,7 @@ async function exportAll() {
  * @returns {Promise<{ documentCount: number, chunkCount: number }>}
  */
 async function importAll(data) {
-  return tracer.startActiveSpan('db.importAll', _dbSpanOpts(), async (span) => {
+  return tracer.startActiveSpan('db.importAll', _dbSpanOpts('DELETE + CREATE documents/chunks (bulk import)'), async (span) => {
     try {
       const docs = data.documents || [];
       const chks = data.chunks || [];

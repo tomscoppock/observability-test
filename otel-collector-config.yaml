@@ -29,6 +29,17 @@ receivers:
       com.docker.compose.service: compose.service
       com.docker.compose.project: compose.project
 
+  # Host-level metrics (CPU, memory, disk, network).
+  # Required for Splunk Infrastructure views and Related Content
+  # correlation between APM traces and infrastructure data.
+  hostmetrics:
+    collection_interval: 15s
+    scrapers:
+      cpu: {}
+      memory: {}
+      filesystem: {}
+      network: {}
+
 processors:
   batch:
     send_batch_size: 512
@@ -39,6 +50,14 @@ processors:
   gen_ai_normalizer:
     sources:
       - name: openllmetry
+
+  # Detect host.name and os.type from the environment.
+  # Required for Splunk Related Content (APM <-> Infrastructure correlation).
+  resourcedetection:
+    detectors: [env, system]
+    system:
+      hostname_sources: [os]
+    override: false
 
   # Add resource attributes for Splunk correlation
   resource/splunk:
@@ -96,13 +115,13 @@ service:
   pipelines:
     traces:
       receivers: [otlp]
-      processors: [gen_ai_normalizer, batch, resource/splunk]
+      processors: [gen_ai_normalizer, resourcedetection, batch, resource/splunk]
       exporters: [debug, otlp_http/splunk, spanmetrics]
     metrics:
-      receivers: [otlp, docker_stats, spanmetrics]
-      processors: [batch, resource/splunk]
+      receivers: [otlp, docker_stats, hostmetrics, spanmetrics]
+      processors: [resourcedetection, batch, resource/splunk]
       exporters: [debug, signalfx]
     logs:
       receivers: [otlp]
-      processors: [batch, resource/splunk]
+      processors: [resourcedetection, batch, resource/splunk]
       exporters: [debug, otlp_http/splunk_logs]
