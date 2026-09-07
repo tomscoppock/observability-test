@@ -932,6 +932,15 @@ These detectors do not measure quality directly but signal when the
 model's output characteristics shift -- which often correlates with
 model updates, prompt regressions, or upstream API changes.
 
+> **Automated setup:** Run `scripts/setup-splunk-dashboard.sh` (or
+> `.ps1`) -- Step 4 creates these detectors automatically from
+> `splunk/detectors.json`. The manual steps below are for reference
+> or if you prefer to create them through the UI.
+
+Each detector compares a 5-minute rolling mean against a 1-hour
+baseline. An alert fires when the short-term mean deviates by more
+than 3 standard deviations from the baseline for at least 5 minutes.
+
 #### Response length anomaly detector
 
 Monitors the `gen_ai.client.response.length` histogram metric for
@@ -942,14 +951,14 @@ sudden changes in response length distribution.
 3. **Signal:** Enter SignalFlow:
 
 ```signalflow
-data('gen_ai.client.response.length', filter=filter('service.name', 'rag-api')).mean().publish(label='Mean Response Length')
+A = data('gen_ai.client.response.length', filter=filter('service.name', 'rag-api')).mean(over='5m')
+B = data('gen_ai.client.response.length', filter=filter('service.name', 'rag-api')).mean(over='1h')
+C = data('gen_ai.client.response.length', filter=filter('service.name', 'rag-api')).stddev(over='1h')
+detect(when(A > B + C * 3, lasting='5m') or when(A < B - C * 3, lasting='5m')).publish('Response Length Anomaly')
 ```
 
-4. **Condition:** Historical anomaly -- deviation from normal pattern
-   over the past 7 days
-5. **Sensitivity:** Medium (adjust based on false-positive rate)
-6. **Severity:** Warning
-7. Add notification, click **Activate**.
+4. **Severity:** Warning
+5. Add notification, click **Activate**.
 
 > **Why this works:** A well-tuned RAG system produces responses of
 > relatively consistent length for similar queries. A sudden increase
@@ -965,31 +974,33 @@ Monitors output token consumption for unexpected changes.
 3. **Signal:** Enter SignalFlow:
 
 ```signalflow
-data('gen_ai.client.token.count', filter=filter('gen_ai.token.type', 'output') and filter('service.name', 'rag-api')).mean().publish(label='Mean Output Tokens')
+A = data('gen_ai.client.token.usage', filter=filter('gen_ai.token.type', 'output') and filter('service.name', 'rag-api')).mean(over='5m')
+B = data('gen_ai.client.token.usage', filter=filter('gen_ai.token.type', 'output') and filter('service.name', 'rag-api')).mean(over='1h')
+C = data('gen_ai.client.token.usage', filter=filter('gen_ai.token.type', 'output') and filter('service.name', 'rag-api')).stddev(over='1h')
+detect(when(A > B + C * 3, lasting='5m') or when(A < B - C * 3, lasting='5m')).publish('Output Token Anomaly')
 ```
 
-4. **Condition:** Historical anomaly -- deviation from 7-day baseline
-5. **Sensitivity:** Medium
-6. **Severity:** Warning
-7. Add notification, click **Activate**.
+4. **Severity:** Warning
+5. Add notification, click **Activate**.
 
 #### Latency anomaly detector
 
-Monitors LLM call latency for sudden changes that may indicate model
-swaps or API degradation.
+Monitors service request latency for sudden changes that may indicate
+model swaps or API degradation.
 
 1. Click **Create (+) > Detector**.
 2. **Name:** `LLM -- Latency Anomaly`
 3. **Signal:** Enter SignalFlow:
 
 ```signalflow
-histogram('traces.span.metrics.duration', filter=filter('service.name', 'rag-api') and filter('gen_ai.operation.name', 'chat')).percentile(pct=50).publish(label='P50 Latency')
+A = data('service.request.duration', filter=filter('service.name', 'rag-api') and filter('sf_dimensionalized', 'true'), rollup='average').mean(over='5m')
+B = data('service.request.duration', filter=filter('service.name', 'rag-api') and filter('sf_dimensionalized', 'true'), rollup='average').mean(over='1h')
+C = data('service.request.duration', filter=filter('service.name', 'rag-api') and filter('sf_dimensionalized', 'true'), rollup='average').stddev(over='1h')
+detect(when(A > B + C * 3, lasting='5m')).publish('Latency Anomaly')
 ```
 
-4. **Condition:** Historical anomaly -- deviation from 7-day baseline
-5. **Sensitivity:** Medium
-6. **Severity:** Warning
-7. Add notification, click **Activate**.
+4. **Severity:** Warning
+5. Add notification, click **Activate**.
 
 #### Interpreting drift alerts
 

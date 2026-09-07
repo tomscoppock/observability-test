@@ -3,7 +3,7 @@
     {
       "name": "LLM -- Response Length Anomaly",
       "description": "Detects sudden changes in LLM response length distribution that may indicate model drift, prompt regression, or upstream API changes.",
-      "programText": "from signalfx.detectors.against_recent import against_recent\nA = data('gen_ai.client.response.length', filter=filter('service.name', 'rag-api')).mean()\nagainst_recent.detector_mean_std(stream=A, current_window='15m', historical_window='1d', fire_num_stddev=3, clear_num_stddev=2.5, orientation='both').publish('Response Length Anomaly')",
+      "programText": "A = data('gen_ai.client.response.length', filter=filter('service.name', 'rag-api')).mean(over='5m')\nB = data('gen_ai.client.response.length', filter=filter('service.name', 'rag-api')).mean(over='1h')\nC = data('gen_ai.client.response.length', filter=filter('service.name', 'rag-api')).stddev(over='1h')\ndetect(when(A > B + C * 3, lasting='5m') or when(A < B - C * 3, lasting='5m')).publish('Response Length Anomaly')",
       "rules": [
         {
           "detectLabel": "Response Length Anomaly",
@@ -16,7 +16,7 @@
     {
       "name": "LLM -- Output Token Anomaly",
       "description": "Detects sudden changes in output token consumption that may indicate model verbosity changes or prompt issues.",
-      "programText": "from signalfx.detectors.against_recent import against_recent\nA = data('gen_ai.client.token.count', filter=filter('gen_ai.token.type', 'output') and filter('service.name', 'rag-api')).mean()\nagainst_recent.detector_mean_std(stream=A, current_window='15m', historical_window='1d', fire_num_stddev=3, clear_num_stddev=2.5, orientation='both').publish('Output Token Anomaly')",
+      "programText": "A = data('gen_ai.client.token.usage', filter=filter('gen_ai.token.type', 'output') and filter('service.name', 'rag-api')).mean(over='5m')\nB = data('gen_ai.client.token.usage', filter=filter('gen_ai.token.type', 'output') and filter('service.name', 'rag-api')).mean(over='1h')\nC = data('gen_ai.client.token.usage', filter=filter('gen_ai.token.type', 'output') and filter('service.name', 'rag-api')).stddev(over='1h')\ndetect(when(A > B + C * 3, lasting='5m') or when(A < B - C * 3, lasting='5m')).publish('Output Token Anomaly')",
       "rules": [
         {
           "detectLabel": "Output Token Anomaly",
@@ -29,7 +29,7 @@
     {
       "name": "LLM -- Latency Anomaly",
       "description": "Detects sudden changes in LLM call latency that may indicate model swaps, API throttling, or infrastructure issues.",
-      "programText": "from signalfx.detectors.against_recent import against_recent\nA = data('traces.span.metrics.duration', filter=filter('service.name', 'rag-api') and filter('gen_ai.operation.name', 'chat'), rollup='average').mean()\nagainst_recent.detector_mean_std(stream=A, current_window='15m', historical_window='1d', fire_num_stddev=3, clear_num_stddev=2.5, orientation='above').publish('Latency Anomaly')",
+      "programText": "A = data('service.request.duration', filter=filter('service.name', 'rag-api') and filter('sf_dimensionalized', 'true'), rollup='average').mean(over='5m')\nB = data('service.request.duration', filter=filter('service.name', 'rag-api') and filter('sf_dimensionalized', 'true'), rollup='average').mean(over='1h')\nC = data('service.request.duration', filter=filter('service.name', 'rag-api') and filter('sf_dimensionalized', 'true'), rollup='average').stddev(over='1h')\ndetect(when(A > B + C * 3, lasting='5m')).publish('Latency Anomaly')",
       "rules": [
         {
           "detectLabel": "Latency Anomaly",
