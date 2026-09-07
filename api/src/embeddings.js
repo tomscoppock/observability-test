@@ -115,6 +115,8 @@ async function embedTexts(texts) {
         span.setAttributes({
           'gen_ai.usage.input_tokens': inputTokens,
           'gen_ai.usage.total_tokens': data.usage.total_tokens,
+          // OpenAI-style aliases for Splunk MetricSet compatibility
+          'gen_ai.usage.prompt_tokens': inputTokens,
         });
       }
 

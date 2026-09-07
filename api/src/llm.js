@@ -113,6 +113,9 @@ async function chatCompletion(messages) {
         'gen_ai.usage.input_tokens': promptTokens,
         'gen_ai.usage.output_tokens': completionTokens,
         'gen_ai.usage.total_tokens': promptTokens + completionTokens,
+        // OpenAI-style aliases for Splunk MetricSet compatibility
+        'gen_ai.usage.prompt_tokens': promptTokens,
+        'gen_ai.usage.completion_tokens': completionTokens,
       });
 
       // gen_ai.response.finish_reasons is an array per the spec
@@ -261,6 +264,9 @@ function recordStreamUsage(span, opts) {
     'gen_ai.usage.input_tokens': opts.promptTokens,
     'gen_ai.usage.output_tokens': opts.completionTokens,
     'gen_ai.usage.total_tokens': opts.promptTokens + opts.completionTokens,
+    // OpenAI-style aliases for Splunk MetricSet compatibility
+    'gen_ai.usage.prompt_tokens': opts.promptTokens,
+    'gen_ai.usage.completion_tokens': opts.completionTokens,
     'gen_ai.response.finish_reasons': [opts.finishReason || 'stop'],
   });
   span.setStatus({ code: 1 });
