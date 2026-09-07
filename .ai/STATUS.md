@@ -29,10 +29,10 @@ Last updated: 2026-09-07
   - 032 -- Dashboard 4-tab split (@tom) -- done 2026-09-07
   - 033 -- Spanmetrics connector (@tom) -- done 2026-09-07
   - 035 -- Fix token metrics dashboard (@tom) -- done 2026-09-07
-  - 036 -- Logs correlation and verification (@tom) -- planned
-  - 037 -- Splunk AI overview and Azure Foundry (@tom) -- planned
-  - 038 -- Evals and drift monitoring (@tom) -- planned
-  - 039 -- Populate Splunk OOTB features (@tom) -- planned
+  - 036 -- Logs correlation and verification (@tom) -- in progress (filter/logs + docs done, user verification pending)
+  - 037 -- Splunk AI overview and Azure Foundry (@tom) -- in progress (7/10 items done via 039)
+  - 038 -- Evals and drift monitoring (@tom) -- in progress (response length metric + drift detectors documented)
+  - 039 -- Populate Splunk OOTB features (@tom) -- in progress (gen_ai attrs + metrics done, user verification pending)
 - 034 -- Web search toggle (@tom) -- backlogged
 - 024 -- Admin tab with database management UI (@tom) -- done 2026-09-04
 - 018 -- Instrument LLM calls with gen_ai.* spans and token metrics (@tom) -- done 2026-09-04
