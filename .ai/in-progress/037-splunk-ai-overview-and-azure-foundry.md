@@ -1,6 +1,6 @@
-b# Plan: 037 -- Splunk AI overview and Azure Foundry monitoring
+# Plan: 037 -- Splunk AI overview and Azure Foundry monitoring
 
-Status: **planned**
+Status: **in-progress**
 Created: 2026-09-07
 Assignee: @tom
 Epic: 025
@@ -113,16 +113,23 @@ This task requires investigation before coding. The research phase should:
 
 ## Implementation checklist
 
-- [ ] Research Splunk AI overview requirements (docs + experimentation)
-- [ ] Identify which span attributes / metrics Splunk AI overview consumes
-- [ ] Test attribute changes locally to verify AI overview populates
-- [ ] Apply necessary span attribute changes to `llm.js` / `embeddings.js`
-- [ ] (If needed) Configure Custom MetricSets in Splunk for `gen_ai.*`
-- [ ] Research Azure Foundry OTLP export capabilities
-- [ ] Document findings and configuration in `docs/splunk-setup.md`
-- [ ] Update `docs/opentelemetry.md` with Azure Foundry section
-- [ ] Run test suite (no regressions)
-- [ ] Verify Splunk AI overview shows live data
+- [x] Research Splunk AI overview requirements (docs + experimentation)
+  - Done in 039: AI overview needs gen_ai.* span attributes + LLM Providers integration
+- [x] Identify which span attributes / metrics Splunk AI overview consumes
+  - Done in 039: 14 gen_ai.* attributes documented in docs/splunk-setup.md Section 25
+- [x] Test attribute changes locally to verify AI overview populates
+  - Done in 039: all 14 attributes emitted, tests pass (63/63)
+- [x] Apply necessary span attribute changes to `llm.js` / `embeddings.js`
+  - Done in 039: added gen_ai.usage.total_tokens, gen_ai.request.input_count,
+    gen_ai.usage.prompt_tokens, gen_ai.usage.completion_tokens (OpenAI aliases)
+- [x] (If needed) Configure Custom MetricSets in Splunk for `gen_ai.*`
+  - Done in 039: documented step-by-step APM MetricSet indexing in docs/splunk-setup.md
+- [ ] Research Azure Foundry OTLP export capabilities (deferred -- stretch goal)
+- [x] Document findings and configuration in `docs/splunk-setup.md`
+  - Done in 039: Section 25 expanded with full attribute table and setup steps
+- [ ] Update `docs/opentelemetry.md` with Azure Foundry section (deferred)
+- [x] Run test suite (no regressions) -- 63 pass, 0 fail
+- [ ] Verify Splunk AI overview shows live data (pending user rebuild)
 
 ## Review notes
 
