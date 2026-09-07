@@ -166,6 +166,11 @@ None expected. All changes should be configuration-level.
 - [x] Document all findings in docs/splunk-setup.md (Section 25)
 - [x] Document collector components in docs/opentelemetry.md
 - [x] Run test suite (63 pass, 0 fail)
+- [x] Cross-reference gen_ai.* attributes against Splunk AI Overview dashboard
+  - Added gen_ai.usage.total_tokens to chatCompletion and recordStreamUsage
+  - Added gen_ai.request.input_count to chatCompletion and chatCompletionStream
+  - All 14 dashboard-expected attributes now emitted with values
+- [x] Re-run test suite after attribute fixes (63 pass, 0 fail)
 - [ ] Final audit: user verifies OOTB features in Splunk UI
   - [ ] Enable AI Agent Monitoring in Splunk Settings
   - [ ] Index gen_ai.* tags in APM MetricSets for Tag Spotlight

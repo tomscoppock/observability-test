@@ -72,6 +72,7 @@ async function chatCompletion(messages) {
       'gen_ai.request.model': model,
       'gen_ai.request.temperature': temperature,
       'gen_ai.request.message_count': messages.length,
+      'gen_ai.request.input_count': messages.length,
       'server.address': parsedUrl.hostname,
       'server.port': parseInt(parsedUrl.port, 10) || (parsedUrl.protocol === 'https:' ? 443 : 80),
     });
@@ -111,6 +112,7 @@ async function chatCompletion(messages) {
         'gen_ai.response.id': data.id || '',
         'gen_ai.usage.input_tokens': promptTokens,
         'gen_ai.usage.output_tokens': completionTokens,
+        'gen_ai.usage.total_tokens': promptTokens + completionTokens,
       });
 
       // gen_ai.response.finish_reasons is an array per the spec
@@ -202,6 +204,7 @@ async function chatCompletionStream(messages) {
     'gen_ai.request.model': model,
     'gen_ai.request.temperature': temperature,
     'gen_ai.request.message_count': messages.length,
+    'gen_ai.request.input_count': messages.length,
     'gen_ai.request.stream': true,
     'server.address': parsedUrl.hostname,
     'server.port': parseInt(parsedUrl.port, 10) || (parsedUrl.protocol === 'https:' ? 443 : 80),
@@ -257,6 +260,7 @@ function recordStreamUsage(span, opts) {
     'gen_ai.response.id': opts.responseId || '',
     'gen_ai.usage.input_tokens': opts.promptTokens,
     'gen_ai.usage.output_tokens': opts.completionTokens,
+    'gen_ai.usage.total_tokens': opts.promptTokens + opts.completionTokens,
     'gen_ai.response.finish_reasons': [opts.finishReason || 'stop'],
   });
   span.setStatus({ code: 1 });
