@@ -111,22 +111,16 @@
       "description": "Token usage, model latency, and AI cost metrics. Latency charts use spanmetrics connector duration metric.",
       "charts": [
         {
-          "name": "LLM Provider",
-          "description": "Active LLM provider name (from gen_ai.provider.name span attribute).",
+          "name": "LLM Provider and Model",
+          "description": "Active LLM provider and chat model with call counts. Uses spanmetrics calls metric grouped by provider and model.",
           "chartType": "List",
-          "programText": "A = data('traces.span.metrics.calls', filter=filter('service.name', 'rag-api') and filter('deployment.environment', 'dev') and filter('gen_ai.operation.name', 'chat')).sum(by=['gen_ai.provider.name']).publish(label='LLM Provider')"
-        },
-        {
-          "name": "LLM Model",
-          "description": "Active LLM chat model (from gen_ai.request.model span attribute).",
-          "chartType": "List",
-          "programText": "A = data('traces.span.metrics.calls', filter=filter('service.name', 'rag-api') and filter('deployment.environment', 'dev') and filter('gen_ai.operation.name', 'chat')).sum(by=['gen_ai.request.model']).publish(label='LLM Model')"
+          "programText": "A = data('traces.span.metrics.calls', filter=filter('service.name', 'rag-api') and filter('deployment.environment', 'dev') and filter('gen_ai.operation.name', 'chat')).sum(by=['gen_ai.provider.name', 'gen_ai.request.model']).publish(label='LLM Calls')"
         },
         {
           "name": "Embedding Model",
-          "description": "Active embedding model (from gen_ai.request.model span attribute).",
+          "description": "Active embedding model with call counts. Uses spanmetrics calls metric grouped by model.",
           "chartType": "List",
-          "programText": "A = data('traces.span.metrics.calls', filter=filter('service.name', 'rag-api') and filter('deployment.environment', 'dev') and filter('gen_ai.operation.name', 'embeddings')).sum(by=['gen_ai.request.model']).publish(label='Embedding Model')"
+          "programText": "A = data('traces.span.metrics.calls', filter=filter('service.name', 'rag-api') and filter('deployment.environment', 'dev') and filter('gen_ai.operation.name', 'embeddings')).sum(by=['gen_ai.provider.name', 'gen_ai.request.model']).publish(label='Embedding Calls')"
         },
         {
           "name": "Total Input Tokens",
