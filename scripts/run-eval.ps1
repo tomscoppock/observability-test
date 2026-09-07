@@ -14,7 +14,7 @@ param(
 $ErrorActionPreference = 'Stop'
 
 $ProjectRoot = Split-Path -Parent (Split-Path -Parent $MyInvocation.MyCommand.Path)
-$GoldenQA = Join-Path $ProjectRoot 'sample-docs' 'golden-qa.json'
+$GoldenQA = Join-Path (Join-Path $ProjectRoot 'sample-docs') 'golden-qa.json'
 
 # ---------------------------------------------------------------------------
 # Validate prerequisites

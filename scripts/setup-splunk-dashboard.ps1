@@ -335,7 +335,7 @@ for ($d = 0; $d -lt $DashCount; $d++) {
 # ---------------------------------------------------------------------------
 # Step 4: Create or update detectors (from splunk/detectors.json)
 # ---------------------------------------------------------------------------
-$DetectorsJson = Join-Path $ProjectRoot 'splunk' 'detectors.json'
+$DetectorsJson = Join-Path (Join-Path $ProjectRoot 'splunk') 'detectors.json'
 $DetectorCount = 0
 
 if (Test-Path $DetectorsJson) {
