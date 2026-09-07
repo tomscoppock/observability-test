@@ -1,6 +1,6 @@
 # Plan: 035 -- Fix token metrics dashboard charts
 
-Status: **in-progress**
+Status: **done**
 Created: 2026-09-07
 Assignee: @tom
 Epic: 025
@@ -87,8 +87,11 @@ None.
 - [x] Run test suite (63 pass, 0 fail)
 - [x] Add `OTEL_EXPORTER_OTLP_METRICS_TEMPORALITY_PREFERENCE=delta` to `docker-compose.yml`
 - [x] Document delta temporality requirement in `docs/opentelemetry.md`
-- [ ] Rebuild api container with `docker compose up -d --build api`
-- [ ] Verify all 3 token charts show data in Splunk (awaiting user test)
+- [x] Add counter metric `gen_ai.client.token.count` in `embeddings.js` and `llm.js`
+- [x] Switch dashboard charts from `histogram()` to `data()` with counter metric
+- [x] Add 2 new charts: LLM Tokens Over Time, Embedding Tokens Over Time
+- [x] Rebuild api container and deploy dashboard (28 charts, 4 dashboards)
+- [x] Verify all 7 LLM and AI charts show data in Splunk (user confirmed)
 
 ## Review notes
 

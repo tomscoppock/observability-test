@@ -10,7 +10,6 @@ Last updated: 2026-09-07
 | @tom | 028 -- Dashboard automation | 025 | 2026-09-04 |
 | @tom | 031 -- Demo traffic simulation script | 025 | 2026-09-04 |
 | @tom | 032 -- Dashboard 4-tab split | 025 | 2026-09-04 |
-| @tom | 035 -- Fix token metrics dashboard | 025 | 2026-09-07 |
 | @tom | 036 -- Logs correlation and verification | 025 | 2026-09-07 |
 | @tom | 037 -- Splunk AI overview and Azure Foundry | 025 | 2026-09-07 |
 | @tom | 038 -- Evals and drift monitoring | 025 | 2026-09-07 |
@@ -18,6 +17,7 @@ Last updated: 2026-09-07
 
 ## Recently completed
 
+- 035 -- Fix token metrics dashboard (@tom) -- done 2026-09-07
 - 033 -- Spanmetrics connector for custom span charts (@tom) -- done 2026-09-07
 - 030 -- Streaming chat with markdown rendering (@tom) -- done 2026-09-04
 - 029 -- Docker Desktop OTel automation (@tom) -- done 2026-09-04
@@ -27,7 +27,7 @@ Last updated: 2026-09-07
   - 028 -- Dashboard automation (@tom) -- in progress
   - 032 -- Dashboard 4-tab split (@tom) -- in progress
   - 033 -- Spanmetrics connector (@tom) -- done 2026-09-07
-  - 035 -- Fix token metrics dashboard (@tom) -- in progress
+  - 035 -- Fix token metrics dashboard (@tom) -- done 2026-09-07
   - 036 -- Logs correlation and verification (@tom) -- planned
   - 037 -- Splunk AI overview and Azure Foundry (@tom) -- planned
   - 038 -- Evals and drift monitoring (@tom) -- planned
