@@ -112,15 +112,15 @@
       "charts": [
         {
           "name": "Total Input Tokens",
-          "description": "Total input (prompt) tokens consumed in the current time window.",
+          "description": "Cumulative input (prompt) tokens. Uses the histogram count rolled up as sum, then summed over a 4h window to show the running total.",
           "chartType": "SingleValue",
-          "programText": "A = data('gen_ai.client.token.count', filter=filter('gen_ai.token.type', 'input') and filter('service.name', 'rag-api')).sum().publish(label='Input Tokens')"
+          "programText": "A = data('gen_ai.client.token.count', filter=filter('gen_ai.token.type', 'input') and filter('service.name', 'rag-api'), rollup='delta').sum().sum(over='4h').publish(label='Input Tokens')"
         },
         {
           "name": "Total Output Tokens",
-          "description": "Total output (completion) tokens consumed in the current time window.",
+          "description": "Cumulative output (completion) tokens. Uses the histogram count rolled up as sum, then summed over a 4h window to show the running total.",
           "chartType": "SingleValue",
-          "programText": "A = data('gen_ai.client.token.count', filter=filter('gen_ai.token.type', 'output') and filter('service.name', 'rag-api')).sum().publish(label='Output Tokens')"
+          "programText": "A = data('gen_ai.client.token.count', filter=filter('gen_ai.token.type', 'output') and filter('service.name', 'rag-api'), rollup='delta').sum().sum(over='4h').publish(label='Output Tokens')"
         },
         {
           "name": "Token Usage Over Time",
