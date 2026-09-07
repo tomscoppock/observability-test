@@ -1,6 +1,6 @@
 # Plan: 033 -- Add spanmetrics connector for custom span dashboard charts
 
-Status: **in-progress** <!-- planning | in-progress | in-review | done -->
+Status: **done** <!-- planning | in-progress | in-review | done -->
 Created: 2026-09-04
 Owner: @tom
 Epic: 025

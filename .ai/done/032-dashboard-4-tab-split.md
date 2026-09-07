@@ -1,6 +1,6 @@
 # Plan: 032 -- Split dashboard into 4 tabs with improved charts
 
-Status: **in-progress** <!-- planning | in-progress | in-review | done -->
+Status: **done** <!-- planning | in-progress | in-review | done -->
 Created: 2026-09-04
 Owner: @tom
 Epic: 025

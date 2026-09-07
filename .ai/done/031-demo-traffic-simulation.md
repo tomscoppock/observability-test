@@ -1,6 +1,6 @@
 # Plan: 031 -- Demo traffic simulation script
 
-Status: **in-progress** <!-- planning | in-progress | in-review | done -->
+Status: **done** <!-- planning | in-progress | in-review | done -->
 Created: 2026-09-04
 Owner: @tom
 
