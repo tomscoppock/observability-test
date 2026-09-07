@@ -1238,39 +1238,77 @@ configuration.
 ### AI Agent Monitoring setup
 
 Our app already emits all required `gen_ai.*` span attributes (see
-`llm.js` and `embeddings.js`). To enable AI Agent Monitoring in Splunk:
+`llm.js` and `embeddings.js`). The AI Overview dashboard expects these
+14 attributes on LLM spans -- all are now emitted with populated values:
 
-1. Go to **Settings > AI Agent Monitoring** (or **Observability for AI**)
-2. Enable the feature for your organization
-3. Verify spans appear with `gen_ai.operation.name` = `chat` or `embeddings`
+| Attribute | Value source |
+|---|---|
+| `gen_ai.operation.name` | `'chat'` or `'embeddings'` |
+| `gen_ai.system` | Provider name (e.g. `openai`) |
+| `gen_ai.provider.name` | Provider name (same as above) |
+| `gen_ai.request.model` | Model name from config |
+| `gen_ai.response.model` | Model name from API response |
+| `gen_ai.request.temperature` | Temperature value |
+| `gen_ai.request.message_count` | Number of messages in request |
+| `gen_ai.request.input_count` | Number of input items (= message count) |
+| `gen_ai.response.id` | Response ID from API |
+| `gen_ai.usage.input_tokens` | `prompt_tokens` from API response |
+| `gen_ai.usage.output_tokens` | `completion_tokens` from API response |
+| `gen_ai.usage.total_tokens` | Sum of input + output tokens |
+| `gen_ai.response.finish_reasons` | Array of finish reasons from API |
+| `gen_ai.tool.name` | N/A (no tool calls in current app) |
 
-The following span attributes are already set on every LLM/embedding call:
+**To enable AI Agent Monitoring in Splunk:**
 
-- `gen_ai.operation.name` -- `chat` or `embeddings`
-- `gen_ai.system` / `gen_ai.provider.name` -- provider name (e.g. `openai`)
-- `gen_ai.request.model` / `gen_ai.response.model` -- model names
-- `gen_ai.usage.input_tokens` / `gen_ai.usage.output_tokens` -- token counts
-- `server.address` / `server.port` -- LLM API endpoint
-- `gen_ai.response.finish_reasons` -- completion reasons
-- `gen_ai.response.id` -- response identifier
+1. In the Splunk Observability Cloud main menu, go to **Data Management >
+   Available integrations**
+2. Search for **LLM Providers** and select it
+3. Follow the on-screen instructions to set up the data integration
+4. After setup, verify data appears at **APM > AI overview** (may take
+   a few minutes for data to appear)
+5. If the AI overview page is empty, check **APM > AI trace data** and
+   add a time filter starting from after you configured the integration
+
+**Permissions:** You need a role with the `read_apm_ai_conversation`
+capability (included in the `admin` and `ai_monitoring` roles) to view
+AI agent conversation details.
 
 No Splunk-specific SDK is needed -- standard OTel gen_ai semantic
-conventions are sufficient.
+conventions are sufficient. Our Node.js app emits these attributes
+directly; the Python-specific Splunk instrumentation packages are not
+required.
 
 ### Tag Spotlight setup
 
-Tag Spotlight requires span tags to be **indexed** in Splunk APM settings.
-Some tags are auto-indexed (e.g. `deployment.environment`). To index
-custom tags:
+Tag Spotlight requires span tags to be **indexed** as Troubleshooting
+MetricSets (TMS) in Splunk APM settings. Some tags are auto-indexed
+(e.g. `deployment.environment`). To index custom `gen_ai.*` tags:
 
-1. Go to **Settings > APM MetricSets**
-2. Click **New MetricSet**
-3. Index these recommended tags:
-   - `gen_ai.operation.name` -- filter by chat vs embeddings
-   - `gen_ai.request.model` -- filter by LLM model
-   - `gen_ai.provider.name` -- filter by provider
-4. Wait ~8 minutes for Troubleshooting MetricSets to populate
-5. Navigate to **APM > Tag Spotlight** to see the new breakdowns
+1. Navigate to the APM MetricSets page using one of:
+   - **APM > Overview**, then select **APM Configuration > APM MetricSets**
+   - **Settings** (in the nav bar) > **APM MetricSets** under Product settings
+2. Click **Add Custom MetricSet**
+3. Enter the **Name** of the span tag to index (e.g. `gen_ai.operation.name`)
+4. For **Scope**, select **Service** and choose `rag-api` (or **All
+   Services** to index globally)
+5. Click **Start Analysis** -- Splunk runs a cardinality check
+6. Wait for the analysis to complete (may take a few moments)
+7. If the status shows **Within Entitlement** (green check), click the
+   check mark under **Actions** to activate the MetricSet
+
+**Recommended tags to index:**
+
+- `gen_ai.operation.name` -- filter by chat vs embeddings
+- `gen_ai.request.model` -- filter by LLM model
+- `gen_ai.provider.name` -- filter by provider
+- `db.system` -- filter by database type
+
+After activation, wait ~8 minutes for Troubleshooting MetricSets to
+populate, then navigate to **APM > Tag Spotlight** to see the new
+breakdowns.
+
+> **Note:** You must have the **admin** role to index span tags.
+> Pending MetricSets expire after 1 hour if not activated.
 
 ### Database Query Performance
 
