@@ -81,6 +81,7 @@ generating duration and call-count metrics from all spans.
 | Processor | Pipelines | Purpose |
 |---|---|---|
 | `gen_ai_normalizer` | Traces | Normalise OpenLLMetry spans to gen_ai.* semconv |
+| `filter/logs` | Logs | Drop DEBUG/TRACE log records (severity < INFO) to reduce Splunk ingest |
 | `resourcedetection` | All | Set `host.name` for Splunk Related Content correlation |
 | `batch` | All | Batch telemetry for efficient export |
 | `resource/splunk` | All | Add `deployment.environment` resource attribute |

@@ -1346,6 +1346,77 @@ enables:
 - **Log-to-trace navigation** -- click a `trace_id` in a log to jump
   to the trace in APM
 
+#### Log level filtering
+
+The OTel Collector includes a `filter/logs` processor that drops DEBUG
+and TRACE log records before they reach Splunk. This reduces ingest
+volume while keeping INFO, WARN, ERROR, and FATAL logs. The filter uses
+the OTTL condition `severity_number < SEVERITY_NUMBER_INFO` (severity
+number 9). The app's logger emits four levels:
+
+| Level | Severity number | Forwarded to Splunk |
+|-------|-----------------|---------------------|
+| DEBUG | 5 | No (dropped by filter) |
+| INFO | 9 | Yes |
+| WARN | 13 | Yes |
+| ERROR | 17 | Yes |
+
+To temporarily include DEBUG logs (e.g. for troubleshooting), remove
+`filter/logs` from the logs pipeline in `otel-collector-config.yaml`
+and restart the collector.
+
+#### Verifying logs in Splunk Log Observer
+
+1. Generate traffic (send a chat message or run the demo traffic script)
+2. In Splunk Observability Cloud, go to **Log Observer** (left nav)
+3. Set the time range to **Last 15 minutes**
+4. In the filter bar, add: `service.name = rag-api`
+5. You should see log records with:
+   - `severityText`: INFO, WARN, or ERROR
+   - `body`: the log message (e.g. "Chat request received",
+     "LLM completion received")
+   - `traceId` and `spanId`: populated for logs emitted inside spans
+   - `attributes`: structured data (e.g. `messageLength`, `model`,
+     `promptTokens`)
+
+If no logs appear, check:
+- The collector is running: `docker compose logs otel-collector`
+- The `SPLUNK_ACCESS_TOKEN` and `SPLUNK_REALM` env vars are set
+- The collector debug output shows log records being exported
+
+#### Trace-to-log correlation workflow
+
+**From a trace to its logs:**
+
+1. Go to **APM > Traces** and select a trace
+2. In the trace detail view, look for **Related Content** in the right
+   panel or bottom section
+3. Click **Logs** to see all log records that share the same `trace_id`
+4. The logs appear in chronological order, showing what happened at each
+   step of the request
+
+**From a log to its trace:**
+
+1. In **Log Observer**, find a log record of interest
+2. Click the `traceId` field value (it's a clickable link)
+3. Splunk navigates directly to the trace in APM, showing the full
+   request waterfall
+
+**Adding log charts to dashboards:**
+
+Log-based charts (Log Timeline, Log View) cannot be created via the
+SignalFx chart API -- they must be created through the Splunk UI:
+
+1. Go to **Log Observer** and create a query (e.g. `severity = ERROR
+   AND service.name = rag-api`)
+2. Click **Save > Save to dashboard**
+3. Choose **Log timeline** (bar chart of log volume over time) or
+   **Log view** (scrollable list of log records)
+4. Select the target dashboard and save
+
+These log charts respond to the same time picker and filters as the
+metric charts on the dashboard.
+
 ---
 
 *Last updated: 2026-09-07*

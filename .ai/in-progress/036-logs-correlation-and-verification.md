@@ -1,6 +1,6 @@
 # Plan: 036 -- Logs correlation and verification
 
-Status: **planned**
+Status: **in-progress**
 Created: 2026-09-07
 Assignee: @tom
 Epic: 025
@@ -89,15 +89,23 @@ None.
 
 ## Implementation checklist
 
-- [ ] Verify logs arrive in Splunk Log Observer (manual check)
+- [ ] Verify logs arrive in Splunk Log Observer (manual check -- user)
 - [ ] If Log Observer not available, document the limitation and skip
       dashboard charts
-- [ ] (Optional) Add filter processor to collector to drop DEBUG logs
-- [ ] Add error log count chart to dashboard (Service Overview or LLM tab)
-- [ ] Add log volume over time chart to dashboard
-- [ ] Update `docs/splunk-setup.md` with Log Observer verification steps
-- [ ] Document trace-to-log correlation workflow in Splunk
-- [ ] Run `setup-splunk-dashboard.ps1` to deploy updated charts
+- [x] Add filter/logs processor to collector to drop DEBUG logs
+  - OTTL condition: `severity_number < SEVERITY_NUMBER_INFO`
+  - Added to logs pipeline in otel-collector-config.yaml
+- [ ] Add log charts to dashboard (must be done via Splunk UI, not API)
+  - Log Timeline and Log View chart types are UI-only
+  - Documented the workflow in docs/splunk-setup.md
+- [x] Update `docs/splunk-setup.md` with Log Observer verification steps
+  - Added: log level filtering table, verification steps, trace-log
+    correlation workflow, dashboard chart instructions
+- [x] Document trace-to-log correlation workflow in Splunk
+  - Added: trace-to-log and log-to-trace navigation steps
+- [x] Update `docs/opentelemetry.md` with filter/logs processor
+- [ ] Run `setup-splunk-dashboard.ps1` to deploy updated charts (no new
+      API charts -- log charts are UI-only)
 - [ ] Run test suite (no regressions)
 
 ## Review notes

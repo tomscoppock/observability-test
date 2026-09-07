@@ -51,6 +51,15 @@ processors:
     sources:
       - name: openllmetry
 
+  # Drop DEBUG and TRACE log records before export to reduce noise and
+  # Splunk ingest volume.  Only INFO (9), WARN (13), ERROR (17), and
+  # FATAL (21) logs are forwarded.
+  filter/logs:
+    error_mode: ignore
+    logs:
+      log_record:
+        - 'severity_number < SEVERITY_NUMBER_INFO'
+
   # Detect host.name and os.type from the environment.
   # Required for Splunk Related Content (APM <-> Infrastructure correlation).
   resourcedetection:
@@ -125,5 +134,5 @@ service:
       exporters: [debug, signalfx]
     logs:
       receivers: [otlp]
-      processors: [resourcedetection, batch, resource/splunk]
+      processors: [filter/logs, resourcedetection, batch, resource/splunk]
       exporters: [debug, otlp_http/splunk_logs]
