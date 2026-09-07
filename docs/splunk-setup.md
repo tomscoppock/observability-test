@@ -794,10 +794,16 @@ A = histogram('gen_ai.client.token.usage', filter=filter('gen_ai.token.type', 'i
 B = histogram('gen_ai.client.token.usage', filter=filter('gen_ai.token.type', 'output') and filter('service.name', 'rag-api')).sum().publish(label='Output Tokens')
 ```
 
-> **Common mistake:** Using `data('gen_ai.client.token.usage', ...)`
+> **Common mistake 1:** Using `data('gen_ai.client.token.usage', ...)`
 > instead of `histogram(...)`. The `data()` function is for gauge and
 > counter metrics. OTel histograms sent via the signalfx exporter with
 > `send_otlp_histograms: true` must be queried with `histogram()`.
+>
+> **Common mistake 2:** Sending **cumulative** histograms. Splunk
+> Observability Cloud requires **delta** aggregation temporality for
+> histogram metrics -- cumulative histograms are silently dropped. Set
+> `OTEL_EXPORTER_OTLP_METRICS_TEMPORALITY_PREFERENCE=delta` on the
+> application container (already configured in `docker-compose.yml`).
 
 ---
 

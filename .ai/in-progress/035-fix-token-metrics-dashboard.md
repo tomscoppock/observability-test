@@ -14,15 +14,21 @@ The LLM and AI dashboard tab shows broken or empty token charts:
 - "Total Output Tokens" -- "A problem has occurred" error
 - "Token Usage Over Time" -- flat zero line
 
-Root cause: `gen_ai.client.token.usage` is created as an OTel **histogram**
-(via `meter.createHistogram()` in `llm.js` and `embeddings.js`), but the
-dashboard SignalFlow queries use `data()` which is for gauge/counter
-metrics. With `send_otlp_histograms: true` on the signalfx exporter,
-histograms are sent in OTLP format and must be queried with `histogram()`
-in SignalFlow.
+Root cause (two issues):
 
-The latency charts on the same tab work correctly because they already use
-`histogram('traces.span.metrics.duration', ...)`.
+1. **Wrong SignalFlow function:** `gen_ai.client.token.usage` is created as
+   an OTel **histogram** (via `meter.createHistogram()` in `llm.js` and
+   `embeddings.js`), but the dashboard queries used `data()` which is for
+   gauge/counter metrics. Fixed by switching to `histogram()`.
+
+2. **Wrong aggregation temporality:** The OTel SDK defaults to **cumulative**
+   temporality for histograms, but Splunk Observability Cloud requires
+   **delta** temporality. Cumulative histograms are silently dropped by
+   Splunk. Fixed by setting `OTEL_EXPORTER_OTLP_METRICS_TEMPORALITY_PREFERENCE=delta`
+   on the api container in `docker-compose.yml`.
+
+The latency charts on the same tab work correctly because they use
+spanmetrics connector output, which already emits delta histograms.
 
 ## Expected behaviour
 
@@ -44,8 +50,9 @@ All 3 token charts on the LLM and AI dashboard tab display live data:
 | File | Change |
 |---|---|
 | `splunk/dashboard.json` | Fix 3 token chart `programText` queries: `data()` -> `histogram()` |
+| `docker-compose.yml` | Add `OTEL_EXPORTER_OTLP_METRICS_TEMPORALITY_PREFERENCE=delta` to api service |
 | `docs/splunk-setup.md` | Update Section 16 (token usage chart tutorial) if it references `data()` |
-| `docs/opentelemetry.md` | Add note that token metrics are histograms, queried with `histogram()` |
+| `docs/opentelemetry.md` | Add note that token metrics are histograms, queried with `histogram()` + delta temporality |
 
 ## Functions / classes to add or change
 
@@ -75,10 +82,13 @@ None.
 - [x] Change "Total Output Tokens" query from `data()` to `histogram().sum()`
 - [x] Change "Token Usage Over Time" query from `data()` to `histogram().sum()`
 - [x] Run `setup-splunk-dashboard.ps1` to deploy updated charts
-- [ ] Verify all 3 token charts show data in Splunk (awaiting user test)
 - [x] Update `docs/splunk-setup.md` Section 16 -- added token usage chart tutorial
 - [x] Add histogram query note to `docs/opentelemetry.md` token metrics section
 - [x] Run test suite (63 pass, 0 fail)
+- [x] Add `OTEL_EXPORTER_OTLP_METRICS_TEMPORALITY_PREFERENCE=delta` to `docker-compose.yml`
+- [x] Document delta temporality requirement in `docs/opentelemetry.md`
+- [ ] Rebuild api container with `docker compose up -d --build api`
+- [ ] Verify all 3 token charts show data in Splunk (awaiting user test)
 
 ## Review notes
 

@@ -238,6 +238,12 @@ metrics (every 15 seconds to the OTel Collector).
 > not `data()`. The signalfx exporter sends histograms in OTLP format
 > when `send_otlp_histograms: true` is set. Example:
 > `histogram('gen_ai.client.token.usage', filter=filter('gen_ai.token.type', 'input')).sum().publish(label='Input Tokens')`
+>
+> **Temporality:** Splunk Observability Cloud requires **delta**
+> aggregation temporality for histogram metrics. The OTel SDK defaults
+> to cumulative, which Splunk drops silently. Set
+> `OTEL_EXPORTER_OTLP_METRICS_TEMPORALITY_PREFERENCE=delta` on the
+> application container (see `docker-compose.yml`).
 
 ### Error handling
 

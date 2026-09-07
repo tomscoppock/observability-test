@@ -41,6 +41,9 @@ services:
       - OTEL_EXPORTER_OTLP_ENDPOINT=${OTEL_EXPORTER_OTLP_ENDPOINT:-http://otel-collector:4318}
       - OTEL_SERVICE_NAME=${OTEL_SERVICE_NAME:-rag-api}
       - OTEL_RESOURCE_ATTRIBUTES=${OTEL_RESOURCE_ATTRIBUTES:-deployment.environment=dev}
+      # Splunk Observability requires delta temporality for histogram metrics;
+      # without this the OTel SDK emits cumulative histograms which Splunk drops.
+      - OTEL_EXPORTER_OTLP_METRICS_TEMPORALITY_PREFERENCE=delta
       - MCP_PLAYWRIGHT_URL=${MCP_PLAYWRIGHT_URL:-}
       - MCP_PLAYWRIGHT_API_KEY=${MCP_PLAYWRIGHT_API_KEY:-}
       - ADMIN_PASSWORD=${ADMIN_PASSWORD:-}
