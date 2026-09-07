@@ -333,6 +333,60 @@ for ($d = 0; $d -lt $DashCount; $d++) {
 }
 
 # ---------------------------------------------------------------------------
+# Step 4: Create or update detectors (from splunk/detectors.json)
+# ---------------------------------------------------------------------------
+$DetectorsJson = Join-Path $ProjectRoot 'splunk' 'detectors.json'
+$DetectorCount = 0
+
+if (Test-Path $DetectorsJson) {
+    $detDef = Get-Content $DetectorsJson -Raw | ConvertFrom-Json
+    $DetectorCount = $detDef.detectors.Count
+    Write-Host ''
+    Write-Host "--- Step 4: Detectors ($DetectorCount definitions) ---"
+
+    # Fetch existing detectors tagged with rag-api
+    $existingDetectors = Invoke-SplunkApi -Method GET -Endpoint '/v2/detector?limit=100&tags=rag-api'
+
+    foreach ($det in $detDef.detectors) {
+        $detName = $det.name
+
+        # Check if detector already exists
+        $existingId = $null
+        if ($existingDetectors.results) {
+            $match = $existingDetectors.results | Where-Object { $_.name -eq $detName } | Select-Object -First 1
+            if ($match) { $existingId = $match.id }
+        }
+
+        $detBody = @{
+            name        = $det.name
+            description = $det.description
+            programText = $det.programText
+            rules       = @($det.rules | ForEach-Object {
+                @{
+                    detectLabel   = $_.detectLabel
+                    severity      = $_.severity
+                    notifications = @()
+                }
+            })
+            tags        = @($det.tags)
+        } | ConvertTo-Json -Compress -Depth 4
+
+        if ($existingId) {
+            Write-Host "  Updating detector: $detName ($existingId)"
+            Invoke-SplunkApi -Method PUT -Endpoint "/v2/detector/$existingId" -Body $detBody | Out-Null
+        } else {
+            Write-Host "  Creating detector: $detName"
+            $detResponse = Invoke-SplunkApi -Method POST -Endpoint '/v2/detector' -Body $detBody
+            $detId = $detResponse.id
+            Write-Host "  Created: $detId"
+        }
+    }
+} else {
+    Write-Host ''
+    Write-Host '--- Step 4: Detectors (skipped -- no splunk/detectors.json) ---'
+}
+
+# ---------------------------------------------------------------------------
 # Done
 # ---------------------------------------------------------------------------
 Write-Host ''
@@ -343,3 +397,6 @@ Write-Host "  https://app.$SplunkRealm.signalfx.com/#/dashboard-group/$GroupId"
 Write-Host ''
 Write-Host "Dashboard group: $GroupId"
 Write-Host "Dashboards:      $DashCount"
+if (Test-Path $DetectorsJson) {
+    Write-Host "Detectors:       $DetectorCount"
+}

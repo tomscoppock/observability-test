@@ -101,12 +101,17 @@ a more thorough periodic check.
 
 | File | Change |
 |---|---|
-| `api/src/routes/chat.js` | (Option A) Add response quality score metric after LLM response |
-| `api/src/llm.js` | (Option A) Record response length as metric attribute |
-| `splunk/dashboard.json` | Add eval/quality chart(s) to LLM and AI tab |
-| `docs/splunk-setup.md` | Add section on quality monitoring and drift detection |
-| `scripts/` | (Option C) Add batch eval script with golden dataset |
-| `sample-docs/` | (Option C) Add golden Q&A dataset for eval |
+| `api/src/routes/chat.js` | Pass `responseLength` to `recordStreamUsage` |
+| `api/src/llm.js` | Record `gen_ai.client.response.length` histogram metric |
+| `splunk/dashboard.json` | Add Response Length Over Time chart to LLM and AI tab |
+| `splunk/detectors.json` | Drift detection detector definitions (response length, token, latency) |
+| `docs/splunk-setup.md` | Section 18.5: LLM drift detection detectors |
+| `docs/opentelemetry.md` | Document `gen_ai.client.response.length` metric |
+| `scripts/setup-splunk-dashboard.sh` | Step 4: automated detector creation from detectors.json |
+| `scripts/setup-splunk-dashboard.ps1` | Step 4: automated detector creation from detectors.json |
+| `scripts/run-eval.sh` | Batch eval script (golden Q&A dataset) |
+| `scripts/run-eval.ps1` | Batch eval script (PowerShell) |
+| `sample-docs/golden-qa.json` | Golden Q&A dataset (10 entries) |
 
 ## Functions / classes to add or change
 
@@ -144,8 +149,9 @@ Depends on chosen approach. For Option A (inline eval):
 - [x] Implement Option A: record response length in both `chatCompletion` and `recordStreamUsage`
 - [x] Implement Option A: pass `responseLength` from `chat.js` streaming path
 - [x] Add Response Length Over Time chart to LLM and AI dashboard tab
-- [ ] (Stretch) Design Option C: define golden Q&A dataset format
-- [ ] (Stretch) Implement Option C: batch eval script
+- [x] Design Option C: define golden Q&A dataset format (`sample-docs/golden-qa.json`)
+- [x] Implement Option C: batch eval script (`scripts/run-eval.sh`, `scripts/run-eval.ps1`)
+- [x] Implement Option D: automated detector creation via API (`splunk/detectors.json` + setup scripts)
 - [x] Document approach in `docs/splunk-setup.md` (section 18.5 drift detection)
 - [x] Document `gen_ai.client.response.length` metric in `docs/opentelemetry.md`
 - [x] Run test suite (no regressions) -- 63 pass, 0 fail

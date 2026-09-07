@@ -1,0 +1,76 @@
+{
+  "description": "Golden Q&A dataset for RAG evaluation. Each entry has a question, the expected source document, and key phrases that must appear in a correct answer.",
+  "version": "1.0",
+  "entries": [
+    {
+      "id": 1,
+      "question": "How many days of annual leave do I get?",
+      "expectedSource": "leave-policy.txt",
+      "requiredPhrases": ["25 days", "bank holiday"],
+      "description": "Basic leave entitlement question"
+    },
+    {
+      "id": 2,
+      "question": "Can I work from home on Fridays?",
+      "expectedSource": "remote-work-policy.txt",
+      "requiredPhrases": ["Friday", "remote"],
+      "description": "Remote work flexibility question"
+    },
+    {
+      "id": 3,
+      "question": "What is the limit for expense claims without a receipt?",
+      "expectedSource": "expenses-policy.txt",
+      "requiredPhrases": ["25"],
+      "description": "Expense receipt threshold question"
+    },
+    {
+      "id": 4,
+      "question": "What happens if I breach the code of conduct?",
+      "expectedSource": "code-of-conduct.txt",
+      "requiredPhrases": ["disciplinary"],
+      "description": "Code of conduct consequences question"
+    },
+    {
+      "id": 5,
+      "question": "How long do we retain personal data?",
+      "expectedSource": "data-protection-policy.txt",
+      "requiredPhrases": ["6 year", "employment"],
+      "description": "Data retention period question"
+    },
+    {
+      "id": 6,
+      "question": "Can I carry over unused leave to the next year?",
+      "expectedSource": "leave-policy.txt",
+      "requiredPhrases": ["carry"],
+      "description": "Leave carry-over policy question"
+    },
+    {
+      "id": 7,
+      "question": "What equipment does the company provide for remote workers?",
+      "expectedSource": "remote-work-policy.txt",
+      "requiredPhrases": ["equipment", "laptop"],
+      "description": "Remote work equipment question"
+    },
+    {
+      "id": 8,
+      "question": "What is the policy on gifts and hospitality?",
+      "expectedSource": "code-of-conduct.txt",
+      "requiredPhrases": ["gift"],
+      "description": "Gifts and hospitality policy question"
+    },
+    {
+      "id": 9,
+      "question": "What are the data breach notification procedures?",
+      "expectedSource": "data-protection-policy.txt",
+      "requiredPhrases": ["breach", "notification"],
+      "description": "Data breach procedures question"
+    },
+    {
+      "id": 10,
+      "question": "How do I request parental leave?",
+      "expectedSource": "leave-policy.txt",
+      "requiredPhrases": ["parental"],
+      "description": "Parental leave request question"
+    }
+  ]
+}

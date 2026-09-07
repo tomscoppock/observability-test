@@ -331,6 +331,59 @@ for d in $(seq 0 $((DASH_COUNT - 1))); do
 done
 
 # ---------------------------------------------------------------------------
+# Step 4: Create or update detectors (from splunk/detectors.json)
+# ---------------------------------------------------------------------------
+DETECTORS_JSON="$PROJECT_ROOT/splunk/detectors.json"
+
+if [ -f "$DETECTORS_JSON" ]; then
+  DETECTOR_COUNT=$(jq '.detectors | length' "$DETECTORS_JSON")
+  echo ""
+  echo "--- Step 4: Detectors ($DETECTOR_COUNT definitions) ---"
+
+  # Fetch existing detectors to check for duplicates
+  EXISTING_DETECTORS=$(api_call GET "/v2/detector?limit=100&tags=rag-api")
+
+  for i in $(seq 0 $((DETECTOR_COUNT - 1))); do
+    DET_NAME=$(jq -r ".detectors[$i].name" "$DETECTORS_JSON")
+    DET_DESC=$(jq -r ".detectors[$i].description" "$DETECTORS_JSON")
+    DET_PROGRAM=$(jq -r ".detectors[$i].programText" "$DETECTORS_JSON")
+    DET_RULES=$(jq -c ".detectors[$i].rules" "$DETECTORS_JSON")
+    DET_TAGS=$(jq -c ".detectors[$i].tags" "$DETECTORS_JSON")
+
+    # Check if detector already exists
+    EXISTING_ID=$(echo "$EXISTING_DETECTORS" | jq -r --arg name "$DET_NAME" \
+      '.results[]? | select(.name == $name) | .id' | head -1)
+
+    DET_BODY=$(jq -n \
+      --arg name "$DET_NAME" \
+      --arg desc "$DET_DESC" \
+      --arg program "$DET_PROGRAM" \
+      --argjson rules "$DET_RULES" \
+      --argjson tags "$DET_TAGS" \
+      '{
+        "name": $name,
+        "description": $desc,
+        "programText": $program,
+        "rules": $rules,
+        "tags": $tags
+      }')
+
+    if [ -n "$EXISTING_ID" ]; then
+      echo "  Updating detector: $DET_NAME ($EXISTING_ID)"
+      api_call PUT "/v2/detector/$EXISTING_ID" "$DET_BODY" >/dev/null
+    else
+      echo "  Creating detector: $DET_NAME"
+      DET_RESPONSE=$(api_call POST "/v2/detector" "$DET_BODY")
+      DET_ID=$(echo "$DET_RESPONSE" | jq -r '.id // "unknown"')
+      echo "  Created: $DET_ID"
+    fi
+  done
+else
+  echo ""
+  echo "--- Step 4: Detectors (skipped -- no splunk/detectors.json) ---"
+fi
+
+# ---------------------------------------------------------------------------
 # Done
 # ---------------------------------------------------------------------------
 echo ""
@@ -341,3 +394,6 @@ echo "  https://app.${SPLUNK_REALM}.signalfx.com/#/dashboard-group/$GROUP_ID"
 echo ""
 echo "Dashboard group: $GROUP_ID"
 echo "Dashboards:      $DASH_COUNT"
+if [ -f "$DETECTORS_JSON" ]; then
+  echo "Detectors:       $DETECTOR_COUNT"
+fi

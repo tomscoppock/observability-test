@@ -1,0 +1,43 @@
+{
+  "detectors": [
+    {
+      "name": "LLM -- Response Length Anomaly",
+      "description": "Detects sudden changes in LLM response length distribution that may indicate model drift, prompt regression, or upstream API changes.",
+      "programText": "from signalfx.detectors.against_recent import against_recent\nA = data('gen_ai.client.response.length', filter=filter('service.name', 'rag-api')).mean()\nagainst_recent.detector_mean_std(stream=A, current_window='15m', historical_window='1d', fire_num_stddev=3, clear_num_stddev=2.5, orientation='both').publish('Response Length Anomaly')",
+      "rules": [
+        {
+          "detectLabel": "Response Length Anomaly",
+          "severity": "Warning",
+          "notifications": []
+        }
+      ],
+      "tags": ["rag-api", "drift-detection", "llm"]
+    },
+    {
+      "name": "LLM -- Output Token Anomaly",
+      "description": "Detects sudden changes in output token consumption that may indicate model verbosity changes or prompt issues.",
+      "programText": "from signalfx.detectors.against_recent import against_recent\nA = data('gen_ai.client.token.count', filter=filter('gen_ai.token.type', 'output') and filter('service.name', 'rag-api')).mean()\nagainst_recent.detector_mean_std(stream=A, current_window='15m', historical_window='1d', fire_num_stddev=3, clear_num_stddev=2.5, orientation='both').publish('Output Token Anomaly')",
+      "rules": [
+        {
+          "detectLabel": "Output Token Anomaly",
+          "severity": "Warning",
+          "notifications": []
+        }
+      ],
+      "tags": ["rag-api", "drift-detection", "llm"]
+    },
+    {
+      "name": "LLM -- Latency Anomaly",
+      "description": "Detects sudden changes in LLM call latency that may indicate model swaps, API throttling, or infrastructure issues.",
+      "programText": "from signalfx.detectors.against_recent import against_recent\nA = data('traces.span.metrics.duration', filter=filter('service.name', 'rag-api') and filter('gen_ai.operation.name', 'chat'), rollup='average').mean()\nagainst_recent.detector_mean_std(stream=A, current_window='15m', historical_window='1d', fire_num_stddev=3, clear_num_stddev=2.5, orientation='above').publish('Latency Anomaly')",
+      "rules": [
+        {
+          "detectLabel": "Latency Anomaly",
+          "severity": "Warning",
+          "notifications": []
+        }
+      ],
+      "tags": ["rag-api", "drift-detection", "llm"]
+    }
+  ]
+}
