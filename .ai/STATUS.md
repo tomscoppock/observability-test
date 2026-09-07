@@ -1,6 +1,6 @@
 # Project Status
 
-Last updated: 2026-09-06
+Last updated: 2026-09-07
 
 ## Active work (per person)
 
@@ -10,10 +10,15 @@ Last updated: 2026-09-06
 | @tom | 028 -- Dashboard automation | 025 | 2026-09-04 |
 | @tom | 031 -- Demo traffic simulation script | 025 | 2026-09-04 |
 | @tom | 032 -- Dashboard 4-tab split | 025 | 2026-09-04 |
-| @tom | 033 -- Spanmetrics connector for custom span charts | 025 | 2026-09-06 |
+| @tom | 035 -- Fix token metrics dashboard | 025 | 2026-09-07 |
+| @tom | 036 -- Logs correlation and verification | 025 | 2026-09-07 |
+| @tom | 037 -- Splunk AI overview and Azure Foundry | 025 | 2026-09-07 |
+| @tom | 038 -- Evals and drift monitoring | 025 | 2026-09-07 |
+| @tom | 039 -- Populate Splunk OOTB features via standard OTel | 025 | 2026-09-07 |
 
 ## Recently completed
 
+- 033 -- Spanmetrics connector for custom span charts (@tom) -- done 2026-09-07
 - 030 -- Streaming chat with markdown rendering (@tom) -- done 2026-09-04
 - 029 -- Docker Desktop OTel automation (@tom) -- done 2026-09-04
 - Epic 025 -- Splunk demo and dashboard automation (@tom) -- in progress
@@ -21,6 +26,13 @@ Last updated: 2026-09-06
   - 027 -- Demo talk track (@tom) -- in progress
   - 028 -- Dashboard automation (@tom) -- in progress
   - 032 -- Dashboard 4-tab split (@tom) -- in progress
+  - 033 -- Spanmetrics connector (@tom) -- done 2026-09-07
+  - 035 -- Fix token metrics dashboard (@tom) -- in progress
+  - 036 -- Logs correlation and verification (@tom) -- planned
+  - 037 -- Splunk AI overview and Azure Foundry (@tom) -- planned
+  - 038 -- Evals and drift monitoring (@tom) -- planned
+  - 039 -- Populate Splunk OOTB features (@tom) -- planned
+- 034 -- Web search toggle (@tom) -- backlogged
 - 024 -- Admin tab with database management UI (@tom) -- done 2026-09-04
 - 018 -- Instrument LLM calls with gen_ai.* spans and token metrics (@tom) -- done 2026-09-04
 - 014 -- Implement web scrape endpoint using Playwright MCP (@tom) -- done 2026-09-04
@@ -62,7 +74,7 @@ Last updated: 2026-09-06
 
 ## Numbering
 
-Next free backlog/epic/task number: **034**
+Next free backlog/epic/task number: **040**
 
 <!-- Increment every time a numbered item is created in backlog/,
      in-progress/, epics/, or done/. Numbers are never reused. -->

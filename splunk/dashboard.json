@@ -114,19 +114,19 @@
           "name": "Total Input Tokens",
           "description": "Total input (prompt) tokens consumed in the current time window.",
           "chartType": "SingleValue",
-          "programText": "A = data('gen_ai.client.token.usage', filter=filter('gen_ai.token.type', 'input') and filter('service.name', 'rag-api')).sum().publish(label='Input Tokens')"
+          "programText": "A = histogram('gen_ai.client.token.usage', filter=filter('gen_ai.token.type', 'input') and filter('service.name', 'rag-api')).sum().publish(label='Input Tokens')"
         },
         {
           "name": "Total Output Tokens",
           "description": "Total output (completion) tokens consumed in the current time window.",
           "chartType": "SingleValue",
-          "programText": "A = data('gen_ai.client.token.usage', filter=filter('gen_ai.token.type', 'output') and filter('service.name', 'rag-api')).sum().publish(label='Output Tokens')"
+          "programText": "A = histogram('gen_ai.client.token.usage', filter=filter('gen_ai.token.type', 'output') and filter('service.name', 'rag-api')).sum().publish(label='Output Tokens')"
         },
         {
           "name": "Token Usage Over Time",
           "description": "Input and output token consumption over time.",
           "chartType": "Line",
-          "programText": "A = data('gen_ai.client.token.usage', filter=filter('gen_ai.token.type', 'input') and filter('service.name', 'rag-api')).sum().publish(label='Input Tokens')\nB = data('gen_ai.client.token.usage', filter=filter('gen_ai.token.type', 'output') and filter('service.name', 'rag-api')).sum().publish(label='Output Tokens')"
+          "programText": "A = histogram('gen_ai.client.token.usage', filter=filter('gen_ai.token.type', 'input') and filter('service.name', 'rag-api')).sum().publish(label='Input Tokens')\nB = histogram('gen_ai.client.token.usage', filter=filter('gen_ai.token.type', 'output') and filter('service.name', 'rag-api')).sum().publish(label='Output Tokens')"
         },
         {
           "name": "LLM Call Latency (P50/P90/P99)",

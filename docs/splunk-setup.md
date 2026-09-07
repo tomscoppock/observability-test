@@ -765,7 +765,7 @@ D = histogram('traces.span.metrics.duration', filter=filter_ and filter('gen_ai.
    - `gen_ai.request.model`
    - `gen_ai.response.finish_reason`
 
-### Custom chart (using spanmetrics duration)
+### Custom chart: LLM latency (using spanmetrics duration)
 
 With the spanmetrics connector enabled, you can chart LLM latency
 using the `duration` histogram metric:
@@ -777,6 +777,27 @@ A = histogram('traces.span.metrics.duration', filter=filter_ and filter('gen_ai.
 
 No manual Splunk UI configuration is needed -- the spanmetrics
 connector generates these metrics automatically from trace spans.
+
+### Custom chart: Token usage (using OTel SDK histogram)
+
+The app records token counts as an OTel histogram metric
+(`gen_ai.client.token.usage`) in `llm.js` and `embeddings.js`. Because
+this is a **histogram** (not a gauge or counter), you must use
+`histogram()` in SignalFlow -- not `data()`.
+
+```signalflow
+# Total input tokens (single value)
+A = histogram('gen_ai.client.token.usage', filter=filter('gen_ai.token.type', 'input') and filter('service.name', 'rag-api')).sum().publish(label='Input Tokens')
+
+# Token usage over time (line chart)
+A = histogram('gen_ai.client.token.usage', filter=filter('gen_ai.token.type', 'input') and filter('service.name', 'rag-api')).sum().publish(label='Input Tokens')
+B = histogram('gen_ai.client.token.usage', filter=filter('gen_ai.token.type', 'output') and filter('service.name', 'rag-api')).sum().publish(label='Output Tokens')
+```
+
+> **Common mistake:** Using `data('gen_ai.client.token.usage', ...)`
+> instead of `histogram(...)`. The `data()` function is for gauge and
+> counter metrics. OTel histograms sent via the signalfx exporter with
+> `send_otlp_histograms: true` must be queried with `histogram()`.
 
 ---
 
@@ -1059,7 +1080,7 @@ The signalfx exporter has `send_otlp_histograms: true` to forward the
 |---|---|---|
 | Service Overview | `histogram('service.request', ...)` | Splunk MMS (automatic) |
 | RAG Pipeline | `histogram('traces.span.metrics.duration', ...)`, `data('traces.span.metrics.calls', ...)` | Spanmetrics connector |
-| LLM and AI | `histogram('traces.span.metrics.duration', ...)`, `data('gen_ai.client.token.usage', ...)` | Spanmetrics + OTel SDK |
+| LLM and AI | `histogram('traces.span.metrics.duration', ...)`, `histogram('gen_ai.client.token.usage', ...)` | Spanmetrics + OTel SDK |
 | Infrastructure | `data('container.*')`, `data('surrealdb.*')` | Docker stats + SurrealDB |
 
 ### Optional: Custom MetricSets for Tag Spotlight

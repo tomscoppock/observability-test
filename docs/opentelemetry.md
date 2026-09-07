@@ -233,6 +233,12 @@ Each metric data point carries these attributes:
 The metrics are exported via the same OTLP pipeline as other application
 metrics (every 15 seconds to the OTel Collector).
 
+> **SignalFlow note:** Because `gen_ai.client.token.usage` is an OTel
+> **histogram**, it must be queried with `histogram()` in SignalFlow --
+> not `data()`. The signalfx exporter sends histograms in OTLP format
+> when `send_otlp_histograms: true` is set. Example:
+> `histogram('gen_ai.client.token.usage', filter=filter('gen_ai.token.type', 'input')).sum().publish(label='Input Tokens')`
+
 ### Error handling
 
 On failure, spans are marked with status code `ERROR` and include:
