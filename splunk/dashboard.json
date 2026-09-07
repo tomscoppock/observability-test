@@ -111,14 +111,32 @@
       "description": "Token usage, model latency, and AI cost metrics. Latency charts use spanmetrics connector duration metric.",
       "charts": [
         {
+          "name": "LLM Provider",
+          "description": "Active LLM provider name (from gen_ai.provider.name span attribute).",
+          "chartType": "List",
+          "programText": "A = data('traces.span.metrics.calls', filter=filter('service.name', 'rag-api') and filter('deployment.environment', 'dev') and filter('gen_ai.operation.name', 'chat')).sum(by=['gen_ai.provider.name']).publish(label='LLM Provider')"
+        },
+        {
+          "name": "LLM Model",
+          "description": "Active LLM chat model (from gen_ai.request.model span attribute).",
+          "chartType": "List",
+          "programText": "A = data('traces.span.metrics.calls', filter=filter('service.name', 'rag-api') and filter('deployment.environment', 'dev') and filter('gen_ai.operation.name', 'chat')).sum(by=['gen_ai.request.model']).publish(label='LLM Model')"
+        },
+        {
+          "name": "Embedding Model",
+          "description": "Active embedding model (from gen_ai.request.model span attribute).",
+          "chartType": "List",
+          "programText": "A = data('traces.span.metrics.calls', filter=filter('service.name', 'rag-api') and filter('deployment.environment', 'dev') and filter('gen_ai.operation.name', 'embeddings')).sum(by=['gen_ai.request.model']).publish(label='Embedding Model')"
+        },
+        {
           "name": "Total Input Tokens",
-          "description": "Cumulative input (prompt) tokens. Uses the histogram count rolled up as sum, then summed over a 4h window to show the running total.",
+          "description": "Cumulative input (prompt) tokens over a 4h rolling window. After creating, switch to Dashboard Window in the chart builder UI to tie to the time picker.",
           "chartType": "SingleValue",
           "programText": "A = data('gen_ai.client.token.count', filter=filter('gen_ai.token.type', 'input') and filter('service.name', 'rag-api'), rollup='delta').sum().sum(over='4h').publish(label='Input Tokens')"
         },
         {
           "name": "Total Output Tokens",
-          "description": "Cumulative output (completion) tokens. Uses the histogram count rolled up as sum, then summed over a 4h window to show the running total.",
+          "description": "Cumulative output (completion) tokens over a 4h rolling window. After creating, switch to Dashboard Window in the chart builder UI to tie to the time picker.",
           "chartType": "SingleValue",
           "programText": "A = data('gen_ai.client.token.count', filter=filter('gen_ai.token.type', 'output') and filter('service.name', 'rag-api'), rollup='delta').sum().sum(over='4h').publish(label='Output Tokens')"
         },
