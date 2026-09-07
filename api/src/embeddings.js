@@ -40,6 +40,13 @@ const tokenUsageHistogram = meter.createHistogram('gen_ai.client.token.usage', {
   unit: '{token}',
 });
 
+// Counter companion -- simpler metric type that works reliably with
+// data() in SignalFlow and any backend. Records the same token values.
+const tokenCounter = meter.createCounter('gen_ai.client.token.count', {
+  description: 'Total number of tokens consumed (counter)',
+  unit: '{token}',
+});
+
 /**
  * Generate embeddings for an array of texts.
  *
@@ -118,13 +125,15 @@ async function embedTexts(texts) {
 
       // Record token usage as OTel metrics
       if (inputTokens > 0) {
-        tokenUsageHistogram.record(inputTokens, {
+        const metricAttrs = {
           'gen_ai.operation.name': 'embeddings',
           'gen_ai.provider.name': provider,
           'gen_ai.request.model': model,
           'gen_ai.response.model': data.model || model,
           'gen_ai.token.type': 'input',
-        });
+        };
+        tokenUsageHistogram.record(inputTokens, metricAttrs);
+        tokenCounter.add(inputTokens, metricAttrs);
       }
 
       logger.info('Embeddings generated', {

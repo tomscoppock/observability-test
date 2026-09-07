@@ -39,6 +39,13 @@ const tokenUsageHistogram = meter.createHistogram('gen_ai.client.token.usage', {
   unit: '{token}',
 });
 
+// Counter companion -- simpler metric type that works reliably with
+// data() in SignalFlow and any backend. Records the same token values.
+const tokenCounter = meter.createCounter('gen_ai.client.token.count', {
+  description: 'Total number of tokens consumed (counter)',
+  unit: '{token}',
+});
+
 /**
  * Send a chat completion request to the LLM.
  *
@@ -125,7 +132,15 @@ async function chatCompletion(messages) {
         ...metricAttrs,
         'gen_ai.token.type': 'input',
       });
+      tokenCounter.add(promptTokens, {
+        ...metricAttrs,
+        'gen_ai.token.type': 'input',
+      });
       tokenUsageHistogram.record(completionTokens, {
+        ...metricAttrs,
+        'gen_ai.token.type': 'output',
+      });
+      tokenCounter.add(completionTokens, {
         ...metricAttrs,
         'gen_ai.token.type': 'output',
       });
@@ -256,7 +271,15 @@ function recordStreamUsage(span, opts) {
     ...metricAttrs,
     'gen_ai.token.type': 'input',
   });
+  tokenCounter.add(opts.promptTokens, {
+    ...metricAttrs,
+    'gen_ai.token.type': 'input',
+  });
   tokenUsageHistogram.record(opts.completionTokens, {
+    ...metricAttrs,
+    'gen_ai.token.type': 'output',
+  });
+  tokenCounter.add(opts.completionTokens, {
     ...metricAttrs,
     'gen_ai.token.type': 'output',
   });

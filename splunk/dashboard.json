@@ -114,19 +114,31 @@
           "name": "Total Input Tokens",
           "description": "Total input (prompt) tokens consumed in the current time window.",
           "chartType": "SingleValue",
-          "programText": "A = histogram('gen_ai.client.token.usage', filter=filter('gen_ai.token.type', 'input') and filter('service.name', 'rag-api')).sum().publish(label='Input Tokens')"
+          "programText": "A = data('gen_ai.client.token.count', filter=filter('gen_ai.token.type', 'input') and filter('service.name', 'rag-api')).sum().publish(label='Input Tokens')"
         },
         {
           "name": "Total Output Tokens",
           "description": "Total output (completion) tokens consumed in the current time window.",
           "chartType": "SingleValue",
-          "programText": "A = histogram('gen_ai.client.token.usage', filter=filter('gen_ai.token.type', 'output') and filter('service.name', 'rag-api')).sum().publish(label='Output Tokens')"
+          "programText": "A = data('gen_ai.client.token.count', filter=filter('gen_ai.token.type', 'output') and filter('service.name', 'rag-api')).sum().publish(label='Output Tokens')"
         },
         {
           "name": "Token Usage Over Time",
-          "description": "Input and output token consumption over time.",
+          "description": "Input and output token consumption over time (all operations).",
           "chartType": "Line",
-          "programText": "A = histogram('gen_ai.client.token.usage', filter=filter('gen_ai.token.type', 'input') and filter('service.name', 'rag-api')).sum().publish(label='Input Tokens')\nB = histogram('gen_ai.client.token.usage', filter=filter('gen_ai.token.type', 'output') and filter('service.name', 'rag-api')).sum().publish(label='Output Tokens')"
+          "programText": "A = data('gen_ai.client.token.count', filter=filter('gen_ai.token.type', 'input') and filter('service.name', 'rag-api')).sum().publish(label='Input Tokens')\nB = data('gen_ai.client.token.count', filter=filter('gen_ai.token.type', 'output') and filter('service.name', 'rag-api')).sum().publish(label='Output Tokens')"
+        },
+        {
+          "name": "LLM Tokens Over Time",
+          "description": "LLM chat completion token consumption (input and output) over time.",
+          "chartType": "Line",
+          "programText": "A = data('gen_ai.client.token.count', filter=filter('gen_ai.token.type', 'input') and filter('gen_ai.operation.name', 'chat') and filter('service.name', 'rag-api')).sum().publish(label='Input Tokens')\nB = data('gen_ai.client.token.count', filter=filter('gen_ai.token.type', 'output') and filter('gen_ai.operation.name', 'chat') and filter('service.name', 'rag-api')).sum().publish(label='Output Tokens')"
+        },
+        {
+          "name": "Embedding Tokens Over Time",
+          "description": "Embedding API token consumption (input only) over time.",
+          "chartType": "Line",
+          "programText": "A = data('gen_ai.client.token.count', filter=filter('gen_ai.token.type', 'input') and filter('gen_ai.operation.name', 'embeddings') and filter('service.name', 'rag-api')).sum().publish(label='Input Tokens')"
         },
         {
           "name": "LLM Call Latency (P50/P90/P99)",
