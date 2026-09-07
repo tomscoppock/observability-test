@@ -225,6 +225,7 @@ for d in $(seq 0 $((DASH_COUNT - 1))); do
       Line)        PLOT_TYPE="TimeSeriesChart" ;;
       Area)        PLOT_TYPE="TimeSeriesChart"; DEFAULT_PLOT_TYPE="AreaChart" ;;
       List)        PLOT_TYPE="List" ;;
+      Table)       PLOT_TYPE="TableChart" ;;
       SingleValue) PLOT_TYPE="SingleValue" ;;
     esac
 

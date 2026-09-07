@@ -256,6 +256,7 @@ for ($d = 0; $d -lt $DashCount; $d++) {
             'Line'        { 'TimeSeriesChart' }
             'Area'        { 'TimeSeriesChart' }
             'List'        { 'List' }
+            'Table'       { 'TableChart' }
             'SingleValue' { 'SingleValue' }
             default       { 'TimeSeriesChart' }
         }

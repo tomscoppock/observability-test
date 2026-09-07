@@ -113,13 +113,13 @@
         {
           "name": "LLM Provider and Model",
           "description": "Active LLM provider and chat model with call counts. Uses spanmetrics calls metric grouped by provider and model.",
-          "chartType": "List",
+          "chartType": "Table",
           "programText": "A = data('traces.span.metrics.calls', filter=filter('service.name', 'rag-api') and filter('deployment.environment', 'dev') and filter('gen_ai.operation.name', 'chat')).sum(by=['gen_ai.provider.name', 'gen_ai.request.model']).publish(label='LLM Calls')"
         },
         {
           "name": "Embedding Model",
           "description": "Active embedding model with call counts. Uses spanmetrics calls metric grouped by model.",
-          "chartType": "List",
+          "chartType": "Table",
           "programText": "A = data('traces.span.metrics.calls', filter=filter('service.name', 'rag-api') and filter('deployment.environment', 'dev') and filter('gen_ai.operation.name', 'embeddings')).sum(by=['gen_ai.provider.name', 'gen_ai.request.model']).publish(label='Embedding Calls')"
         },
         {
