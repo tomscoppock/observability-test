@@ -112,7 +112,12 @@ When this is done:
 - [x] Create `splunk/dashboard.json` with all 14 chart definitions
 - [x] Create `scripts/setup-splunk-dashboard.sh` (bash)
 - [x] Create `scripts/setup-splunk-dashboard.ps1` (PowerShell)
-- [ ] Test the script against a live Splunk Observability Cloud instance
+- [x] Test the script against a live Splunk Observability Cloud instance
+      -- run successfully against the eu2 org: 4 dashboards and 3
+      detectors created/updated, idempotent on re-run. Note it requires
+      `SPLUNK_ACCESS_TOKEN` to carry the **API** scope with the `power`
+      role, in addition to Ingest for the collector (see
+      docs/configuration.md).
       (deferred -- requires live credentials; script structure verified)
 - [x] Add automation section to `docs/splunk-setup.md`
 - [x] Cross-reference chart names against task 027 talk track

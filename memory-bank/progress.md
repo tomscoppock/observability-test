@@ -16,22 +16,37 @@ Last refreshed: 2026-08-18
 
 ## Left to do
 
-> Refreshed 2026-09-07. Epics 001-005 and tasks 006-035 are done; see
-> `.ai/STATUS.md` and `.ai/done/` for the authoritative trail.
+> Refreshed 2026-09-08. **Epic 025 is closed and `.ai/in-progress/` is
+> empty.** Epics 001-005 and tasks 006-039 are done; see `.ai/STATUS.md`
+> and `.ai/done/` for the authoritative trail.
 
-- Task 036 (logs correlation): HEC ingestion into Splunk Cloud Platform
-  is working and verified. Remaining: user confirms the app's own log
-  records are searchable (`index=main sourcetype=otel`), then ship.
-- Task 037: 3 items remain (Azure Foundry OTLP research is a stretch
-  goal, and blocked architecturally -- the collector is not publicly
-  reachable from Azure in a Docker-only setup).
-- Task 038: 2 stretch items deferred (golden Q&A dataset, batch eval
-  script).
-- Task 039: remaining items are Splunk-side UI verification. Its Log
-  Observer conclusion was corrected on 2026-09-07.
-- Blocked, needs a licensing decision: Log Observer Connect (trace-to-log
-  correlation in Observability Cloud) requires a licensed non-trial
-  Splunk Cloud Platform or Splunk Enterprise instance.
+- **040 (backlog, high)** -- the only substantive item left. A
+  coding-agent prompt applying this spike's OTel and Splunk learnings to
+  the Knowledge Discovery agent: MCP discoverability, token consumption,
+  SurrealDB infrastructure monitoring, APM/latency analysis. Prompt
+  written; needs review against that repo and a Plan Mode run there.
+- **034 (backlog, low)** -- web search toggle. Unrelated to
+  observability.
+- Optional follow-up, not tracked as a task: no test covers the OTel SDK
+  wiring in `instrumentation.js`. The positional-argument bug that
+  dropped 100% of logs was invisible to all 63 tests because they mock
+  the logger provider. A meaningful test would be integration-level
+  against a real or fake OTLP endpoint.
+
+### Capability boundaries (not bugs, do not re-investigate)
+
+Both established empirically and documented in `docs/splunk-setup.md`
+Section 26, and covered in the demo talk track Section 7:
+
+- **Log Observer Connect** needs a licensed non-trial Splunk platform.
+  Logs DO reach Splunk Cloud Platform via HEC and are searchable there
+  with `trace_id`/`span_id`; only the single-pane view in Observability
+  Cloud is missing. A licence fixes it with no code changes.
+- **APM AI Agent Monitoring and Splunk-side evals** are unreachable from
+  Node.js: Splunk's instrumentation is Python-only, and the screens key
+  off `invoke_agent`/`invoke_workflow` semantics. Evals additionally need
+  a platform licence and prompt/response capture, which is a PII/data
+  protection decision. A licence alone would NOT unlock these.
 
 ## Known issues
 

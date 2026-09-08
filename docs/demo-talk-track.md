@@ -365,6 +365,65 @@ gate."
 
 ---
 
+## Section 7: Boundaries -- what this stack does not do (~1.5 minutes)
+
+> **Why this section exists:** it is more credible to name the edges of
+> the demo than to let a knowledgeable viewer notice them first. Every
+> item below was established empirically, not assumed. Full detail in
+> [splunk-setup.md Section 26](splunk-setup.md#26-what-works-on-free--trial-accounts-and-what-does-not).
+
+**[SHOW]** Stay on the Service Overview tab. Nothing to click here; this
+is a spoken section.
+
+**[SAY]** "Before I close, I want to be straight about where the edges
+of this are, because three things you might expect to see are
+deliberately not here."
+
+**[SAY]** "**First, log correlation.** Our logs do reach Splunk, and
+they carry trace and span IDs, so the correlation data is genuinely
+there. But they land in Splunk Cloud Platform, not Observability Cloud.
+Splunk deprecated the old native Log Observer in January 2024. The
+replacement, Log Observer Connect, reads logs in place from a Splunk
+platform instance rather than storing a copy, and it requires a licensed
+non-trial platform. So today you search logs in Splunk Web and traces in
+APM. On a licensed account those become one pane, and no code changes
+would be needed. The pipeline is already correct."
+
+**[SAY]** "**Second, AI Agent Monitoring.** Splunk has a dedicated set
+of AI agent screens, and Cisco is extending them further through the
+Galileo acquisition announced in April. They stay empty for us for two
+honest reasons: the documented instrumentation is Python-only, and this
+is a Node.js application. And those screens key off agent and workflow
+span semantics, `invoke_agent` and `invoke_workflow`, where we emit
+`chat` and `embeddings`. That is a data model difference, not a
+misconfiguration."
+
+**[SAY]** "**Third, Splunk-side quality evals.** Splunk can score
+responses for hallucination, relevance, toxicity and bias. That needs a
+platform licence, and it needs prompt and response content shipped to
+Splunk. For a RAG agent over internal documents, that is a data
+protection decision rather than a config change, so it is out of scope
+here by choice, not by accident."
+
+**[HIGHLIGHT]** "What we do have is a local eval harness, running a
+golden question set against the live agent, plus drift detectors on
+token count, response length and latency. That covers regression and
+drift without sending a single prompt off the stack."
+
+**[SAY]** "None of this is a limitation of OpenTelemetry. Every one of
+those gaps is a vendor entitlement or a language support boundary, and
+because the collector is upstream OpenTelemetry rather than a vendor
+distribution, the same telemetry would flow to Azure Monitor or Grafana
+without touching the application."
+
+> **Note for presenter:** if asked "so would paying fix it?", the honest
+> answer is that a licensed Splunk platform fixes log correlation
+> immediately with no code change, and the AI agent screens would still
+> need Python instrumentation plus agent/workflow span semantics. Do not
+> promise the AI screens on a licence upgrade alone.
+
+---
+
 ## Closing (~30 seconds)
 
 **[SHOW]** Return to the **Service Overview** tab for a final summary.

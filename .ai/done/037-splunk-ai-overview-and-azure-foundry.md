@@ -1,6 +1,6 @@
 # Plan: 037 -- Splunk AI overview and Azure Foundry monitoring
 
-Status: **in-progress**
+Status: **done** (2026-09-08)
 Created: 2026-09-07
 Assignee: @tom
 Epic: 025
@@ -124,12 +124,28 @@ This task requires investigation before coding. The research phase should:
     gen_ai.usage.prompt_tokens, gen_ai.usage.completion_tokens (OpenAI aliases)
 - [x] (If needed) Configure Custom MetricSets in Splunk for `gen_ai.*`
   - Done in 039: documented step-by-step APM MetricSet indexing in docs/splunk-setup.md
-- [ ] Research Azure Foundry OTLP export capabilities (deferred -- stretch goal)
+- [x] Research Azure Foundry OTLP export capabilities -- **descoped**.
+      Architecturally blocked: Azure Foundry would need to reach the
+      collector, which is not publicly reachable in a Docker-only setup.
+      Would require a public endpoint or VPN. Not pursued.
 - [x] Document findings and configuration in `docs/splunk-setup.md`
   - Done in 039: Section 25 expanded with full attribute table and setup steps
-- [ ] Update `docs/opentelemetry.md` with Azure Foundry section (deferred)
+- [x] Update `docs/opentelemetry.md` with Azure Foundry section --
+      **descoped** along with the research item above.
 - [x] Run test suite (no regressions) -- 63 pass, 0 fail
-- [ ] Verify Splunk AI overview shows live data (pending user rebuild)
+- [x] Verify Splunk AI overview shows live data -- **not achievable on
+      this stack**, established 2026-09-08. Splunk's AI Agent Monitoring
+      instrumentation is documented for Python only
+      (`splunk-otel-util-genai`); no Node.js path exists. The screens
+      also key off `invoke_agent` / `invoke_workflow` / `execute_tool`
+      span semantics, whereas this app emits `chat` and `embeddings`, so
+      no agent or workflow entities exist to display. This is a product
+      language-support and data-model boundary, not a misconfiguration.
+      The underlying `gen_ai.*` data is confirmed correct and does
+      populate APM traces, Tag Spotlight and our own dashboards. Splunk's
+      AI Agent Monitoring predates the Galileo acquisition (Cisco,
+      announced 2026-04-09), which extends rather than enables it. See
+      docs/splunk-setup.md Section 26.
 
 ## Review notes
 

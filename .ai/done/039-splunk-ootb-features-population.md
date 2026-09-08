@@ -1,6 +1,6 @@
 # Plan: 039 -- Populate Splunk OOTB features via standard OTel
 
-Status: **in-progress**
+Status: **done** (2026-09-08)
 Created: 2026-09-07
 Assignee: @tom
 Epic: 025
@@ -182,14 +182,35 @@ None expected. All changes should be configuration-level.
   - Added gen_ai.request.input_count to chatCompletion and chatCompletionStream
   - All 14 dashboard-expected attributes now emitted with values
 - [x] Re-run test suite after attribute fixes (63 pass, 0 fail)
-- [ ] Final audit: user verifies OOTB features in Splunk UI
-  - [ ] Enable AI Agent Monitoring in Splunk Settings
-  - [ ] Index gen_ai.* tags in APM MetricSets for Tag Spotlight
-  - [ ] Verify Infrastructure views show host + container metrics
-  - [ ] Verify Log Observer Connect shows correlated logs (blocked --
-        needs a licensed non-trial Splunk Cloud Platform/Enterprise
-        instance; logs themselves now confirmed landing in Splunk Cloud
-        Platform via HEC, see 036)
+- [x] Final audit: user verified OOTB features in Splunk UI (2026-09-08)
+  - [x] Enable AI Agent Monitoring in Splunk Settings -- LLM Providers
+        integration confirmed active. Note the AI Agent Monitoring
+        *screens* remain empty for reasons outside this task's control:
+        Python-only instrumentation and agent/workflow span semantics.
+        See 037 and docs/splunk-setup.md Section 26.
+  - [x] Index gen_ai.* tags in APM MetricSets for Tag Spotlight -- five
+        Custom MetricSets active: `gen_ai.operation.name` (rag-api),
+        `gen_ai.request.model`, `gen_ai.provider.name`,
+        `gen_ai.usage.completion_tokens`, `db.system` (all services),
+        plus one combined MMS. These are TMS (Tag Spotlight); dashboards
+        do not depend on them, they read spanmetrics dimensions directly.
+  - [x] Verify Infrastructure views show host + container metrics --
+        confirmed via the metrics API: `system.cpu.time` (32 timeseries),
+        `system.memory.usage` (24), `system.network.io` (16),
+        `container.cpu.usage.total` (28), `surrealdb.process.memory` (4).
+        Two notes: `system.cpu.utilization` is opt-in on the hostmetrics
+        cpu scraper so it reports nothing by default, and
+        `system.filesystem.usage` is empty because the collector runs in
+        a container without a `/hostfs` mount.
+  - [x] Verify Log Observer Connect shows correlated logs --
+        **descoped, unreachable on this account.** Three independent
+        gates: not offered on Cloud Platform trials, its IP allow list is
+        configured via a support case, and trials cannot open support
+        cases. Logs themselves are confirmed landing in Splunk Cloud
+        Platform via HEC with `trace_id`/`span_id` attached and are fully
+        searchable there (see 036), so the correlation *data* exists; only
+        the single-pane view inside Observability Cloud is unavailable.
+        Carried as a blocker in STATUS.md for a licensed instance.
 
 ## Review notes
 

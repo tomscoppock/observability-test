@@ -8,8 +8,28 @@ Last refreshed: 2026-09-07
 
 ## Current focus
 
-Epic 025 (Splunk demo and dashboard automation). Active: tasks 027, 028,
-036, 037, 038, 039.
+**Epic 025 (Splunk demo and dashboard automation) closed 2026-09-08.**
+Tasks 027, 028, 036, 037, 038 and 039 are all in `.ai/done/`. Nothing is
+in `.ai/in-progress/`.
+
+Next up is **040** (backlog, high): the capstone item. A ready-to-paste
+coding-agent prompt that carries this spike's learnings into the
+Knowledge Discovery agent repo, covering MCP discoverability, token
+consumption, SurrealDB infrastructure monitoring, and APM/latency
+analysis. The prompt is already written in the task file; it needs review
+against that repo's actual stack and then a run in Plan Mode there. The
+most valuable part is its "Non-obvious traps" section, since every trap
+listed was a silent failure where the system looked healthy while
+emitting nothing.
+
+Two capability boundaries were established empirically and are now
+documented in `docs/splunk-setup.md` Section 26 and covered explicitly in
+the demo talk track Section 7: Log Observer Connect needs a licensed
+non-trial Splunk platform, and APM AI Agent Monitoring plus Splunk-side
+evals are unreachable from Node.js (Python-only instrumentation, plus
+agent/workflow span semantics this app does not emit).
+
+### Historical note (task 036, 2026-09-07/08)
 
 Task 036 (logs correlation) took a significant turn today. Two root
 causes were found behind "no logs anywhere in Splunk":

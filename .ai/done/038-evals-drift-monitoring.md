@@ -1,6 +1,6 @@
 # Plan: 038 -- Evals and drift monitoring
 
-Status: **in-progress**
+Status: **done** (2026-09-08)
 Created: 2026-09-07
 Assignee: @tom
 Epic: 025

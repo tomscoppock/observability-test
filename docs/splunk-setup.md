@@ -1732,4 +1732,58 @@ metric charts on the dashboard.
 
 ---
 
-*Last updated: 2026-09-07*
+## 26. What works on free / trial accounts (and what does not)
+
+Established empirically across 2026-09-07 and 2026-09-08 on a **Splunk
+Observability Cloud free edition** org plus a **Splunk Cloud Platform
+trial**. Recorded here because several of these look like configuration
+problems and are actually entitlement or product-support boundaries, and
+each one cost real time to establish.
+
+### Works
+
+| Capability | Notes |
+|---|---|
+| APM: traces, service map, Trace Analyzer | Full fidelity. SurrealDB and LLM providers appear as inferred services |
+| Infrastructure Monitoring | Host and container metrics via the `hostmetrics` and `docker_stats` receivers |
+| Custom dashboards and charts via REST API | `scripts/setup-splunk-dashboard.*`, using `/v2/dashboard`, `/v2/chart` |
+| Detectors / alerting via REST API | Three LLM drift detectors, see Section 18.5 |
+| Tag Spotlight | Requires TMS MetricSets to be indexed manually, see Section 25 |
+| `gen_ai.*` span attributes | All 14 visible on spans in APM |
+| Token and response-length metrics | Via OTel SDK histograms plus the `spanmetrics` connector |
+| Related Content (APM to Infrastructure) | Needs the `resourcedetection` processor for `host.name` |
+| **Logs into Splunk Cloud Platform via HEC** | Ingested and fully searchable in Splunk Web (`index=main sourcetype=otel`), with `trace_id` and `span_id` attached |
+
+### Does not work, and why
+
+| Capability | Blocker | Type |
+|---|---|---|
+| **Log Observer Connect** (logs correlated inside Observability Cloud) | Not offered on Cloud Platform trials; its IP allow list is configured via a support case; trials cannot open support cases | Entitlement, three independent gates |
+| **APM > AI Agent Monitoring** | Documented instrumentation is Python-only (`splunk-otel-util-genai`); no Node.js path exists. Also expects `invoke_agent` / `invoke_workflow` / `execute_tool` span semantics, whereas this app emits `chat` and `embeddings` | Product language support + data model |
+| **Splunk-side instrumentation evals** (bias, hallucination, relevance, sentiment, toxicity) | Requires a Splunk Enterprise or Cloud Platform licence to store conversation data, plus message content capture | Entitlement + privacy |
+| **Support cases** | Trial accounts cannot open them, which also blocks reporting the DNS gap below | Entitlement |
+| **ACS API for HEC token automation** | Admin Config Service is unsupported on single-instance deployments, which most trials are | Deployment topology |
+| **`http-inputs-<stack>.splunkcloud.com` HEC endpoint** | DNS records were never provisioned for this stack, despite the TLS cert covering those names. Workaround is the main hostname on port 8088 with `SPLUNK_HEC_INSECURE_SKIP_VERIFY=true` | Splunk-side provisioning gap |
+
+### Privacy note on Splunk-side evals
+
+Enabling `OTEL_INSTRUMENTATION_GENAI_CAPTURE_MESSAGE_CONTENT` sends
+actual prompts and completions to Splunk, and Splunk's own documentation
+warns that captured content contains PII. For a RAG agent answering
+questions over ingested documents, that means document content and user
+queries leave the stack. **Treat this as a data protection review for
+Legal and Compliance, not a configuration toggle.** It is out of scope
+for this project.
+
+### What this means in practice
+
+The stack demonstrates full-fidelity traces, metrics, infrastructure
+monitoring, LLM token economics, dashboards and alerting on a free
+account, with logs searchable in Splunk Cloud Platform. The two things a
+licensed account would add are **single-pane trace-to-log correlation**
+and **the AI Agent Monitoring / eval surfaces** (the latter also
+requiring Python instrumentation).
+
+---
+
+*Last updated: 2026-09-08*
