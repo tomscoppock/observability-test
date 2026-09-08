@@ -139,8 +139,36 @@ docker compose up -d --force-recreate otel-collector
 ```
 
 See [Docker Commands > Apply changed .env values](docker-commands.md#apply-changed-env-values-after-rotating-a-token)
-for the full explanation, including why the replacement token needs both
-INGEST and API scopes.
+for the full explanation.
+
+**Two traps to check, both of which produce exactly this symptom:**
+
+1. **The token needs both Ingest and API scopes.** The collector ingests
+   with it; `setup-splunk-dashboard.*` calls the management API with it.
+   Splunk warns when you enable both. That warning is expected here and
+   should be overridden. An API-only token makes the dashboard script
+   work while the collector 401s on every datapoint.
+2. **Your shell may be overriding `.env`.** Docker Compose gives shell
+   environment variables precedence over `.env`, and the setup scripts
+   set `SPLUNK_*` as process-scoped variables that outlive the script. So
+   a terminal that has run those scripts keeps injecting the old values
+   into every later `docker compose up`, and `--force-recreate` cannot
+   help because Compose is faithfully applying what the shell told it.
+   **Open a new terminal** before re-running, or clear them:
+
+   ```powershell
+   Remove-Item Env:SPLUNK_ACCESS_TOKEN, Env:SPLUNK_HEC_URL, Env:SPLUNK_HEC_TOKEN `
+     -ErrorAction SilentlyContinue
+   ```
+
+To see what `.env` actually resolves to, independent of your shell, run
+`docker compose config` from a terminal that has never run the scripts
+and compare against what the container really received:
+
+```bash
+docker inspect observability-test-otel-collector-1 \
+  --format '{{range .Config.Env}}{{println .}}{{end}}' | grep SPLUNK_
+```
 
 Note that logs are unaffected by this, because they authenticate
 separately with `SPLUNK_HEC_TOKEN` against Splunk Cloud Platform. Logs

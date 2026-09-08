@@ -58,8 +58,24 @@ are needed -- just set the correct base URL format (see
 
 | Variable | Default | Description |
 |---|---|---|
-| `SPLUNK_ACCESS_TOKEN` | (empty) | Splunk ingest token |
-| `SPLUNK_REALM` | `us1` | Splunk realm (us0, us1, eu0, etc.) |
+| `SPLUNK_ACCESS_TOKEN` | (empty) | Splunk token. **Needs BOTH Ingest and API scopes** -- see below |
+| `SPLUNK_REALM` | `us1` | Splunk realm (us0, us1, eu0, eu2, etc.) |
+
+**`SPLUNK_ACCESS_TOKEN` does two jobs, so it needs two scopes.** The OTel
+Collector uses it to *ingest* traces and metrics, and
+`scripts/setup-splunk-dashboard.*` uses it against the *management API*
+to create dashboards, charts and detectors. When creating the token,
+enable **both Ingest and API**. Splunk shows a warning when you combine
+them; that warning is expected here and can be overridden.
+
+With only API, the dashboard script works while the collector silently
+401s on `/v2/datapoint` and drops every span and datapoint. With only
+Ingest, the reverse. For the API side, the `power` role is what grants
+write access to dashboards and detectors.
+
+If you would rather not combine scopes, split them into two tokens and
+point the collector and the script at different variables. This project
+uses one token for simplicity.
 
 The collector derives the ingest endpoint from `SPLUNK_REALM` directly --
 there is no separate `SPLUNK_INGEST_URL` variable.
