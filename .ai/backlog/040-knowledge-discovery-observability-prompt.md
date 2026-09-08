@@ -28,8 +28,19 @@ prompt below, not code in this repo.
 
 ## Notes
 
-Every code block in the prompt is copied from working, verified code in
-this repo, not written from memory. Versions are the ones actually in
+The same material now also lives as project documentation in
+[`docs/implementation-playbook.md`](../../docs/implementation-playbook.md),
+which is the canonical reference for this repo and is linked from the
+docs index, README, `opentelemetry.md`, `splunk-setup.md` and
+`architecture.md`.
+
+**The duplication is deliberate.** The prompt below must stay
+self-contained, because it gets pasted into a different repository where
+these docs do not exist. If you change one, change both; the playbook is
+the version to edit first.
+
+Every code block is copied from working, verified code in this repo, not
+written from memory. Versions are the ones actually in
 `api/package.json` and proven against Splunk on 2026-09-08.
 
 Source material: `api/src/instrumentation.js`, `api/src/logger.js`,

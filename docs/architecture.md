@@ -1,5 +1,9 @@
 # Architecture
 
+> For the transferable version of this design, including the traps that
+> make it hard to rebuild, see the
+> [Implementation Playbook](implementation-playbook.md).
+
 ## System overview
 
 ```

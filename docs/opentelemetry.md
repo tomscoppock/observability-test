@@ -1,5 +1,10 @@
 # OpenTelemetry
 
+> Rebuilding this in another project? Read the
+> [Implementation Playbook](implementation-playbook.md) first. It carries
+> the transferable patterns plus 13 silent-failure traps, including one
+> that discarded 100% of logs while all tests passed.
+
 ## Overview
 
 This project uses OpenTelemetry (OTel) to collect and export traces,

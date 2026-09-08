@@ -12,6 +12,7 @@ Comprehensive guides for the Observability Test project.
 | [Configuration](configuration.md) | Environment variables and how to swap providers |
 | [Architecture](architecture.md) | System design, service topology, data flow |
 | [OpenTelemetry](opentelemetry.md) | OTel SDK setup, collector config, instrumentation |
+| [Implementation Playbook](implementation-playbook.md) | **Start here to rebuild this elsewhere.** Transferable OTel-to-Splunk know-how, and the 13 silent-failure traps |
 | [Docker Desktop OTel](docker-desktop-otel.md) | Send Docker Desktop telemetry to the OTel Collector |
 | [Splunk Setup](splunk-setup.md) | Dashboards, alerts, and monitoring in Splunk Observability Cloud |
 | [Demo Talk Track](demo-talk-track.md) | Scripted ~12 min demo walkthrough for the Splunk dashboard |

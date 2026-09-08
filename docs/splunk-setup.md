@@ -6,6 +6,12 @@ Observability Cloud for the observability-test RAG Agent stack.
 > **Prerequisite:** The OTel Collector must be exporting data to Splunk.
 > Check **APM > Overview** for the `rag-api` service. If missing, see
 > [opentelemetry.md](opentelemetry.md).
+>
+> **Setting this up from scratch, or in another project?** The
+> [Implementation Playbook](implementation-playbook.md) collects the
+> token-scope, HEC and MetricSet pitfalls in one place, along with the
+> other silent-failure traps. Section 26 below covers what free and
+> trial accounts cannot do at all.
 
 ---
 

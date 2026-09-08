@@ -71,8 +71,17 @@ Last updated: 2026-09-08
   (high). The capstone item: a ready-to-paste coding-agent prompt
   carrying this spike's learnings into the Knowledge Discovery repo,
   covering MCP discoverability, token consumption, SurrealDB
-  infrastructure monitoring, and APM/latency analysis. Prompt is written;
-  needs review and a run in that repo.
+  infrastructure monitoring, and APM/latency analysis. The prompt is
+  written and detailed (full SDK/collector/compose implementation plus
+  Splunk setup, SignalFlow and detector snippets, all copied from
+  verified working code here). Needs review against that repo's actual
+  stack, then a Plan Mode run there.
+
+  The same material is now canonical project documentation in
+  `docs/implementation-playbook.md`, linked from the docs index, README,
+  `opentelemetry.md`, `splunk-setup.md` and `architecture.md`. The
+  duplication into 040 is deliberate: that prompt travels to another repo
+  where these docs will not exist. Edit the playbook first, then mirror.
 
 ### rag-agent (backlog)
 

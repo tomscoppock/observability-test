@@ -71,6 +71,8 @@ Full documentation is in the [`docs/`](docs/) folder:
 | [Configuration](docs/configuration.md) | Environment variables and how to swap providers |
 | [Architecture](docs/architecture.md) | System design, service topology, data flow |
 | [OpenTelemetry](docs/opentelemetry.md) | OTel SDK setup, collector config, instrumentation |
+| [Implementation Playbook](docs/implementation-playbook.md) | Transferable OTel-to-Splunk know-how and the 13 silent-failure traps |
+| [Splunk Setup](docs/splunk-setup.md) | Dashboards, alerts, and what free/trial accounts cannot do |
 | [Troubleshooting](docs/troubleshooting.md) | Common issues and fixes |
 
 ## Quick start
