@@ -1,6 +1,6 @@
 # Plan: 036 -- Logs correlation and verification
 
-Status: **in-progress**
+Status: **done** (2026-09-08)
 Created: 2026-09-07
 Assignee: @tom
 Epic: 025
@@ -137,8 +137,8 @@ None.
       steps
 - [x] Update `docs/opentelemetry.md` and `docs/configuration.md` exporter
       and env var references
-- [ ] User adds `SPLUNK_HEC_*` values to `.env` (agent is permission-
-      blocked from this file)
+- [x] User adds `SPLUNK_HEC_*` values to `.env` (agent is permission-
+      blocked from this file); `.env.example` documented to match
 - [x] User generated a HEC token in Splunk Web
 - [x] Diagnosed `SPLUNK_HEC_URL` DNS failure: documented
       `http-inputs-<stack>.splunkcloud.com` hostname is not provisioned in
@@ -209,10 +209,9 @@ None.
 - [x] Isolation test proving collector -> Splunk works independently:
       raw OTLP log record POSTed to `localhost:4318/v1/logs` appeared in
       Splunk Cloud Platform as `source=otel-collector sourcetype=otel`
-- [ ] Verify the app's own log records are searchable in Splunk Cloud
-      Platform Search (manual check -- user): `index=main sourcetype=otel`
-      should now show `Chat request received` etc. alongside the earlier
-      test events
+- [x] Verify the app's own log records are searchable in Splunk Cloud
+      Platform Search: confirmed by user 2026-09-08 --
+      `index=main sourcetype=otel` returns the app's own log records
 - [x] Run test suite (no regressions) -- 63 pass, 0 fail
 - [x] Realign docs on the HEC approach: `docs/architecture.md` (new
       Observability Cloud vs Cloud Platform signal-split diagram and
@@ -231,4 +230,49 @@ None.
 
 ## Review notes
 
-(To be filled during review.)
+Reviewed 2026-09-08 via the `code-review` skill at high effort, over the
+full working-tree diff including the two new scripts. Seven findings, all
+fixed before commit:
+
+1. **Collector-wide outage risk (serious).** The `splunk_hec` exporter
+   rejects an empty `endpoint` or `token` at config-validation time, so
+   the documented empty defaults would have stopped the entire collector,
+   traces and metrics included. Verified against the contrib image
+   (`requires a non-empty "endpoint"`, then `"token"`). Both now default
+   to inert placeholders in `docker-compose.yml`.
+2. `set -e` in `setup-splunk-hec.sh` aborted on curl's non-zero exit,
+   making the whole DNS/TLS/firewall guidance block unreachable in
+   exactly the NXDOMAIN case it exists for. Now captures the exit code.
+   Verified by running against a deliberately bad hostname.
+3. `$ErrorActionPreference = 'Stop'` made `Write-Error` terminating in
+   the `.ps1`, so the `$Missing` aggregation and its `exit 1` were dead
+   code. Rewritten to collect names and report all of them.
+4. The `.ps1` `.env` parser kept surrounding quotes and inline comments
+   that docker compose strips, so a quoted token would 401 here while
+   working fine for the collector. Now strips both.
+5. `"${CURL_TLS_OPTS[@]}"` on an empty array aborts under `set -u` on
+   bash 3.2 (macOS default). Changed to a plain string.
+6. The PowerShell 5.1 fallback installed a process-wide
+   `TrustAllCertsPolicy` and never removed it, disabling certificate
+   validation for the rest of the session. Now restored in a `finally`.
+7. A comment claimed sourcing `.env` does not override exported vars;
+   `set -a` does override. Comment corrected to describe the actual
+   (intentional) behaviour.
+
+Confirmed correct by the review: the `BatchLogRecordProcessor({ exporter })`
+fix matches the installed sdk-logs 0.221.0 signature, `OTEL_LOG_LEVEL`
+empty is treated as unset so no diag logger is installed, unquoted
+`insecure_skip_verify: ${VAR}` validates even when unset, and both
+scripts are ASCII-only with LF endings per project convention.
+
+Not reviewed: `.env.example` and `.claude/settings.json` are blocked by
+the `permissions.deny` list, so their added lines were not inspected by
+the reviewer. `.env.example` was manually verified secret-free before
+push.
+
+**Known quality gap, deliberately not closed here:** no test covers the
+SDK wiring in `instrumentation.js`. The positional-argument bug was
+invisible to all 63 tests because every test mocks the logger provider.
+A meaningful test would need to be integration-level against a real or
+fake OTLP endpoint. Raised for a follow-up decision rather than adding a
+brittle unit test.

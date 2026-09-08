@@ -8,13 +8,13 @@ Last updated: 2026-09-07
 |---|---|---|---|
 | @tom | 027 -- Demo talk track | 025 | 2026-09-04 |
 | @tom | 028 -- Dashboard automation | 025 | 2026-09-04 |
-| @tom | 036 -- Logs correlation and verification | 025 | 2026-09-07 |
 | @tom | 037 -- Splunk AI overview and Azure Foundry | 025 | 2026-09-07 |
 | @tom | 038 -- Evals and drift monitoring | 025 | 2026-09-07 |
 | @tom | 039 -- Populate Splunk OOTB features via standard OTel | 025 | 2026-09-07 |
 
 ## Recently completed
 
+- 036 -- Logs correlation and verification (@tom) -- done 2026-09-08
 - 035 -- Fix token metrics dashboard (@tom) -- done 2026-09-07
 - 033 -- Spanmetrics connector for custom span charts (@tom) -- done 2026-09-07
 - 032 -- Dashboard 4-tab split (@tom) -- done 2026-09-07
@@ -29,7 +29,7 @@ Last updated: 2026-09-07
   - 032 -- Dashboard 4-tab split (@tom) -- done 2026-09-07
   - 033 -- Spanmetrics connector (@tom) -- done 2026-09-07
   - 035 -- Fix token metrics dashboard (@tom) -- done 2026-09-07
-  - 036 -- Logs correlation and verification (@tom) -- in progress (pivoted to HEC: native Log Observer deprecated Jan 2024; also fixed a silent BatchLogRecordProcessor bug that was dropping ALL app logs. HEC ingestion verified end-to-end; Log Observer Connect blocked on non-trial licence)
+  - 036 -- Logs correlation and verification (@tom) -- done 2026-09-08 (pivoted to HEC: native Log Observer deprecated Jan 2024; also fixed a silent BatchLogRecordProcessor bug that was dropping ALL app logs. App logs confirmed searchable in Splunk Cloud Platform; Log Observer Connect descoped, blocked on non-trial licence)
   - 037 -- Splunk AI overview and Azure Foundry (@tom) -- in progress (7/10 items done via 039)
   - 038 -- Evals and drift monitoring (@tom) -- in progress (response length metric + drift detectors documented)
   - 039 -- Populate Splunk OOTB features (@tom) -- in progress (gen_ai attrs + metrics done, user verification pending)
