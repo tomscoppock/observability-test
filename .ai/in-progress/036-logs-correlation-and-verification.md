@@ -149,6 +149,20 @@ None.
       `SplunkServerDefaultCert` -- added `SPLUNK_HEC_INSECURE_SKIP_VERIFY`
       env var (default `false`) to `otel-collector-config.yaml`,
       `docker-compose.yml`, and both setup scripts to handle this
+- [x] Proved the DNS failure is a Splunk-side provisioning gap, not our
+      misconfiguration: the DigiCert wildcard cert served on port 443
+      lists `http-inputs-<stack>`, `http-inputs-ack-<stack>`,
+      `http-inputs-firehose-<stack>` and `akamai-inputs-<stack>` in its
+      SANs, yet all four return NXDOMAIN. Splunk issued a certificate for
+      hostnames it never created DNS records for. Our original
+      `http-inputs-` configuration was correct.
+      **Exit condition for the TLS workaround:** once Splunk Support
+      creates the ingest DNS record, switch `SPLUNK_HEC_URL` to
+      `https://http-inputs-<stack>.splunkcloud.com/services/collector`
+      and set `SPLUNK_HEC_INSECURE_SKIP_VERIFY=false` -- that endpoint is
+      covered by the publicly-trusted cert, so no bypass is needed.
+- [ ] Raise the missing HEC ingest DNS records with Splunk Support, citing
+      the cert-SAN-vs-NXDOMAIN evidence (see docs/splunk-setup.md)
 - [x] User updates `.env`: `SPLUNK_HEC_URL=https://<stack>.splunkcloud.com:8088/services/collector`,
       `SPLUNK_HEC_INSECURE_SKIP_VERIFY=true`, then re-runs
       `setup-splunk-hec.ps1`/`.sh`

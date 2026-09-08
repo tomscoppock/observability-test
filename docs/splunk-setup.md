@@ -1534,6 +1534,48 @@ Splunk Cloud Platform normally uses port 443 for HEC on properly
 provisioned (non-trial) instances -- the `:8088` requirement above is
 specific to trials per Splunk's own documentation.
 
+#### Proving it is a Splunk-side DNS gap (and how to get it fixed)
+
+The `http-inputs-` hostname failing to resolve looks like a naming
+mistake, but it can be shown to be missing DNS on Splunk's side. Inspect
+the certificate your stack serves on port 443:
+
+```bash
+echo | openssl s_client -connect <stack>.splunkcloud.com:443 \
+  -servername <stack>.splunkcloud.com 2>/dev/null \
+  | openssl x509 -noout -subject -issuer -ext subjectAltName
+```
+
+On this deployment that returned a genuine DigiCert-issued wildcard
+certificate whose Subject Alternative Names include **all** of the
+ingest hostnames:
+
+```
+CN=*.<stack>.splunkcloud.com   (issuer: DigiCert Global G2 TLS RSA SHA256 2020 CA1)
+SAN: http-inputs-<stack>.splunkcloud.com
+     *.http-inputs-<stack>.splunkcloud.com
+     http-inputs-ack-<stack>.splunkcloud.com
+     http-inputs-firehose-<stack>.splunkcloud.com
+     akamai-inputs-<stack>.splunkcloud.com
+```
+
+Yet every one of those names returned `NXDOMAIN`. Splunk issued a
+certificate covering hostnames it never created DNS records for, which
+means:
+
+- The documented `http-inputs-<stack>.splunkcloud.com` endpoint **is**
+  the intended target. Our original configuration was correct.
+- Once the DNS record exists, that endpoint serves a publicly-trusted
+  DigiCert certificate, so `SPLUNK_HEC_INSECURE_SKIP_VERIFY` can go back
+  to `false` and the `:8088` main-hostname workaround can be dropped.
+- The `insecure_skip_verify` workaround is therefore temporary, with a
+  known exit condition, not a permanent property of this setup.
+
+**Raise it with Splunk Support** using exactly that evidence: the cert
+SAN list includes the ingest hostnames, DNS does not resolve them, so
+the HEC ingest DNS records are missing for the stack. That is far more
+actionable than "HEC doesn't work".
+
 #### Activating the pipeline
 
 Run `scripts/setup-splunk-hec.ps1` (or `.sh`). It validates the four
