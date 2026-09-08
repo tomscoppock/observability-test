@@ -83,6 +83,12 @@ Last updated: 2026-09-08
   duplication into 040 is deliberate: that prompt travels to another repo
   where these docs will not exist. Edit the playbook first, then mirror.
 
+  **Authoring is complete as of 2026-09-08.** The task stays in backlog
+  because its remaining acceptance criteria (run the prompt, review the
+  resulting plan, confirm each trap is handled) can only be done in the
+  Knowledge Discovery repo. Re-raise those in that repo's tracker when
+  the work starts; nothing further is actionable here.
+
 ### rag-agent (backlog)
 
 - 034 -- Web search toggle (low)

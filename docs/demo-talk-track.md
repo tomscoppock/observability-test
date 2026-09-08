@@ -1,7 +1,7 @@
 # Demo Talk Track -- RAG Agent Observability
 
 A scripted walkthrough for demonstrating the Splunk Observability Cloud
-dashboard for the RAG Agent stack. Total runtime: ~12 minutes.
+dashboard for the RAG Agent stack. Total runtime: ~14 minutes.
 
 Each section includes:
 - **[SHOW]** -- what to click/navigate to in Splunk
@@ -26,24 +26,27 @@ Each section includes:
 >    is configured), and generates deliberate errors so the service map
 >    shows health colours instead of grey.
 >
->    Two options worth knowing for demo prep:
->    - `--duration 30` (bash) / `-DurationMinutes 30` (PowerShell) loops
->      rounds until the time is up, instead of running a fixed count.
->      Useful for building a baseline while you rehearse, and the drift
->      detectors need roughly an hour of traffic to mean anything.
->    - `--load heavy` / `-Load heavy` triples chat volume and quarters
->      the pauses, for busier-looking charts. **Every chat message is a
->      real LLM API call**, so a long heavy run costs real money. Start
->      with a short duration to gauge the rate.
 > 4. Wait ~2 minutes after the script finishes for metrics to flush
 >    through the OTel Collector to Splunk.
 > 5. In Splunk, set the time picker to **Last 15 minutes** (or a window
 >    that covers your recent activity). The service map and charts only
 >    show data within the selected time range -- if the window is too
 >    narrow or too old, nodes will appear grey or missing.
+> 6. **Open Splunk Cloud Platform in a second browser tab**, signed in,
+>    on **Search & Reporting**. Section 7 switches products, and you do
+>    not want to be logging in on camera.
 >
 > **Options:**
 > - `--rounds N` / `-Rounds N` -- run N rounds (default 2)
+> - `--duration M` / `-DurationMinutes M` -- loop rounds for M minutes
+>   instead of a fixed count. Good for building a baseline while you
+>   rehearse; the drift detectors need roughly an hour of traffic before
+>   they mean anything.
+> - `--load light|heavy` / `-Load light|heavy` -- `light` is the default
+>   and unchanged. `heavy` triples chat volume and quarters the pauses,
+>   for busier-looking charts. **Every chat message is a real LLM API
+>   call**, so a long heavy run costs real money. Start with a short
+>   duration to gauge the rate.
 > - `--no-errors` / `-NoErrors` -- skip error traffic (all-green map)
 > - `--errors` -- include error traffic (default)
 >
@@ -375,7 +378,97 @@ gate."
 
 ---
 
-## Section 7: Boundaries -- what this stack does not do (~1.5 minutes)
+## Section 7: Log Analytics in Splunk Cloud Platform (~2 minutes)
+
+> **Product switch.** This section leaves Splunk Observability Cloud and
+> moves to **Splunk Cloud Platform**. Have it open in a second browser
+> tab before you start, already signed in, so the switch is one click.
+
+**[SAY]** "Everything so far has been traces and metrics. But when
+something goes wrong, the question is usually 'what actually happened
+inside that one request?' That is a logs question, and our logs carry
+the full trace context, so we can reconstruct any single request end to
+end."
+
+**[SHOW]** Switch to the Splunk Cloud Platform tab. Open **Search &
+Reporting** and run:
+
+```
+index=main sourcetype=otel
+```
+
+Set the time picker to **Last 60 minutes**.
+
+**[SAY]** "These are structured log records emitted by the agent through
+OpenTelemetry, shipped to Splunk via HTTP Event Collector. Not scraped
+text files, not a sidecar tailing stdout. The application emits them as
+structured events, and every one is queryable the moment it lands."
+
+**[SHOW]** Click the **arrow to expand a single event**, ideally an
+`LLM completion received` line. Point at the extracted fields.
+
+**[SAY]** "Look at what rides along with each record. The message body,
+the severity, the service name, and critically **`trace_id` and
+`span_id`**. The logger attaches the active span context automatically,
+so every log line knows which request it belongs to and which operation
+within that request emitted it. Nobody had to pass a correlation ID
+around by hand."
+
+**[HIGHLIGHT]** "That is the single most valuable field on the screen.
+It turns a pile of log lines into a per-request narrative."
+
+**[SHOW]** Click the **`trace_id` field value**, choose **Add to
+search**, and run it. The search becomes something like:
+
+```
+index=main sourcetype=otel trace_id="608ae1bdc3ce433fc42886ce7baed4f8"
+```
+
+**[SAY]** "Now I have every log line from one single user question, in
+order. Chat request received, embeddings generated for the query, vector
+search against SurrealDB, LLM completion received with its token counts.
+That is the complete story of one request, reconstructed from a field I
+did not have to design or maintain."
+
+**[HIGHLIGHT]** "This is the same `trace_id` you saw in APM a moment
+ago. The correlation data is genuinely there and it is the same
+identifier across both products, which matters for what I will say in a
+minute about licensing."
+
+**[SHOW]** Change the search to show only problems:
+
+```
+index=main sourcetype=otel severityText=ERROR
+```
+
+**[SAY]** "And because severity is a first-class field, error triage is
+a filter rather than a grep. In an incident you would start here, grab
+the `trace_id` off the failing request, and pull back the full narrative
+in one search."
+
+**[SAY]** "One cost point worth making, because it is a design decision
+rather than an accident. The OTel Collector drops DEBUG and TRACE
+records before they ever reach Splunk. You are not paying to index
+developer noise, but the moment you need that detail you change one line
+of collector config, not the application. Filtering happens in the
+pipeline, not in the app and not at query time after you have already
+paid to store it."
+
+> **Note for presenter, verify before you demo:** confirm that
+> `trace_id` actually appears as an **extracted field** in the left-hand
+> field list, not just as text inside the raw event. Whether Splunk
+> auto-parses the JSON depends on how the `otel` sourcetype is
+> configured. If the fields are not extracted, either append `| spath`
+> to the search, or set `KV_MODE = json` for that sourcetype. Find this
+> out in rehearsal, not on camera.
+
+> **Note for presenter:** if asked why logs are in a different product
+> from traces, that is Section 8. Do not improvise an answer here; there
+> is a precise one.
+
+---
+
+## Section 8: Boundaries -- what this stack does not do (~1.5 minutes)
 
 > **Why this section exists:** it is more credible to name the edges of
 > the demo than to let a knowledgeable viewer notice them first. Every
@@ -389,15 +482,19 @@ is a spoken section.
 of this are, because three things you might expect to see are
 deliberately not here."
 
-**[SAY]** "**First, log correlation.** Our logs do reach Splunk, and
-they carry trace and span IDs, so the correlation data is genuinely
-there. But they land in Splunk Cloud Platform, not Observability Cloud.
-Splunk deprecated the old native Log Observer in January 2024. The
-replacement, Log Observer Connect, reads logs in place from a Splunk
-platform instance rather than storing a copy, and it requires a licensed
-non-trial platform. So today you search logs in Splunk Web and traces in
-APM. On a licensed account those become one pane, and no code changes
-would be needed. The pipeline is already correct."
+**[SAY]** "**First, log correlation.** You just watched me pull back a
+full request narrative by its `trace_id`, so the correlation data is
+genuinely there and it is the same identifier APM uses. What is missing
+is only the join between the two products. Splunk deprecated the old
+native Log Observer in January 2024. Its replacement, Log Observer
+Connect, reads logs in place from a Splunk platform instance rather than
+storing a copy, and it requires a licensed non-trial platform."
+
+**[HIGHLIGHT]** "So the gap is a click, not a capability. Today I copy a
+`trace_id` from APM and paste it into Splunk search. On a licensed
+account that becomes one click from the trace, with no code changes and
+no pipeline changes. What you saw in Section 7 is already the hard part
+working."
 
 **[SAY]** "**Second, AI Agent Monitoring.** Splunk has a dedicated set
 of AI agent screens, and Cisco is extending them further through the
@@ -440,12 +537,14 @@ without touching the application."
 
 **[SAY]** "To summarise what we've seen: a single OpenTelemetry
 pipeline gives us infrastructure monitoring, application performance
-management, cost tracking, cross-service tracing, security signals,
-and quality indicators -- all in one platform. The key benefits are:
+management, cost tracking, cross-service tracing, per-request log
+analytics, security signals, and quality indicators. One pipeline, one
+instrumentation effort, three signals. The key benefits are:
 
 **For engineering:** Full-stack visibility from database transactions
 to LLM completions, with distributed tracing across service
-boundaries. No blind spots.
+boundaries, and every log line tagged with the trace it belongs to. No
+blind spots, and no manual correlation IDs.
 
 **For finance:** Token-level cost tracking and projection. Know
 exactly what your AI spend is and where it's going.

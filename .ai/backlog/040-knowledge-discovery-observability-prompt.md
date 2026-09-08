@@ -1,13 +1,13 @@
 # 040 -- Apply OTel/Splunk learnings to the Knowledge Discovery agent
 
-Status: backlog
+Status: backlog (authoring complete 2026-09-08; blocked on the Knowledge Discovery repo for the remaining handoff items)
 Priority: high
 Assignee: @tom
 Epic: 025
 Theme: otel-instrumentation, llm-observability, splunk-observability
 Tags: non-code
 Repo: TungstenKnowledgeDiscovery
-Stage: assessment
+Stage: runtime-validation-pending
 
 ## Description
 
@@ -19,12 +19,31 @@ prompt below, not code in this repo.
 
 ## Acceptance criteria
 
-- [ ] Prompt reviewed and adjusted for the Knowledge Discovery repo's
-      actual stack (language, service names, MCP servers in use)
-- [ ] Prompt run in the Knowledge Discovery repo, in Plan Mode first
+**This repo's deliverable (authoring):**
+
+- [x] Prompt written, covering MCP discoverability, token consumption,
+      SurrealDB infrastructure monitoring and APM/latency analysis
+- [x] Full implementation detail included: SDK versions, bootstrap,
+      logger, gen_ai instrumentation, collector config, compose wiring,
+      Splunk token/HEC setup, REST API patterns, SignalFlow, detectors
+- [x] Every snippet verified against working code in this repo, and the
+      two SignalFlow errors found during that check corrected
+- [x] Same material published as `docs/implementation-playbook.md` and
+      cross-linked from the docs index, README, `opentelemetry.md`,
+      `splunk-setup.md` and `architecture.md`
+
+**Handoff (belongs to the Knowledge Discovery repo, not this one):**
+
+- [ ] Prompt reviewed and adjusted for that repo's actual stack
+      (language, service names, MCP servers in use)
+- [ ] Prompt run there, in Plan Mode first
 - [ ] Resulting plan reviewed before implementation
 - [ ] Cross-check that every trap in the prompt's "Non-obvious traps"
       section is explicitly handled, since each one was a silent failure
+
+The handoff items cannot be completed from this repository. They are
+carried here so the trail is not lost, and should be re-raised in the
+Knowledge Discovery tracker when that work starts.
 
 ## Notes
 
