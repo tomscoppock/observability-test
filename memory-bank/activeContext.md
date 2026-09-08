@@ -1,6 +1,6 @@
 # Active Context
 
-Last refreshed: 2026-09-07
+Last refreshed: 2026-09-08
 
 > This file was a month stale (last refreshed 2026-08-18, describing
 > Epics 001/002 as pending). `.ai/STATUS.md` is the authoritative record
@@ -8,9 +8,27 @@ Last refreshed: 2026-09-07
 
 ## Current focus
 
+**041 (in progress)** -- talk track click paths. Every `[SHOW]` block in
+`docs/demo-talk-track.md` now gives explicit navigation: which surface
+you are on, numbered steps, literal UI labels and filter values. Three
+instructions were wrong, not merely vague, and are fixed:
+
+- Section 4 told the presenter to filter for traces containing both
+  `rag-api` and `playwright-mcp`. Splunk APM ORs multiple values inside
+  one filter, so that returns traces containing either. Now filters on
+  the `scrape.url` span tag, which only the scrape path sets.
+- Section 6 said to expand the `llm.chatCompletion` span. No such span
+  exists. It is `chat gpt-4o-mini` (`api/src/llm.js:73`, `chat ${model}`).
+- Section 5 assumed Tag Spotlight covered `gen_ai.response.finish_reasons`.
+  039 indexed five tags and that is not one of them, so the finish-reason
+  demo moves to Trace Analyzer, which searches unindexed tags.
+
+Doc edits are complete and the ASCII check passes. The remaining gate is
+a literal walkthrough in the live Splunk org after a simulator run;
+checklist is in `.ai/in-progress/041-talk-track-click-paths.md`.
+
 **Epic 025 (Splunk demo and dashboard automation) closed 2026-09-08.**
-Tasks 027, 028, 036, 037, 038 and 039 are all in `.ai/done/`. Nothing is
-in `.ai/in-progress/`.
+Tasks 027, 028, 036, 037, 038 and 039 are all in `.ai/done/`.
 
 Next up is **040** (backlog, high): the capstone item. A ready-to-paste
 coding-agent prompt that carries this spike's learnings into the

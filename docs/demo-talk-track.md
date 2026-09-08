@@ -65,10 +65,15 @@ Each section includes:
 
 ## Opening (~30 seconds)
 
-**[SHOW]** Open Splunk Observability Cloud. Navigate to the `RAG Agent
--- Observability` dashboard group. You will see four tabs: **Service
-Overview**, **RAG Pipeline**, **LLM and AI**, and **Infrastructure**.
-Start on the **Service Overview** tab.
+**[SHOW]** Open Splunk Observability Cloud and find the demo dashboard:
+
+1. In the main menu on the left, select **Dashboards**.
+2. Type `RAG Agent` in the search field at the top of the page.
+3. Click the **RAG Agent -- Observability** dashboard group name to
+   list the dashboards inside it.
+
+You will see four tabs: **Service Overview**, **RAG Pipeline**, **LLM
+and AI**, and **Infrastructure**. Start on the **Service Overview** tab.
 
 **[SAY]** "What you're looking at is a fully instrumented RAG agent
 stack -- a Node.js API backed by SurrealDB for document and vector
@@ -82,9 +87,14 @@ Splunk Observability Cloud. Let me walk you through what this gives us."
 
 ## Section 1: Service Map and Infrastructure (~2 minutes)
 
-**[SHOW]** Navigate to **APM > Service map**. Set environment to `dev`.
-Adjust the time picker to cover the period when you generated traffic
-(e.g. **Last 15 minutes**).
+**[SHOW]** In the main menu select **APM**, then **Service map**. Set
+the filter bar up left to right:
+
+1. **Time range** -- `Last 15 minutes`, or whatever window covers the
+   traffic you generated.
+2. **Environment** -- `dev`.
+
+Leave **Service** empty here; you want the whole map, not one node.
 
 **[SAY]** "The service map is auto-generated from trace data -- we
 didn't configure it, Splunk built it from the parent-child span
@@ -111,7 +121,9 @@ scraping."
 `playwright-mcp` -- this is the cross-service MCP dependency. If you
 ran a scrape, this edge will be visible.
 
-**[SHOW]** Click the `rag-api` node to open the service view.
+**[SHOW]** Click the `rag-api` node. A side panel opens on the right
+with that service's RED metrics; from there select the service name to
+open the full service view.
 
 **[SAY]** "The service view gives us RED metrics -- Request rate, Error
 rate, and Duration -- without any manual setup. Splunk derives these
@@ -122,8 +134,9 @@ just by sending traces."
 **[CHART]** `rag-api Requests`, `surrealdb Requests`,
 `playwright-mcp Requests`, `Error Rate %` (Service Overview tab)
 
-**[SHOW]** Switch to the **Infrastructure** tab. Point to the SurrealDB
-charts.
+**[SHOW]** Leave APM and return to the **RAG Agent -- Observability**
+dashboard (main menu > **Dashboards**, or the browser Back button).
+Switch to the **Infrastructure** tab and point to the SurrealDB charts.
 
 **[SAY]** "Now let's look at the infrastructure layer. SurrealDB 3.2
 has native OpenTelemetry support -- it pushes metrics directly to our
@@ -162,8 +175,8 @@ here, correlated by time and service."
 
 ## Section 2: RAG Pipeline Performance (~2 minutes)
 
-**[SHOW]** Switch to the **Service Overview** tab. Point to the request
-rate and latency charts.
+**[SHOW]** Still on the dashboard, switch to the **Service Overview**
+tab. Point to the request rate and latency charts.
 
 **[CHART]** `Request Rate`, `Error Rate %`, `Service Latency (P50/P90/P99)`,
 `Error Count by Endpoint` (Service Overview tab)
@@ -241,8 +254,40 @@ ask."
 
 ## Section 4: Cross-Service Tracing -- MCP (~2 minutes)
 
-**[SHOW]** Navigate to **APM > Traces**. Filter for traces containing
-both `rag-api` and `playwright-mcp`.
+**[SHOW]** In the main menu select **APM**, then **Traces**. This page
+is Trace Analyzer. Set the filter bar up left to right:
+
+1. **Time range** -- `Last 15 minutes`, or whatever window covers your
+   simulator run.
+2. **Environment** -- `dev`.
+3. **Service** -- `rag-api`.
+4. **Add filters** -- tag `scrape.url`, operator `=`, value `*`. Only
+   the scrape path sets this attribute, so it isolates scrape traces
+   and nothing else.
+5. Set the sample ratio selector to **all traces** rather than 10%, and
+   leave the **Errors only** toggle off.
+
+The traces table now lists scrape requests only. Sort by duration and
+pick one that ran a full page load.
+
+> **Presenter note -- why not just filter on both services:** selecting
+> two values inside one **Service** filter is a Boolean OR in Splunk
+> APM, so `rag-api` + `playwright-mcp` returns traces containing
+> *either* service, not both. Filtering on the `scrape.url` tag is the
+> reliable way to get the cross-service traces. If you would rather
+> filter by service, set **Service** to `playwright-mcp` on its own:
+> in this stack every trace that reaches the MCP server was started by
+> `rag-api`, so both services are present by construction.
+
+> **Presenter note -- no `playwright-mcp` in the dropdown?** The MCP
+> server runs outside this Compose stack, from a separate project (see
+> [architecture.md](architecture.md)). If it is not running and
+> instrumented, no `playwright-mcp` service is reported and the scrape
+> traces show `rag-api` spans only: `scrape.pipeline` -> `mcp.scrape`
+> -> the auto-instrumented HTTP client span. The pipeline story still
+> works, you just cannot show the far side of the boundary. Check the
+> **Service** dropdown lists `playwright-mcp` during rehearsal, not on
+> camera.
 
 **[SAY]** "This is distributed tracing in action. When a user scrapes
 a web page, the request flows from our Node.js API to the Playwright
@@ -251,7 +296,17 @@ W3C trace context propagation automatically links the spans across the
 HTTP boundary. We didn't write any correlation code -- the OTel
 auto-instrumentation handles it."
 
-**[SHOW]** Click a scrape trace to open the waterfall view.
+**[SHOW]** Select the **Trace ID** in the traces table to open the
+trace **Waterfall**. Expand the **Trace flow** section above the
+waterfall -- it is collapsed by default, and it draws the services
+involved with lines for the parent-child links between them. That is
+the cleanest single visual for the cross-service point.
+
+> **Presenter note -- highlighting the MCP hop:** inside the waterfall,
+> **Add filters** takes span tag values and highlights matching spans in
+> blue. Filter on `mcp.session_id` to light up just the MCP spans. Leave
+> the **Matches only** switch off so the highlighted spans stay in
+> context with the rest of the trace.
 
 **[SAY]** "In the waterfall, you can see the full journey: the Express
 route handler creates a `scrape.pipeline` span, which calls
@@ -280,8 +335,35 @@ without losing visibility."
 
 ## Section 5: Security and Threat Detection (~2 minutes)
 
-**[SHOW]** Navigate back to the dashboard. Open **APM > Tag Spotlight**
-for `rag-api`.
+**[SHOW]** In the main menu select **APM**, then **Tag spotlight**. Set
+the filter bar:
+
+1. **Time range** -- `Last 15 minutes`.
+2. **Environment** -- `dev`.
+3. **Service** -- `rag-api`.
+
+Each indexed span tag gets its own box of request, error and duration
+charts. Open `gen_ai.operation.name` to show `chat` against
+`embeddings`, then `gen_ai.usage.completion_tokens`, which is the box
+that backs the token-anomaly point in the script below.
+
+> **Presenter note -- which tags have boxes:** Tag Spotlight only shows
+> tags indexed as MetricSets. This org has five active:
+> `gen_ai.operation.name`, `gen_ai.request.model`,
+> `gen_ai.provider.name`, `gen_ai.usage.completion_tokens` and
+> `db.system`. Anything else will not appear here. See
+> [splunk-setup.md Section 25](splunk-setup.md#tag-spotlight-setup) if
+> you need to index another one -- it needs the admin role and about
+> 8 minutes to populate, so do it well before you present.
+
+> **Presenter note -- finish reasons are not in Tag Spotlight:**
+> `gen_ai.response.finish_reasons` is not indexed, so it has no box.
+> To show the finish-reason signal the script describes next, use Trace
+> Analyzer instead, which searches unindexed tags: **APM > Traces**,
+> **Environment** `dev`, **Service** `rag-api`, then **Add filters**
+> with tag `gen_ai.response.finish_reasons`, operator `!=`, value
+> `stop`. On a healthy run that returns nothing, which is itself the
+> point worth making out loud.
 
 **[SAY]** "Now let's talk about security -- an increasingly critical
 concern for AI agent systems. Prompt injection is the number one
@@ -334,8 +416,35 @@ compliance in regulated industries."
 
 ## Section 6: Quality and Eval Monitoring (~1.5 minutes)
 
-**[SHOW]** Navigate to **APM > Traces** and filter for chat operations.
-Click a trace and expand the `llm.chatCompletion` span.
+**[SHOW]** Go back to **APM > Traces** and reset the filter bar for
+chat traffic:
+
+1. **Time range** -- `Last 15 minutes`.
+2. **Environment** -- `dev`.
+3. **Service** -- `rag-api`.
+4. **Add filters** -- tag `gen_ai.operation.name`, operator `=`, value
+   `chat`. Embeddings share the `gen_ai.*` namespace, so filtering on
+   the operation rather than the namespace keeps them out.
+5. Sample ratio: **all traces**.
+
+**[SHOW]** Select a **Trace ID** to open the waterfall, then select the
+`chat gpt-4o-mini` span. Open the **Tags** section of the span
+properties panel on the right and point at
+`gen_ai.response.finish_reasons`, `gen_ai.usage.input_tokens` and
+`gen_ai.usage.output_tokens`.
+
+> **Presenter note -- the span name tracks the model:** spans follow the
+> OpenTelemetry GenAI convention `{operation} {model}`, so the name is
+> whatever `LLM_MODEL` is set to. On the default config that is
+> `chat gpt-4o-mini`; against a Gemma or Qwen backend it will read
+> `chat gemma2:9b` or similar. Check the name in rehearsal rather than
+> reading this one off the page.
+
+> **Presenter note -- showing the failure modes live:** to demonstrate
+> truncation, add a filter on tag `gen_ai.response.finish_reasons` with
+> value `length`. To follow one user's whole conversation across
+> separate traces, filter on the `session.id` tag, which the API sets on
+> every request from the `X-Session-Id` header.
 
 **[SAY]** "The final piece is quality monitoring -- how do we know the
 agent is giving good answers? Traditional monitoring says 'the service
@@ -390,8 +499,9 @@ inside that one request?' That is a logs question, and our logs carry
 the full trace context, so we can reconstruct any single request end to
 end."
 
-**[SHOW]** Switch to the Splunk Cloud Platform tab. Open **Search &
-Reporting** and run:
+**[SHOW]** Switch to the Splunk Cloud Platform browser tab. From the
+app menu on the left of the Splunk bar, select **Search & Reporting**,
+then run this in the search box:
 
 ```
 index=main sourcetype=otel
@@ -622,4 +732,4 @@ are organised across 4 dashboard tabs.
 
 ---
 
-*Last updated: 2026-09-04*
+*Last updated: 2026-09-08*

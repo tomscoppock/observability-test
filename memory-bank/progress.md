@@ -16,9 +16,17 @@ Last refreshed: 2026-08-18
 
 ## Left to do
 
-> Refreshed 2026-09-08. **Epic 025 is closed and `.ai/in-progress/` is
-> empty.** Epics 001-005 and tasks 006-039 are done; see `.ai/STATUS.md`
-> and `.ai/done/` for the authoritative trail.
+> Refreshed 2026-09-08. **Epic 025 is closed.** Epics 001-005 and tasks
+> 006-039 are done; see `.ai/STATUS.md` and `.ai/done/` for the
+> authoritative trail.
+
+- **041 (in progress)** -- talk track click paths. `docs/demo-talk-track.md`
+  rewritten so every `[SHOW]` gives an explicit click path, plus three
+  factual fixes: the Section 4 two-service filter (Splunk ORs values
+  within one filter), the Section 6 `llm.chatCompletion` span name (it is
+  `chat gpt-4o-mini`), and Section 5's Tag Spotlight coverage
+  (`gen_ai.response.finish_reasons` is not among the five tags 039
+  indexed). Doc work done; awaiting a live-tenant walkthrough.
 
 - **040 (backlog, high)** -- the only substantive item left. A
   coding-agent prompt applying this spike's OTel and Splunk learnings to

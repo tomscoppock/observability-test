@@ -4,7 +4,16 @@ Last updated: 2026-09-08
 
 ## Active work (per person)
 
-(None -- Epic 025 closed 2026-09-08. Next up: 040, the capstone item.)
+- **041 -- Talk track click paths (@tom)** -- doc edits complete, awaiting
+  live-tenant verification. Rewrote every `[SHOW]` in
+  `docs/demo-talk-track.md` to give explicit navigation, and fixed three
+  instructions that did not work as written: the Section 4 two-service
+  filter (Splunk ORs multiple values inside one filter), the Section 6
+  `llm.chatCompletion` span name (does not exist; it is `chat gpt-4o-mini`),
+  and Section 5's Tag Spotlight assumptions (`gen_ai.response.finish_reasons`
+  is not one of the five tags 039 indexed). Remaining gate is a literal
+  walkthrough in the live org after a simulator run -- checklist is in the
+  task file.
 
 ## Recently completed
 
@@ -118,7 +127,7 @@ record, both established empirically and documented in
 
 ## Numbering
 
-Next free backlog/epic/task number: **041**
+Next free backlog/epic/task number: **042**
 
 <!-- Increment every time a numbered item is created in backlog/,
      in-progress/, epics/, or done/. Numbers are never reused. -->

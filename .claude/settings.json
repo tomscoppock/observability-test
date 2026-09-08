@@ -1,5 +1,18 @@
 {
   "permissions": {
+    "allow": [
+      "Bash(npm test *)",
+      "Bash(python3 -c \"import yaml; yaml.safe_load\\(open\\('otel-collector-config.yaml'\\)\\); print\\('otel-collector-config.yaml: OK'\\)\")",
+      "Bash(docker compose *)",
+      "WebFetch(domain:help.splunk.com)",
+      "WebSearch",
+      "Bash(openssl s_client -connect prd-p-6bx70.splunkcloud.com:8088 -servername prd-p-6bx70.splunkcloud.com)",
+      "Bash(openssl x509 *)",
+      "Bash(cd /tmp)",
+      "Bash(bash --version)",
+      "Bash(bash /tmp/t.sh)",
+      "Bash(echo \"exit=$?\")"
+    ],
     "deny": [
       "Read(./.env)",
       "Read(./.env.*)",
