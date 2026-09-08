@@ -1,6 +1,6 @@
 # Epic: 025 -- Splunk Demo and Dashboard Automation
 
-Status: **in-progress**
+Status: **done** (2026-09-08)
 Created: 2026-09-04
 Lead: @tom
 Theme: llm-observability, splunk-observability, otel-core
@@ -47,15 +47,15 @@ RAG Agent stack. Three deliverables:
 ## Child items
 
 - [x] 026 -- Splunk docs review and MCP monitoring section
-- [ ] 027 -- Demo talk track
-- [ ] 028 -- Dashboard automation (Splunk REST API / Terraform)
-- [ ] 032 -- Dashboard 4-tab split
+- [x] 027 -- Demo talk track
+- [x] 028 -- Dashboard automation (Splunk REST API / Terraform)
+- [x] 032 -- Dashboard 4-tab split
 - [x] 033 -- Spanmetrics connector for custom span charts
-- [ ] 035 -- Fix token metrics dashboard charts
-- [ ] 036 -- Logs correlation and verification
-- [ ] 037 -- Splunk AI overview and Azure Foundry monitoring
-- [ ] 038 -- Evals and drift monitoring
-- [ ] 039 -- Populate Splunk OOTB features via standard OTel
+- [x] 035 -- Fix token metrics dashboard charts
+- [x] 036 -- Logs correlation and verification
+- [x] 037 -- Splunk AI overview and Azure Foundry monitoring
+- [x] 038 -- Evals and drift monitoring
+- [x] 039 -- Populate Splunk OOTB features via standard OTel
 
 ## Notes
 
