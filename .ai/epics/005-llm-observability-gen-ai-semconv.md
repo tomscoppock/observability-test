@@ -1,6 +1,6 @@
 # Epic: 005 -- LLM Observability with gen_ai Semantic Conventions
 
-Status: not-started
+Status: done (2026-09-08, retroactive -- all child tasks were completed 2026-08-25 to 2026-09-04 but the epic file was never updated)
 Created: 2026-08-18
 Theme: llm-observability, llm-integration
 Lead: @tom
@@ -27,8 +27,8 @@ Excluded:
 
 ## Child items
 
-- [ ] 017 -- Add gen_ai normalizer processor to OTel Collector (@tom)
-- [ ] 018 -- Instrument LLM calls with gen_ai.* spans and token metrics (@tom)
+- [x] 017 -- Add gen_ai normalizer processor to OTel Collector (@tom)
+- [x] 018 -- Instrument LLM calls with gen_ai.* spans and token metrics (@tom)
 
 ## Notes
 

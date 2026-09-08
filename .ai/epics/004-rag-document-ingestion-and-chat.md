@@ -1,6 +1,6 @@
 # Epic: 004 -- RAG Document Ingestion and Chat
 
-Status: not-started
+Status: done (2026-09-08, retroactive -- all child tasks were completed 2026-08-25 to 2026-09-04 but the epic file was never updated)
 Created: 2026-08-18
 Theme: rag-agent, database, mcp-services, llm-integration
 Lead: @tom
@@ -28,10 +28,10 @@ Excluded:
 
 ## Child items
 
-- [ ] 013 -- Set up SurrealDB schema for documents and embeddings (@tom)
-- [ ] 014 -- Implement web scrape endpoint using Playwright MCP (@tom)
-- [ ] 015 -- Implement file upload endpoint for HTML, TXT, MD, PDF (@tom)
-- [ ] 016 -- Implement RAG chat endpoint with swappable LLM backend (@tom)
+- [x] 013 -- Set up SurrealDB schema for documents and embeddings (@tom)
+- [x] 014 -- Implement web scrape endpoint using Playwright MCP (@tom)
+- [x] 015 -- Implement file upload endpoint for HTML, TXT, MD, PDF (@tom)
+- [x] 016 -- Implement RAG chat endpoint with swappable LLM backend (@tom)
 
 ## Notes
 

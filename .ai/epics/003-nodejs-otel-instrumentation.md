@@ -1,6 +1,6 @@
 # Epic: 003 -- Node.js OTel Instrumentation
 
-Status: not-started
+Status: done (2026-09-08, retroactive -- all child tasks were completed 2026-08-25 to 2026-09-04 but the epic file was never updated)
 Created: 2026-08-18
 Theme: otel-instrumentation
 Lead: @tom
@@ -29,8 +29,8 @@ Excluded:
 
 ## Child items
 
-- [ ] 011 -- Add OTel SDK 2.x instrumentation to Node.js API (@tom)
-- [ ] 012 -- Add custom logger service wrapping OTel logs API (@tom)
+- [x] 011 -- Add OTel SDK 2.x instrumentation to Node.js API (@tom)
+- [x] 012 -- Add custom logger service wrapping OTel logs API (@tom)
 
 ## Notes
 
