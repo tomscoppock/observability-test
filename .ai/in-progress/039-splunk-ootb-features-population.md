@@ -30,7 +30,7 @@ Splunk API calls from the app).
 | **AI Agent Monitoring** | AI trace data | Unknown | `gen_ai.*` traces |
 | **Database Monitoring** | Overview | Unknown | DB spans (`db.*` attributes) |
 | **Infrastructure** | Various | Partially working | Metrics (docker_stats, custom) |
-| **Logs** | Log Observer | Unknown | OTel logs |
+| **Logs** | Log Observer Connect | Blocked on licensing | OTel logs -> Splunk Cloud Platform via HEC (see 036) |
 | **Metrics** | Metric Finder | Working | All metrics |
 
 ### Principles
@@ -156,7 +156,18 @@ None expected. All changes should be configuration-level.
 - [x] Research: Splunk Tag spotlight / MetricSet requirements
   - Result: needs manual indexing of gen_ai.* tags in Settings > APM MetricSets
 - [x] Research: Splunk Log Observer requirements
-  - Result: already working -- logs sent via OTLP with trace_id correlation
+  - ~~Result: already working -- logs sent via OTLP with trace_id correlation~~
+  - **Corrected 2026-09-07 (via 036):** this conclusion was wrong on two
+    counts. (1) Native Log Observer (direct OTLP log ingest into
+    Observability Cloud) was deprecated by Splunk in January 2024; the
+    `v2/log/otlp` endpoint this relied on is a dead path. Logs now go to
+    Splunk Cloud Platform via HEC (`splunk_hec/logs`), read back into
+    Observability Cloud by Log Observer Connect, which requires a
+    licensed (non-trial) Splunk platform instance. (2) No application
+    logs were reaching the collector at all: `instrumentation.js` passed
+    the exporter positionally to `BatchLogRecordProcessor`, which expects
+    an options object, so every export threw silently (`diag` is a no-op
+    unless `OTEL_LOG_LEVEL` is set). Both fixed in 036.
 - [x] Research: Infrastructure views requirements
   - Result: needed hostmetrics receiver and resourcedetection processor
 - [x] Implement: add hostmetrics receiver to collector config
@@ -175,7 +186,10 @@ None expected. All changes should be configuration-level.
   - [ ] Enable AI Agent Monitoring in Splunk Settings
   - [ ] Index gen_ai.* tags in APM MetricSets for Tag Spotlight
   - [ ] Verify Infrastructure views show host + container metrics
-  - [ ] Verify Log Observer shows correlated logs
+  - [ ] Verify Log Observer Connect shows correlated logs (blocked --
+        needs a licensed non-trial Splunk Cloud Platform/Enterprise
+        instance; logs themselves now confirmed landing in Splunk Cloud
+        Platform via HEC, see 036)
 
 ## Review notes
 

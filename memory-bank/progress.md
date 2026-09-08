@@ -16,15 +16,40 @@ Last refreshed: 2026-08-18
 
 ## Left to do
 
-- Start Docker Desktop and validate Epic 001 stack with
-  `docker compose up -d --build`.
-- Epic 002: OTel Collector Pipeline to Splunk (tasks 009, 010).
-- Epic 003: Node.js OTel Instrumentation (tasks 011, 012).
-- Epic 004: RAG Document Ingestion and Chat (tasks 013, 014, 015, 016).
-- Epic 005: LLM Observability with gen_ai Semconv (tasks 017, 018).
+> Refreshed 2026-09-07. Epics 001-005 and tasks 006-035 are done; see
+> `.ai/STATUS.md` and `.ai/done/` for the authoritative trail.
+
+- Task 036 (logs correlation): HEC ingestion into Splunk Cloud Platform
+  is working and verified. Remaining: user confirms the app's own log
+  records are searchable (`index=main sourcetype=otel`), then ship.
+- Task 037: 3 items remain (Azure Foundry OTLP research is a stretch
+  goal, and blocked architecturally -- the collector is not publicly
+  reachable from Azure in a Docker-only setup).
+- Task 038: 2 stretch items deferred (golden Q&A dataset, batch eval
+  script).
+- Task 039: remaining items are Splunk-side UI verification. Its Log
+  Observer conclusion was corrected on 2026-09-07.
+- Blocked, needs a licensing decision: Log Observer Connect (trace-to-log
+  correlation in Observability Cloud) requires a licensed non-trial
+  Splunk Cloud Platform or Splunk Enterprise instance.
 
 ## Known issues
 
-- Docker Desktop not running on dev machine.
-- OTel SDK packages are experimental (0.x) -- may have breaking changes
-  between minor versions.
+- `SPLUNK_HEC_INSECURE_SKIP_VERIFY=true` is currently required because
+  the Splunk Cloud Platform trial's HEC port serves Splunk's default
+  self-signed certificate. Revert to `false` on a properly provisioned
+  instance.
+- The documented `http-inputs-<stack>.splunkcloud.com` HEC hostname does
+  not resolve on this trial; HEC is reachable on the main stack hostname
+  at port 8088 instead.
+- Log Observer Connect is unavailable on Splunk Cloud Platform trials
+  (Splunk's own documented restriction), so trace-to-log correlation in
+  Observability Cloud cannot be demonstrated on the current account.
+- OTel SDK packages are experimental (0.x) and caret-ranged, so minor
+  bumps can change APIs silently. This already caused a real outage: a
+  `BatchLogRecordProcessor` constructor signature change (positional to
+  options object) silently dropped every log record, invisible to the
+  test suite because tests mock the logger provider. When telemetry goes
+  missing, set `OTEL_LOG_LEVEL=debug` on the api service -- SDK export
+  failures are otherwise completely silent.
+- No test covers `instrumentation.js`'s SDK wiring.

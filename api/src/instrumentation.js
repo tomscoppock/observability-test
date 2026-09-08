@@ -71,12 +71,16 @@ if (otlpEndpoint) {
     exportIntervalMillis: 15000,
   });
 
+  // BatchLogRecordProcessor takes an options object -- passing the
+  // exporter positionally leaves options.exporter undefined, which makes
+  // every export throw internally and silently (diag is a no-op unless
+  // OTEL_LOG_LEVEL is set), so no logs ever reach the collector.
   sdkOptions.logRecordProcessors = [
-    new BatchLogRecordProcessor(
-      new OTLPLogExporter({
+    new BatchLogRecordProcessor({
+      exporter: new OTLPLogExporter({
         url: `${otlpEndpoint}/v1/logs`,
-      })
-    ),
+      }),
+    }),
   ];
 
   console.log(`[otel] Exporting telemetry to ${otlpEndpoint}`);

@@ -64,7 +64,7 @@ generating duration and call-count metrics from all spans.
 | **Traces** | `otlp_http/splunk` | Splunk APM (`/v2/trace/otlp`) |
 | **Traces** | `spanmetrics` (connector) | Metrics pipeline (generates `duration` + `calls`) |
 | **Metrics** | `signalfx` | Splunk Infrastructure Monitoring |
-| **Logs** | `otlp_http/splunk_logs` | Splunk Log Observer (`/v2/log/otlp`) |
+| **Logs** | `splunk_hec/logs` | Splunk Cloud Platform / Enterprise, via HEC |
 | **All** | `debug` | Collector stdout (always on) |
 
 **Receivers:**
@@ -135,13 +135,36 @@ Set these in your `.env` file (see `.env.example`):
 
 | Variable | Example | Description |
 |---|---|---|
-| `SPLUNK_ACCESS_TOKEN` | `abc123...` | Splunk Observability Cloud ingest token |
+| `SPLUNK_ACCESS_TOKEN` | `abc123...` | Splunk Observability Cloud ingest token (traces + metrics) |
 | `SPLUNK_REALM` | `us1` | Your Splunk realm (us0, us1, eu0, etc.) |
+| `SPLUNK_HEC_URL` | `https://http-inputs-<stack>.splunkcloud.com/services/collector` | Splunk Cloud Platform HEC endpoint (logs only) -- see note below, this varies |
+| `SPLUNK_HEC_TOKEN` | `abc123...` | HEC token, generated in Splunk Web (Settings > Add Data > HTTP Event Collector) |
+| `SPLUNK_HEC_INDEX` | `main` | Target index for log events |
+| `SPLUNK_HEC_SOURCETYPE` | `otel` | Sourcetype assigned to log events |
+| `SPLUNK_HEC_INSECURE_SKIP_VERIFY` | `false` | Set `true` only against a Splunk instance still using its default self-signed cert (e.g. an unprovisioned trial's HEC port) -- never in production |
 
-The collector config derives all endpoints from `SPLUNK_REALM`:
+**On some Splunk Cloud Platform trials, the documented `http-inputs-<stack>.splunkcloud.com`
+hostname is not actually provisioned in DNS.** If `SPLUNK_HEC_URL` fails to
+resolve, check whether HEC is instead reachable directly on your main stack
+hostname at port 8088 (`https://<stack>.splunkcloud.com:8088/services/collector`).
+If so, it will likely present Splunk's default `SplunkServerDefaultCert`
+self-signed certificate rather than one matching the hostname -- that's
+expected for an unprovisioned trial, not a security concern in itself, but
+it does mean `SPLUNK_HEC_INSECURE_SKIP_VERIFY=true` is required to accept
+it. See [docs/splunk-setup.md](splunk-setup.md#log-observer-connect-splunk-cloud-platform)
+for the full diagnostic path.
+
+The collector config derives traces/metrics endpoints from `SPLUNK_REALM`:
 - Traces: `https://ingest.{realm}.signalfx.com/v2/trace/otlp`
 - Metrics: auto-derived by the signalfx exporter
-- Logs: `https://ingest.{realm}.signalfx.com`
+
+Logs do **not** go to Observability Cloud -- Splunk deprecated direct
+OTLP/HEC log ingest there in January 2024. Logs go to Splunk Cloud
+Platform / Enterprise via the `splunk_hec/logs` exporter, using
+`SPLUNK_HEC_URL` directly (not derived from `SPLUNK_REALM`, since it
+points at a different product). See
+[docs/splunk-setup.md](splunk-setup.md#log-observer-connect-splunk-cloud-platform)
+for the full architecture and Log Observer Connect linking steps.
 
 ### Viewing telemetry locally
 
@@ -162,6 +185,12 @@ After setting `SPLUNK_ACCESS_TOKEN` and `SPLUNK_REALM` in `.env`:
 2. Check for export errors: `docker compose logs otel-collector | findstr "error"`
 3. Open Splunk Observability Cloud -> APM -> look for service `rag-api`
 4. Check Infrastructure Monitoring for metrics from `rag-api`
+
+For logs specifically (a separate destination -- Splunk Cloud Platform,
+not Observability Cloud), set the four `SPLUNK_HEC_*` variables and run
+`scripts/setup-splunk-hec.ps1` (or `.sh`), which validates the HEC
+connection and redeploys the collector. See
+[docs/splunk-setup.md](splunk-setup.md#log-observer-connect-splunk-cloud-platform).
 
 ### Adding Azure Monitor exporter (future)
 

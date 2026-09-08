@@ -54,13 +54,39 @@ are needed -- just set the correct base URL format (see
 | `OTEL_SERVICE_NAME` | `rag-api` | Service name in telemetry |
 | `OTEL_RESOURCE_ATTRIBUTES` | `deployment.environment=dev` | Extra resource attributes (key=value,key=value) |
 
-### Splunk Observability Cloud
+### Splunk Observability Cloud (traces + metrics)
 
 | Variable | Default | Description |
 |---|---|---|
 | `SPLUNK_ACCESS_TOKEN` | (empty) | Splunk ingest token |
 | `SPLUNK_REALM` | `us1` | Splunk realm (us0, us1, eu0, etc.) |
-| `SPLUNK_INGEST_URL` | `https://ingest.us1.signalfx.com` | Splunk ingest endpoint |
+
+The collector derives the ingest endpoint from `SPLUNK_REALM` directly --
+there is no separate `SPLUNK_INGEST_URL` variable.
+
+### Splunk Cloud Platform (logs, via HEC)
+
+Logs do not go to Observability Cloud -- native Log Observer was
+deprecated by Splunk in January 2024. See
+[splunk-setup.md](splunk-setup.md#log-observer-connect-splunk-cloud-platform)
+for the full architecture.
+
+| Variable | Default | Description |
+|---|---|---|
+| `SPLUNK_HEC_URL` | (empty) | Splunk Cloud Platform HEC endpoint -- see note below, format varies by deployment |
+| `SPLUNK_HEC_TOKEN` | (empty) | HEC token, generated in Splunk Web |
+| `SPLUNK_HEC_INDEX` | `main` | Target index for log events |
+| `SPLUNK_HEC_SOURCETYPE` | `otel` | Sourcetype assigned to log events |
+| `SPLUNK_HEC_INSECURE_SKIP_VERIFY` | `false` | Set `true` only against a Splunk instance still using its default self-signed cert (e.g. an unprovisioned trial) -- never in production |
+
+**`SPLUNK_HEC_URL` format varies.** Splunk documents
+`https://http-inputs-<stack>.splunkcloud.com/services/collector` as the
+standard pattern, but on some trials that hostname is never actually
+provisioned in DNS. If so, check whether HEC is reachable directly on
+the main stack hostname at port 8088 instead -- see
+[splunk-setup.md](splunk-setup.md#log-observer-connect-splunk-cloud-platform)
+for the diagnostic steps and why `SPLUNK_HEC_INSECURE_SKIP_VERIFY` may
+also be needed in that case.
 
 ### Azure Monitor (future)
 

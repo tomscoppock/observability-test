@@ -35,10 +35,27 @@ swappable LLM backend.
      +-----------------+   +----------------+
               |
      +--------v--------+
-     | OTel Collector   |----> Splunk / Azure Monitor / Grafana
+     | OTel Collector   |
      | (contrib image)  |
-     +-----------------+
+     +--+-----------+---+
+        |           |
+        | traces    | logs
+        | metrics   | (HEC)
+        v           v
+  +-------------+  +------------------+
+  | Splunk      |  | Splunk Cloud     |
+  | Observability|  | Platform /       |
+  | Cloud (APM, |  | Enterprise       |
+  | Infra Mon)  |  | (log indexes)    |
+  +-------------+  +------------------+
 ```
+
+Traces and metrics go to Splunk Observability Cloud; logs go to Splunk
+Cloud Platform via HEC, because Splunk deprecated native log ingest into
+Observability Cloud in January 2024. See
+[docs/architecture.md](docs/architecture.md) for the full split and
+[docs/splunk-setup.md](docs/splunk-setup.md) for setup. Azure Monitor and
+Grafana remain swappable alternatives via the collector config.
 
 All services run in Docker Compose. All configuration is in `.env`.
 

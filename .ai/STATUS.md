@@ -29,7 +29,7 @@ Last updated: 2026-09-07
   - 032 -- Dashboard 4-tab split (@tom) -- done 2026-09-07
   - 033 -- Spanmetrics connector (@tom) -- done 2026-09-07
   - 035 -- Fix token metrics dashboard (@tom) -- done 2026-09-07
-  - 036 -- Logs correlation and verification (@tom) -- in progress (filter/logs + docs done, user verification pending)
+  - 036 -- Logs correlation and verification (@tom) -- in progress (pivoted to HEC: native Log Observer deprecated Jan 2024; also fixed a silent BatchLogRecordProcessor bug that was dropping ALL app logs. HEC ingestion verified end-to-end; Log Observer Connect blocked on non-trial licence)
   - 037 -- Splunk AI overview and Azure Foundry (@tom) -- in progress (7/10 items done via 039)
   - 038 -- Evals and drift monitoring (@tom) -- in progress (response length metric + drift detectors documented)
   - 039 -- Populate Splunk OOTB features (@tom) -- in progress (gen_ai attrs + metrics done, user verification pending)
@@ -71,7 +71,15 @@ Last updated: 2026-09-07
 
 ## Blockers
 
-(None)
+- **Log Observer Connect (tasks 036, 039)** -- requires a licensed,
+  non-trial Splunk Cloud Platform or Splunk Enterprise instance. Splunk
+  documents it as unavailable on Cloud Platform trials, which is what
+  this project has. Logs themselves DO reach Splunk Cloud Platform via
+  HEC and are searchable there; only the trace-to-log correlation UI
+  inside Observability Cloud is blocked. Needs a licensing decision.
+- **Azure Foundry OTLP export (task 037, stretch)** -- would need the
+  collector publicly reachable from Azure, not possible in the current
+  Docker-only setup.
 
 ## Numbering
 

@@ -33,14 +33,47 @@
 
 All services emit telemetry via OTLP:
 
-+-------------------+
-| OTel Collector    |
-| (contrib image)   |
-+---+---+---+-------+
-    |   |   |
-    v   v   v
- Splunk Azure Grafana
++---------------------------+
+|      OTel Collector       |
+|     (contrib image)       |
++--+---------+--------+-----+
+   |         |        |
+   | traces  | metrics|  logs
+   |         |        |
+   v         v        v
++--------------------+  +----------------------+
+| Splunk             |  | Splunk Cloud         |
+| Observability Cloud|  | Platform (or         |
+| (formerly SignalFx)|  | Splunk Enterprise)   |
+|                    |  |                      |
+| - APM (traces)     |  | - Indexes/stores     |
+| - Infra Monitoring |  |   raw log events     |
+|   (metrics)        |  | - Received via HEC   |
++--------------------+  +----------------------+
+
+(Azure Monitor and Grafana are alternative backends, swappable
+ via the collector config -- see docs/opentelemetry.md)
 ```
+
+**Traces and metrics go to a different Splunk product than logs.** This
+is not a design preference, it is forced by Splunk: they deprecated
+native Log Observer (direct log ingest into Observability Cloud) in
+January 2024. Logs must now live in a Splunk Cloud Platform or Splunk
+Enterprise instance, which Observability Cloud then reads in place via
+Log Observer Connect rather than storing a copy. So:
+
+| Signal | Exporter | Destination |
+|---|---|---|
+| Traces | `otlp_http/splunk` | Splunk Observability Cloud (APM) |
+| Metrics | `signalfx` | Splunk Observability Cloud (Infrastructure Monitoring) |
+| Logs | `splunk_hec/logs` | Splunk Cloud Platform / Enterprise, via HEC |
+
+Trace-to-log correlation therefore spans two products: the log records
+carry `trace_id`/`span_id` (attached by `logger.js` from the active
+span), and Log Observer Connect uses those to join them back to the
+traces in APM. See [splunk-setup.md](splunk-setup.md#log-observer-connect-splunk-cloud-platform)
+for the full setup, including the licensing constraint that Log Observer
+Connect is not available on Splunk Cloud Platform trial accounts.
 
 ## Services
 
@@ -105,8 +138,12 @@ All services emit telemetry via OTLP:
 3. Playwright MCP server (external) also exports traces via OTLP HTTP
    to the same collector -- W3C `traceparent` headers propagate trace
    context across the HTTP boundary automatically
-4. Collector batches and forwards to configured backends
-5. Backends (Splunk/Azure/Grafana) store and visualise the data
+4. Collector batches and forwards each signal to its own destination:
+   traces and metrics to Splunk Observability Cloud, logs to Splunk
+   Cloud Platform via HEC (see the split described above)
+5. Log records carry `trace_id`/`span_id`, so Log Observer Connect can
+   join them back to the corresponding APM traces across the two
+   products
 
 ## Playwright MCP server (external)
 

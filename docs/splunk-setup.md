@@ -77,31 +77,44 @@ Node.js API (rag-api)               SurrealDB 3.2+ (surrealdb)
                     |
             OTel Collector (otel-collector container)
                     |
-                    |  Three export pipelines:
-                    |    Traces  --> otlp_http/splunk  --> Splunk APM
-                    |    Metrics --> signalfx           --> Splunk IM
-                    |    Logs    --> otlp_http/splunk_logs --> Splunk Log Observer
-                    |
-                    |  The spanmetrics connector generates metrics
-                    |  from ALL spans (including INTERNAL/CLIENT):
-                    |    duration  -- histogram of span durations (ms)
-                    |    calls     -- counter of span invocations
-                    |
-                    v
-            Splunk Observability Cloud
-                    |
-                    |  APM derives Monitoring MetricSets (MMS) from traces:
-                    |    service.request  -- histogram containing count + duration
-                    |    spans            -- per-span histogram (SERVER/CONSUMER only)
-                    |    traces           -- per-trace histogram
-                    |
-                    |  Infrastructure Monitoring receives direct metrics:
-                    |    surrealdb.*      -- gauges, counters, histograms
-                    |    duration/calls   -- from spanmetrics connector
-                    |
-                    v
-            Dashboards, Alerts, Service Map
+                    |  Traces  --> otlp_http/splunk  ------+
+                    |  Metrics --> signalfx  --------------+
+                    |                                      |
+                    |  Logs    --> splunk_hec/logs -----+  |
+                    |              (HTTP Event Collector) |  |
+                    v                                   |  v
+        +------------------------+                      |  +----------------------------+
+        | Splunk Cloud Platform  |                      |  |  Splunk Observability Cloud |
+        |    / Splunk Enterprise |                      |  |     (formerly SignalFx)     |
+        |                        |                      |  |                              |
+        | - Indexes and stores   |                      |  | - APM (traces)               |
+        |   raw log events       |                      |  | - Infrastructure Monitoring   |
+        | - Separate product/    |                      |  |   (metrics)                   |
+        |   license from the     |                      |  | - Dashboards, Alerts,         |
+        |   box on the right     |                      |  |   Service Map                 |
+        +------------------------+                      |  +----------------------------+
+                    ^                                    |              ^
+                    |            Log Observer Connect    +--------------+
+                    +------------ (live query -- logs stay in Splunk
+                                   Cloud Platform, never copied into
+                                   Observability Cloud) ---------------+
 ```
+
+**Why two products for one demo?** Splunk Observability Cloud (the
+APM/Infrastructure Monitoring/dashboards product, built on the
+SignalFx acquisition) and Splunk Cloud Platform (the classic
+index-and-search product) are separate licensed offerings with separate
+data stores. Splunk deprecated *native* Log Observer -- which used to let
+Observability Cloud ingest and store logs directly via OTLP/HEC -- in
+January 2024. The current product, **Log Observer Connect**, does not
+store a copy of your logs in Observability Cloud at all; it queries them
+live from a genuine Splunk Enterprise or Splunk Cloud Platform instance.
+That is why this stack's logs pipeline targets Splunk Cloud Platform via
+HEC (`splunk_hec/logs`) while traces and metrics continue straight into
+Observability Cloud -- see [Section 25's Log Observer
+Connect](#log-observer-connect-splunk-cloud-platform) subsection for the
+full setup. Note that Log Observer Connect is not available on Splunk
+Cloud Platform trial accounts, only licensed instances.
 
 **Key concept -- Monitoring MetricSets (MMS) and spanmetrics:**
 
@@ -449,13 +462,13 @@ SurrealDB 3.2.4 (surrealdb container)
   v
 OTel Collector (same instance as rag-api)
   |
-  |  Same three export pipelines:
-  |    Metrics --> signalfx          --> Splunk IM
-  |    Traces  --> otlp_http/splunk  --> Splunk APM
-  |    Logs    --> otlp_http/splunk_logs --> Splunk Log Observer
+  |  Same export pipelines as rag-api (see Section 1):
+  |    Metrics --> signalfx          --> Splunk Observability Cloud
+  |    Traces  --> otlp_http/splunk  --> Splunk Observability Cloud
+  |    Logs    --> splunk_hec/logs   --> Splunk Cloud Platform (via HEC)
   |
   v
-Splunk Observability Cloud
+Splunk Observability Cloud + Splunk Cloud Platform
 ```
 
 **Key difference from rag-api:** These are **infrastructure metrics** --
@@ -1317,8 +1330,8 @@ configuration.
 | **AI Agent Monitoring** | Needs config | `gen_ai.*` spans | Enable in Settings; spans already have correct attributes |
 | **Database Monitoring** | Not supported | Dedicated receivers | Only MS SQL Server, PostgreSQL, Oracle. SurrealDB not in supported list |
 | **Database Query Perf** | Partial | `db.*` span attributes | SurrealDB shows as inferred service; full query analytics requires supported `db.system` value |
-| **Log Observer** | Working | OTel logs via OTLP | Logs sent to `v2/log/otlp`; trace_id correlation automatic |
-| **Log Observer Connect** | N/A | Splunk Enterprise/Cloud | Requires separate Splunk Platform license |
+| **Log Observer (native)** | Deprecated | N/A | Splunk deprecated direct OTLP/HEC log ingest into Observability Cloud in Jan 2024. Do not build against this. |
+| **Log Observer Connect** | Needs config | Logs in Splunk Cloud Platform/Enterprise, live-queried | Logs sent via `splunk_hec/logs` to Splunk Cloud Platform; requires a licensed (non-trial) Platform instance and admin-console linking. See [Log Observer Connect](#log-observer-connect-splunk-cloud-platform) below. |
 | **Infrastructure** | Working | `docker_stats` + `hostmetrics` | Container and host metrics via collector receivers |
 | **Related Content** | Working | `host.name` + `trace_id` | `resourcedetection` processor sets `host.name`; logs include `trace_id` |
 | **Metric Finder** | Working | All metrics | All custom and built-in metrics searchable |
@@ -1423,16 +1436,125 @@ a `resourcedetection` processor that sets `host.name`. This enables:
 - **Related Content** -- click from a trace to see correlated
   infrastructure metrics and logs for the same host
 
-### Log Observer
+### Log Observer Connect (Splunk Cloud Platform)
 
-OTel log records are sent via OTLP to Splunk's `v2/log/otlp` endpoint.
-The logger (`logger.js`) attaches active span context to every log
-record, so `trace_id` and `span_id` are automatically included. This
-enables:
+**Finding, 2026-09:** this stack originally sent logs via OTLP straight
+to Splunk Observability Cloud (`otlp_http/splunk_logs` -> `v2/log/otlp`),
+following the "Log Observer" guidance that used to live in this section.
+That path is dead: Splunk deprecated native Log Observer, with migration
+required by the end of January 2024. Observability Cloud's own UI now
+tells you as much if you open **Logs Explorer** without a linked
+platform: *"You can use Splunk Log Observer to work with logs that you
+send to Splunk Cloud or Splunk Enterprise. To get started, ask your
+Splunk administrator to set up Splunk Log Observer Connect."*
 
-- **Trace-log correlation** -- click from a trace to see related logs
-- **Log-to-trace navigation** -- click a `trace_id` in a log to jump
-  to the trace in APM
+The replacement product, **Log Observer Connect**, works differently: it
+does not store or index a copy of your logs in Observability Cloud at
+all -- it live-queries them from a separate, genuinely licensed Splunk
+Enterprise (9.0.1+) or Splunk Cloud Platform (9.0.2209+) instance. See
+the [top-level architecture diagram](#1-how-our-data-reaches-splunk) in
+Section 1. Two things this rules out for a quick demo setup:
+
+- **Log Observer Connect does not work on Splunk Cloud Platform trial
+  accounts** -- confirmed directly in Splunk's help docs. A trial Cloud
+  Platform instance can still receive and index logs via HEC and let you
+  search them in that platform's own Splunk Web UI, but Observability
+  Cloud will not be able to link to it until it's a licensed instance.
+- There is no API for the platform-linking step itself -- it's an
+  admin-console-only workflow on both sides (see below).
+
+Sources: [Introduction to Log Observer
+Connect](https://docs.splunk.com/observability/logs/intro-logconnect.html),
+[Set up Log Observer Connect for Splunk Cloud
+Platform](https://help.splunk.com/en/splunk-observability-cloud/manage-data/view-splunk-platform-logs/set-up-log-observer-connect-for-splunk-cloud-platform),
+[Splunk Log Observer transitioning to Log Observer
+Connect](https://splunk.my.site.com/customer/s/article/Splunk-Log-Observer-transitioning).
+
+#### Generating a HEC token (Splunk Cloud Platform)
+
+1. In Splunk Web: **Settings -> Add Data -> Monitor -> HTTP Event
+   Collector**.
+2. Name the token (e.g. `otel-collector-logs`).
+3. Set the source type (`_json` is fine -- the collector sends
+   structured JSON) and pick the target index. Use `main` or a
+   dedicated index (e.g. `otel_logs`) -- **not** `history`, which is
+   Splunk's internal index for search-job history, not application data.
+4. Review and submit. Splunk shows the token value once -- copy it
+   immediately into `.env` as `SPLUNK_HEC_TOKEN`.
+5. Splunk Cloud Platform also exposes an admin API (ACS) for scripted
+   token creation, but ACS does not support single-instance deployments,
+   which most trial/small stacks are -- the UI path above is the
+   reliable one. See [Manage HEC tokens via
+   ACS](https://help.splunk.com/en/splunk-cloud-platform/administer/admin-config-service-manual/10.5.2605/administer-splunk-cloud-platform-using-the-admin-config-service-acs-api/manage-http-event-collector-hec-tokens-in-splunk-cloud-platform)
+   if you want to try it on a licensed multi-instance stack.
+
+Set these in `.env` (see `.env.example`):
+
+```
+SPLUNK_HEC_URL=https://http-inputs-<your-stack>.splunkcloud.com/services/collector
+SPLUNK_HEC_TOKEN=<token value from step 4>
+SPLUNK_HEC_INDEX=main
+SPLUNK_HEC_SOURCETYPE=otel
+SPLUNK_HEC_INSECURE_SKIP_VERIFY=false
+```
+
+#### If `SPLUNK_HEC_URL` doesn't resolve (trial accounts)
+
+**Finding, 2026-09:** on at least one Splunk Cloud Platform free trial,
+the documented `http-inputs-<stack>.splunkcloud.com` hostname was never
+provisioned in DNS at all -- it fails with `NXDOMAIN`, confirmed by direct
+DNS lookup, not just a client-side misconfiguration. Splunk's own docs
+say free trials use **port 8088** rather than 443 for HEC, which
+suggested trying the main stack hostname directly instead of the
+`http-inputs-` subdomain:
+
+```
+https://<your-stack>.splunkcloud.com:8088/services/collector
+```
+
+Testing this confirmed HEC is genuinely listening there -- but presenting
+Splunk's own default self-signed certificate (`CN=SplunkServerDefaultCert,
+O=SplunkUser`, issued by Splunk's internal `SplunkCommonCA`), not one
+matching the hostname. This is the certificate every Splunk instance
+ships with before a proper CA-signed cert is configured for a given
+port/service -- an artifact of the trial never being fully provisioned,
+not a sign of anything wrong on your network. Standard TLS clients
+(browsers, curl, PowerShell) correctly reject it, since it doesn't match
+the hostname you're connecting to.
+
+If you hit this: set `SPLUNK_HEC_URL` to the main-hostname:8088 form
+above, and set `SPLUNK_HEC_INSECURE_SKIP_VERIFY=true` to accept the
+default cert. **Only do this against an instance you've confirmed is
+presenting Splunk's own default cert for this reason** -- never set it
+against a production Splunk deployment, where the fix is to provision a
+real certificate on the correctly-registered `http-inputs-` hostname
+instead of bypassing verification.
+
+Splunk Cloud Platform normally uses port 443 for HEC on properly
+provisioned (non-trial) instances -- the `:8088` requirement above is
+specific to trials per Splunk's own documentation.
+
+#### Activating the pipeline
+
+Run `scripts/setup-splunk-hec.ps1` (or `.sh`). It validates the four
+`SPLUNK_HEC_*` variables, sends one test event straight to the HEC
+endpoint to confirm the token/URL/index actually work, then rebuilds and
+restarts `otel-collector` and tails its logs. It does not create the HEC
+token itself -- see the manual step above.
+
+#### Verifying logs land in Splunk Cloud Platform
+
+1. Generate traffic (send a chat message or run the demo traffic script).
+2. In **Splunk Cloud Platform** Search (not Observability Cloud), run:
+   `index=<SPLUNK_HEC_INDEX> sourcetype=<SPLUNK_HEC_SOURCETYPE>`
+3. You should see log records with a `trace_id` field (the logger,
+   `logger.js`, attaches active span context to every log record).
+
+If nothing appears, check:
+- The collector is running: `docker compose logs otel-collector`
+- The four `SPLUNK_HEC_*` env vars are set correctly
+- The collector debug output shows log records being exported (no
+  401/403/404 from the `splunk_hec/logs` exporter)
 
 #### Log level filtering
 
@@ -1453,50 +1575,88 @@ To temporarily include DEBUG logs (e.g. for troubleshooting), remove
 `filter/logs` from the logs pipeline in `otel-collector-config.yaml`
 and restart the collector.
 
-#### Verifying logs in Splunk Log Observer
+#### Setting up Log Observer Connect (links Splunk Cloud Platform into Observability Cloud)
 
-1. Generate traffic (send a chat message or run the demo traffic script)
-2. In Splunk Observability Cloud, go to **Log Observer** (left nav)
-3. Set the time range to **Last 15 minutes**
-4. In the filter bar, add: `service.name = rag-api`
-5. You should see log records with:
-   - `severityText`: INFO, WARN, or ERROR
-   - `body`: the log message (e.g. "Chat request received",
-     "LLM completion received")
-   - `traceId` and `spanId`: populated for logs emitted inside spans
-   - `attributes`: structured data (e.g. `messageLength`, `model`,
-     `promptTokens`)
+This is entirely manual and admin-console-driven on both sides -- no API
+exists for it, and it requires a **licensed (non-trial)** Splunk Cloud
+Platform or Splunk Enterprise instance.
 
-If no logs appear, check:
-- The collector is running: `docker compose logs otel-collector`
-- The `SPLUNK_ACCESS_TOKEN` and `SPLUNK_REALM` env vars are set
-- The collector debug output shows log records being exported
+> **Don't confuse this with "Connect a Splunk Observability Cloud
+> organization"** (Splunk Cloud Platform -> Settings -> Splunk
+> Observability Cloud), which does the opposite: it pulls Observability
+> Cloud *metrics* into Splunk's own Dashboard Studio / Search & Reporting
+> app. It's a real, separately useful integration, but completing it does
+> **not** unlock Log Observer Connect or bypass the trial restriction --
+> the two are independent setup flows in opposite data directions.
 
-#### Trace-to-log correlation workflow
+If you attempt Log Observer Connect's setup wizard (from Observability
+Cloud: **Data Management > Logs > Splunk platform connections**) on a
+trial and see a request to `/services/authorization/tokens` fail with
+`303 See Other`, that's very likely Splunk Cloud Platform's **Search Head
+API IP allow list** blocking Observability Cloud's own backend from
+calling in -- by realm, the IPs to allow are:
 
-**From a trace to its logs:**
+| Realm | IPs to allow (Search Head API) |
+|---|---|
+| us0 | 34.199.200.84/32, 52.20.177.252/32, 52.201.67.203/32, 54.89.1.85/32 |
+| us1 | 44.230.152.35/32, 44.231.27.66/32, 44.225.234.52/32, 44.230.82.104/32 |
+| eu0 | 108.128.26.145/32, 34.250.243.212/32, 54.171.237.247/32 |
+| eu1 | 3.73.240.7/32, 18.196.129.64/32, 3.126.181.171/32 |
+| eu2 | 13.41.86.83/32, 52.56.124.93/32, 35.177.204.133/32 |
+| jp0 | 35.78.47.79/32, 35.77.252.198/32, 35.75.200.181/32 |
+| au0 | 13.54.193.47/32, 13.55.9.109/32, 54.153.190.59/32 |
+| sg0 | 3.0.226.159/32, 18.136.255.76/32, 52.220.199.72/32 |
+| us2 (GCP) | 35.247.113.38/32, 35.247.32.72/32, 35.247.86.219/32 |
 
-1. Go to **APM > Traces** and select a trace
-2. In the trace detail view, look for **Related Content** in the right
-   panel or bottom section
-3. Click **Logs** to see all log records that share the same `trace_id`
-4. The logs appear in chronological order, showing what happened at each
-   step of the request
+Source: [Set up Log Observer Connect for Splunk Cloud
+Platform](https://help.splunk.com/en/splunk-observability-cloud/manage-data/view-splunk-platform-logs/set-up-log-observer-connect-for-splunk-cloud-platform)
+(confirm against this page before use -- Splunk may update these IPs).
+Configuring this allow list (Splunk Web, requires `sc_admin` and token
+authentication enabled) will likely clear the 303 error itself, but **on
+a trial account Log Observer Connect will still be blocked afterward** by
+the separate trial restriction documented above -- clearing this error is
+not the same as unblocking the feature.
 
-**From a log to its trace:**
+**On Splunk Cloud Platform (as `sc_admin`):**
 
-1. In **Log Observer**, find a log record of interest
-2. Click the `traceId` field value (it's a clickable link)
-3. Splunk navigates directly to the trace in APM, showing the full
-   request waterfall
+1. **Settings -> Roles** -- create a custom role for Log Observer
+   Connect's service account.
+2. Under index access, deselect all internal indexes and select only the
+   index your logs actually use (e.g. `main` or `otel_logs`).
+3. Enable the `edit_tokens_own` and `search` capabilities; disable
+   `indexes_list_all`.
+4. On the Resources tab, set a standard search limit of 40 and a
+   real-time search limit of 0 per user.
+5. Set the role's search time window to a maximum of 2592000 seconds and
+   earliest searchable time to 7776000 seconds.
+6. Create a service account user and assign it this custom role.
+7. Add a Workload Rule limiting Log Observer Connect searches to 5
+   minutes.
+8. Ensure token authentication is enabled for the service account, and
+   confirm your Search Head API allow-list includes the IP ranges
+   Splunk documents for Log Observer Connect in your region.
+
+**In Splunk Observability Cloud:**
+
+9. Go to the Log Observer Connect setup flow (Observability Cloud
+   prompts for this the first time you open Logs Explorer without a
+   linked platform) and provide the service account credentials from
+   step 6.
+10. Once linked, open a trace in **APM > Traces** and check **Related
+    Content** for correlated log records pulled live from Splunk Cloud
+    Platform.
+
+Source: [Set up Log Observer Connect for Splunk Cloud
+Platform](https://help.splunk.com/en/splunk-observability-cloud/manage-data/view-splunk-platform-logs/set-up-log-observer-connect-for-splunk-cloud-platform).
 
 **Adding log charts to dashboards:**
 
 Log-based charts (Log Timeline, Log View) cannot be created via the
-SignalFx chart API -- they must be created through the Splunk UI:
+SignalFx chart API -- they must be created through the Splunk UI, from
+within Log Observer Connect once it's linked:
 
-1. Go to **Log Observer** and create a query (e.g. `severity = ERROR
-   AND service.name = rag-api`)
+1. Open Logs Explorer / Log Observer Connect and create a query (e.g.
+   `severity = ERROR AND service.name = rag-api`)
 2. Click **Save > Save to dashboard**
 3. Choose **Log timeline** (bar chart of log volume over time) or
    **Log view** (scrollable list of log records)

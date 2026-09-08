@@ -2,11 +2,19 @@
 # Receives OTLP telemetry from the Node.js API and exports to:
 #   1. debug (stdout) -- always on, for local troubleshooting
 #   2. Splunk Observability Cloud -- when SPLUNK_ACCESS_TOKEN is set
+#   3. Splunk Cloud Platform -- when SPLUNK_HEC_TOKEN is set (logs only)
 #
 # Exporters:
-#   Traces  -> otlphttp/splunk       (OTLP/HTTP to Splunk APM)
-#   Metrics -> signalfx              (native Splunk metrics format)
-#   Logs    -> otlp_http/splunk_logs (OTLP/HTTP to Splunk Log Observer)
+#   Traces  -> otlphttp/splunk (OTLP/HTTP to Splunk APM, Observability Cloud)
+#   Metrics -> signalfx        (native Splunk metrics format, Observability Cloud)
+#   Logs    -> splunk_hec/logs (HEC to Splunk Cloud Platform / Enterprise)
+#
+# Note: logs do NOT go to Observability Cloud. Splunk deprecated native
+# Log Observer (direct OTLP/HEC ingest into Observability Cloud) in
+# January 2024. The current product, Log Observer Connect, reads logs
+# live from a separate Splunk Enterprise/Cloud Platform instance rather
+# than storing them in Observability Cloud -- see docs/splunk-setup.md
+# for the full architecture and linking steps.
 #
 # Connectors:
 #   spanmetrics -- generates duration + calls metrics from ALL spans
@@ -114,13 +122,23 @@ exporters:
     # Required to send histogram metrics (e.g. duration from spanmetrics)
     send_otlp_histograms: true
 
-  # Logs -> Splunk Log Observer via OTLP/HTTP
-  # (splunk_hec was returning 404 -- Observability Cloud does not expose
-  #  the /services/collector HEC path; use OTLP/HTTP instead)
-  otlp_http/splunk_logs:
-    logs_endpoint: "https://ingest.${SPLUNK_REALM}.signalfx.com/v2/log/otlp"
-    headers:
-      X-SF-Token: "${SPLUNK_ACCESS_TOKEN}"
+  # Logs -> Splunk Cloud Platform / Enterprise via HTTP Event Collector (HEC)
+  # Native Log Observer (direct OTLP into Observability Cloud) was
+  # deprecated by Splunk in January 2024. Logs must live in a genuine
+  # Splunk Enterprise/Cloud Platform instance for Log Observer Connect
+  # to read them -- see docs/splunk-setup.md for the linking steps.
+  splunk_hec/logs:
+    token: "${SPLUNK_HEC_TOKEN}"
+    endpoint: "${SPLUNK_HEC_URL}"
+    index: "${SPLUNK_HEC_INDEX}"
+    source: "otel-collector"
+    sourcetype: "${SPLUNK_HEC_SOURCETYPE}"
+    tls:
+      # Only set SPLUNK_HEC_INSECURE_SKIP_VERIFY=true against a Splunk
+      # instance still using its default self-signed SplunkServerDefaultCert
+      # (e.g. an unprovisioned trial's HEC port) -- never against a
+      # production Splunk deployment. Provision a real cert there instead.
+      insecure_skip_verify: ${SPLUNK_HEC_INSECURE_SKIP_VERIFY}
 
 service:
   pipelines:
@@ -135,4 +153,4 @@ service:
     logs:
       receivers: [otlp]
       processors: [filter/logs, resourcedetection, batch, resource/splunk]
-      exporters: [debug, otlp_http/splunk_logs]
+      exporters: [debug, splunk_hec/logs]
