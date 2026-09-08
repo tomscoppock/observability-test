@@ -103,6 +103,49 @@ Common issues:
 - Indentation errors (YAML is whitespace-sensitive)
 - Missing quotes around environment variable references
 - Typos in exporter/receiver names
+- An empty `SPLUNK_HEC_URL` or `SPLUNK_HEC_TOKEN`. The `splunk_hec`
+  exporter rejects an empty endpoint or token at validation time, which
+  stops the **whole** collector, traces and metrics included. This is why
+  `docker-compose.yml` gives both inert placeholder defaults rather than
+  `""`.
+
+### Dashboards suddenly empty / no traces or metrics arriving
+
+**Symptom:** Splunk dashboards show no data, but the collector looks
+healthy and logs are still reaching Splunk Cloud Platform.
+
+**Most likely cause:** a rotated or revoked `SPLUNK_ACCESS_TOKEN`. The
+collector keeps running and reports itself as fine while silently
+dropping every span and datapoint.
+
+```bash
+docker compose logs otel-collector --since=5m | grep -iE "401|403|Unauthorized"
+```
+
+A rejected token looks like this:
+
+```
+error  Exporting failed. Dropping data.  {"otelcol.component.id": "signalfx",
+  "error": "Permanent error: HTTP \"/v2/datapoint\" 401 \"Unauthorized\"",
+  "dropped_items": 135}
+```
+
+**Fix:** put a valid token in `.env`, then **force-recreate** the
+container. Editing `.env` alone does nothing to a running container, and
+plain `restart` or `up -d` will not pick it up either:
+
+```bash
+docker compose up -d --force-recreate otel-collector
+```
+
+See [Docker Commands > Apply changed .env values](docker-commands.md#apply-changed-env-values-after-rotating-a-token)
+for the full explanation, including why the replacement token needs both
+INGEST and API scopes.
+
+Note that logs are unaffected by this, because they authenticate
+separately with `SPLUNK_HEC_TOKEN` against Splunk Cloud Platform. Logs
+continuing to arrive while traces and metrics stop is a strong signal
+that the Observability Cloud token specifically is the problem.
 
 ## API issues
 

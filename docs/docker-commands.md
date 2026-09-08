@@ -50,6 +50,51 @@ docker compose restart otel-collector
 docker compose up -d --build api
 ```
 
+### Apply changed `.env` values (after rotating a token)
+
+**A running container never sees edits to `.env`.** Environment variables
+are snapshotted when the container is created, so editing `.env` and then
+running `docker compose restart` or even `docker compose up -d` leaves the
+old values in place. Compose only recreates a container when its resolved
+config actually changes, so an unchanged image plus an unchanged compose
+file means your edit is silently ignored.
+
+Use `--force-recreate` on the affected service:
+
+```bash
+# After changing SPLUNK_ACCESS_TOKEN, SPLUNK_REALM, or any SPLUNK_HEC_* value
+docker compose up -d --force-recreate otel-collector
+
+# After changing LLM_API_KEY, EMBEDDING_API_KEY, ADMIN_PASSWORD, MCP_*, etc.
+docker compose up -d --force-recreate api
+
+# Everything at once
+docker compose up -d --force-recreate
+```
+
+Then confirm the new credentials are actually accepted, because a bad
+token fails silently from the outside -- telemetry just stops arriving:
+
+```bash
+# Should print nothing. Any 401/403 means the token is still wrong.
+docker compose logs otel-collector --since=2m | grep -iE "401|403|Unauthorized"
+```
+
+A rejected `SPLUNK_ACCESS_TOKEN` looks like this, and drops every span
+and datapoint while the collector otherwise appears healthy:
+
+```
+error  Exporting failed. Dropping data.  {"otelcol.component.id": "signalfx",
+  "error": "Permanent error: HTTP \"/v2/datapoint\" 401 \"Unauthorized\"",
+  "dropped_items": 135}
+```
+
+Note that `SPLUNK_ACCESS_TOKEN` is used for two different things in this
+project: the collector uses it to **ingest** traces and metrics, and
+`scripts/setup-splunk-dashboard.*` uses it against the **management
+API**. A replacement token needs both the INGEST and API authorization
+scopes, or dashboards will stop deploying even though ingest works.
+
 ## Logs
 
 ### View logs for all services
