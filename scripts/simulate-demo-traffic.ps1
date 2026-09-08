@@ -3,22 +3,65 @@
 # charts, distributed traces).
 #
 # Usage:
-#   .\scripts\simulate-demo-traffic.ps1 [-BaseUrl http://localhost] [-Rounds 2] [-NoErrors]
+#   .\scripts\simulate-demo-traffic.ps1 [-BaseUrl http://localhost] [-Rounds 2]
+#                                       [-DurationMinutes 30] [-Load heavy] [-NoErrors]
 #
 # Options:
-#   -BaseUrl    Base URL of the stack (default: http://localhost)
-#   -Rounds     Number of rounds (default: 2, each ~3-4 min)
-#   -NoErrors   Skip deliberate error traffic (keeps service map green)
+#   -BaseUrl          Base URL of the stack (default: http://localhost)
+#   -Rounds           Number of rounds (default: 2, each ~3-4 min)
+#   -DurationMinutes  Run for this many minutes instead, looping rounds
+#                     until the time is up. Overrides -Rounds. Default: 0 (off).
+#   -Load             light (default, current behaviour) or heavy.
+#                     heavy shortens pauses ~4x and sends 3x the chat
+#                     volume per round.
+#   -NoErrors         Skip deliberate error traffic (keeps service map green)
 #
 # Requires: PowerShell 5.1+ (Invoke-WebRequest)
+#
+# COST WARNING: every chat message is a real LLM API call. -Load heavy
+# triples chat volume and removes most of the pacing, so a long heavy run
+# can be expensive. Start with a short -DurationMinutes to gauge the rate.
 
 param(
     [string]$BaseUrl = "http://localhost",
     [int]$Rounds = 2,
+    [int]$DurationMinutes = 0,
+    [ValidateSet('light','heavy')]
+    [string]$Load = 'light',
     [switch]$NoErrors
 )
 
 $ErrorActionPreference = "Continue"
+
+# ---------------------------------------------------------------------------
+# Derive load settings
+# ---------------------------------------------------------------------------
+if ($Load -eq 'heavy') {
+    $DelayDivisor = 4
+    $ChatRepeat   = 3
+}
+else {
+    $DelayDivisor = 1
+    $ChatRepeat   = 1
+}
+
+if ($DurationMinutes -lt 0) {
+    Write-Error 'ERROR: -DurationMinutes cannot be negative'
+    exit 1
+}
+if ($Rounds -lt 1) {
+    Write-Error 'ERROR: -Rounds must be a positive whole number'
+    exit 1
+}
+
+# Scaled sleep. Under -Load heavy every pause is divided by $DelayDivisor,
+# with a 1s floor so we still yield between requests rather than spinning.
+function Start-Pause {
+    param([int]$Seconds)
+    $scaled = [Math]::Floor($Seconds / $DelayDivisor)
+    if ($scaled -lt 1) { $scaled = 1 }
+    Start-Sleep -Seconds $scaled
+}
 
 $ScriptDir = Split-Path -Parent $MyInvocation.MyCommand.Path
 $SampleDir = Join-Path (Split-Path -Parent $ScriptDir) "sample-docs"
@@ -205,7 +248,7 @@ function Hit-Health {
 function Get-RandomDelay {
     param([int]$Min, [int]$Max)
     $delay = Get-Random -Minimum $Min -Maximum ($Max + 1)
-    Start-Sleep -Seconds $delay
+    Start-Pause -Seconds $delay
 }
 
 # ---------------------------------------------------------------------------
@@ -218,7 +261,13 @@ Write-Host "  RAG Agent -- Demo Traffic Simulator" -ForegroundColor White
 Write-Host "==============================================" -ForegroundColor White
 Write-Host ""
 Log "Base URL:  $BaseUrl"
-Log "Rounds:    $Rounds"
+if ($DurationMinutes -gt 0) {
+    Log "Duration:  $DurationMinutes min (rounds loop until elapsed)"
+}
+else {
+    Log "Rounds:    $Rounds"
+}
+Log "Load:      $Load (pauses /$DelayDivisor, chat x$ChatRepeat)"
 Log "Errors:    $IncludeErrors"
 Log "Sessions:  Alice=$SessionA"
 Log "           Bob=$SessionB"
@@ -256,10 +305,21 @@ Write-Host ""
 
 $sessions = @($SessionA, $SessionB, $SessionC)
 
-for ($round = 1; $round -le $Rounds; $round++) {
+$StartTime = Get-Date
+$Deadline = if ($DurationMinutes -gt 0) { $StartTime.AddMinutes($DurationMinutes) } else { $null }
+
+$round = 0
+while ($true) {
+    $round++
     Write-Host ""
     Write-Host "----------------------------------------------" -ForegroundColor White
-    Phase "Round $round of $Rounds"
+    if ($Deadline) {
+        $remaining = [Math]::Max(0, [Math]::Ceiling(($Deadline - (Get-Date)).TotalMinutes))
+        Phase "Round $round (~$remaining min remaining)"
+    }
+    else {
+        Phase "Round $round of $Rounds"
+    }
     Write-Host "----------------------------------------------" -ForegroundColor White
     Write-Host ""
 
@@ -269,20 +329,23 @@ for ($round = 1; $round -le $Rounds; $round++) {
         $sampleFiles = Get-ChildItem -Path $SampleDir -Filter "*.txt" -ErrorAction SilentlyContinue
         foreach ($f in $sampleFiles) {
             Send-Upload -FilePath $f.FullName -Session $SessionA
-            Start-Sleep -Seconds 1
+            Start-Pause -Seconds 1
         }
         Ok "Phase 1 complete -- documents uploaded"
         Write-Host ""
     }
 
     # Phase 2: Chat traffic (multiple sessions, varied delays)
-    Phase "Phase 2: Chat traffic ($($ChatMessages.Count) messages)"
-    for ($i = 0; $i -lt $ChatMessages.Count; $i++) {
-        $sessionIdx = $i % 3
-        $session = $sessions[$sessionIdx]
-        Send-Chat -Session $session -Message $ChatMessages[$i]
-        Hit-Health
-        Get-RandomDelay -Min 3 -Max 8
+    # Under -Load heavy the whole message set is replayed $ChatRepeat times.
+    Phase "Phase 2: Chat traffic ($($ChatMessages.Count * $ChatRepeat) messages)"
+    for ($pass = 1; $pass -le $ChatRepeat; $pass++) {
+        for ($i = 0; $i -lt $ChatMessages.Count; $i++) {
+            $sessionIdx = ($i + $pass) % 3
+            $session = $sessions[$sessionIdx]
+            Send-Chat -Session $session -Message $ChatMessages[$i]
+            Hit-Health
+            Get-RandomDelay -Min 3 -Max 8
+        }
     }
     Ok "Phase 2 complete -- chat traffic generated"
     Write-Host ""
@@ -297,7 +360,7 @@ for ($round = 1; $round -le $Rounds; $round++) {
                 Warn "MCP became unavailable -- skipping remaining scrapes"
                 break
             }
-            Start-Sleep -Seconds 3
+            Start-Pause -Seconds 3
         }
         if ($McpAvailable) { Ok "Phase 3 complete" }
     } else {
@@ -309,11 +372,11 @@ for ($round = 1; $round -le $Rounds; $round++) {
     Phase "Phase 4: Error traffic"
     if ($IncludeErrors) {
         Send-Error -Message "Simulated timeout for demo" -Session $SessionC
-        Start-Sleep -Seconds 1
+        Start-Pause -Seconds 1
         Send-Error -Message "Simulated validation failure" -Session $SessionA
-        Start-Sleep -Seconds 1
+        Start-Pause -Seconds 1
         Send-Error -Message "Simulated upstream error" -Session $SessionB
-        Start-Sleep -Seconds 1
+        Start-Pause -Seconds 1
         Send-Error -Message "Simulated rate limit exceeded" -Session $SessionC
         Ok "Phase 4 complete -- errors recorded"
     } else {
@@ -326,32 +389,45 @@ for ($round = 1; $round -le $Rounds; $round++) {
     Phase "Phase 5: Cool-down -- successful requests"
     Send-Chat -Session $SessionA -Message "Summarise the key points of the leave policy"
     Hit-Health
-    Start-Sleep -Seconds 3
+    Start-Pause -Seconds 3
     Send-Chat -Session $SessionB -Message "What are the main data protection principles?"
     Hit-Health
-    Start-Sleep -Seconds 3
+    Start-Pause -Seconds 3
     Send-Chat -Session $SessionC -Message "How do I submit an expense claim?"
     Hit-Health
-    Start-Sleep -Seconds 3
+    Start-Pause -Seconds 3
     Send-Chat -Session $SessionA -Message "What is the notice period for resignation?"
     Hit-Health
-    Start-Sleep -Seconds 3
+    Start-Pause -Seconds 3
     Send-Chat -Session $SessionB -Message "Explain the whistleblowing procedure"
     Ok "Phase 5 complete"
     Write-Host ""
 
-    if ($round -lt $Rounds) {
-        Log "Pausing 10s before next round ..."
-        Start-Sleep -Seconds 10
+    # Termination: by deadline in duration mode, by count otherwise.
+    if ($Deadline) {
+        if ((Get-Date) -ge $Deadline) {
+            Log "Duration reached after $round round(s)."
+            break
+        }
     }
+    elseif ($round -ge $Rounds) {
+        break
+    }
+
+    Log "Pausing before next round ..."
+    Start-Pause -Seconds 10
 }
+
+$ElapsedMin = [Math]::Ceiling(((Get-Date) - $StartTime).TotalMinutes)
 
 Write-Host ""
 Write-Host "==============================================" -ForegroundColor White
 Write-Host "  Simulation complete!" -ForegroundColor White
 Write-Host "==============================================" -ForegroundColor White
 Write-Host ""
-Log "Total rounds: $Rounds"
+Log "Rounds run:    $round"
+Log "Elapsed:       ~$ElapsedMin min"
+Log "Load level:    $Load"
 Log "Error traffic: $IncludeErrors"
 Write-Host ""
 Log "Open Splunk Observability Cloud and set the time picker to"

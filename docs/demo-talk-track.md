@@ -25,6 +25,16 @@ Each section includes:
 >    per round across 3 simulated user sessions, scrapes URLs (if MCP
 >    is configured), and generates deliberate errors so the service map
 >    shows health colours instead of grey.
+>
+>    Two options worth knowing for demo prep:
+>    - `--duration 30` (bash) / `-DurationMinutes 30` (PowerShell) loops
+>      rounds until the time is up, instead of running a fixed count.
+>      Useful for building a baseline while you rehearse, and the drift
+>      detectors need roughly an hour of traffic to mean anything.
+>    - `--load heavy` / `-Load heavy` triples chat volume and quarters
+>      the pauses, for busier-looking charts. **Every chat message is a
+>      real LLM API call**, so a long heavy run costs real money. Start
+>      with a short duration to gauge the rate.
 > 4. Wait ~2 minutes after the script finishes for metrics to flush
 >    through the OTel Collector to Splunk.
 > 5. In Splunk, set the time picker to **Last 15 minutes** (or a window

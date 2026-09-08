@@ -8,11 +8,20 @@
 #
 # Options:
 #   --rounds N      Number of rounds (default: 2, each ~3-4 min)
+#   --duration M    Run for M minutes instead, looping rounds until the
+#                   time is up. Overrides --rounds. Default: unset.
+#   --load LEVEL    light (default, current behaviour) or heavy.
+#                   heavy shortens pauses ~4x and sends 3x the chat
+#                   volume per round.
 #   --no-errors     Skip deliberate error traffic (keeps service map green)
 #   --errors        Include deliberate error traffic (default)
 #
 # BASE_URL defaults to http://localhost (nginx proxy).
 # Requires: curl
+#
+# COST WARNING: every chat message is a real LLM API call. --load heavy
+# triples chat volume and removes most of the pacing, so a long heavy run
+# can be expensive. Start with a short --duration to gauge the rate.
 
 set -euo pipefail
 
@@ -20,6 +29,8 @@ set -euo pipefail
 # Argument parsing
 # ---------------------------------------------------------------------------
 ROUNDS=2
+DURATION_MIN=""
+LOAD="light"
 INCLUDE_ERRORS=true
 BASE_URL="http://localhost"
 
@@ -27,6 +38,14 @@ while [[ $# -gt 0 ]]; do
   case "$1" in
     --rounds)
       ROUNDS="$2"
+      shift 2
+      ;;
+    --duration)
+      DURATION_MIN="$2"
+      shift 2
+      ;;
+    --load)
+      LOAD="$2"
       shift 2
       ;;
     --no-errors)
@@ -47,6 +66,30 @@ while [[ $# -gt 0 ]]; do
       ;;
   esac
 done
+
+# ---------------------------------------------------------------------------
+# Validate and derive load settings
+# ---------------------------------------------------------------------------
+case "$LOAD" in
+  light) DELAY_DIVISOR=1; CHAT_REPEAT=1 ;;
+  heavy) DELAY_DIVISOR=4; CHAT_REPEAT=3 ;;
+  *)
+    echo "ERROR: --load must be 'light' or 'heavy' (got '$LOAD')" >&2
+    exit 1
+    ;;
+esac
+
+if [ -n "$DURATION_MIN" ]; then
+  if ! [[ "$DURATION_MIN" =~ ^[0-9]+$ ]] || [ "$DURATION_MIN" -lt 1 ]; then
+    echo "ERROR: --duration must be a positive whole number of minutes" >&2
+    exit 1
+  fi
+fi
+
+if ! [[ "$ROUNDS" =~ ^[0-9]+$ ]] || [ "$ROUNDS" -lt 1 ]; then
+  echo "ERROR: --rounds must be a positive whole number" >&2
+  exit 1
+fi
 
 SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
 SAMPLE_DIR="$SCRIPT_DIR/../sample-docs"
@@ -192,11 +235,20 @@ hit_health() {
   curl -s -o /dev/null "${BASE_URL}/health" 2>/dev/null || true
 }
 
+# Scaled sleep. Under --load heavy every pause is divided by DELAY_DIVISOR,
+# with a 1s floor so we still yield between requests rather than spinning.
+pause() {
+  local seconds="$1"
+  local scaled=$(( seconds / DELAY_DIVISOR ))
+  [ "$scaled" -lt 1 ] && scaled=1
+  sleep "$scaled"
+}
+
 random_delay() {
   local min="$1"
   local max="$2"
   local delay=$(( RANDOM % (max - min + 1) + min ))
-  sleep "$delay"
+  pause "$delay"
 }
 
 # ---------------------------------------------------------------------------
@@ -209,7 +261,12 @@ echo "  RAG Agent -- Demo Traffic Simulator"
 echo "=============================================="
 echo ""
 log "Base URL:  $BASE_URL"
-log "Rounds:    $ROUNDS"
+if [ -n "$DURATION_MIN" ]; then
+  log "Duration:  ${DURATION_MIN} min (rounds loop until elapsed)"
+else
+  log "Rounds:    $ROUNDS"
+fi
+log "Load:      $LOAD (pauses /${DELAY_DIVISOR}, chat x${CHAT_REPEAT})"
 log "Errors:    $INCLUDE_ERRORS"
 log "Sessions:  Alice=$SESSION_A"
 log "           Bob=$SESSION_B"
@@ -241,10 +298,24 @@ echo ""
 
 SESSIONS=("$SESSION_A" "$SESSION_B" "$SESSION_C")
 
-for round in $(seq 1 "$ROUNDS"); do
+START_TS=$(date +%s)
+DEADLINE_TS=0
+if [ -n "$DURATION_MIN" ]; then
+  DEADLINE_TS=$(( START_TS + DURATION_MIN * 60 ))
+fi
+
+round=0
+while true; do
+  round=$(( round + 1 ))
   echo ""
   echo "----------------------------------------------"
-  phase "Round $round of $ROUNDS"
+  if [ -n "$DURATION_MIN" ]; then
+    remaining=$(( (DEADLINE_TS - $(date +%s) + 59) / 60 ))
+    [ "$remaining" -lt 0 ] && remaining=0
+    phase "Round $round (~${remaining} min remaining)"
+  else
+    phase "Round $round of $ROUNDS"
+  fi
   echo "----------------------------------------------"
   echo ""
 
@@ -254,7 +325,7 @@ for round in $(seq 1 "$ROUNDS"); do
     for f in "$SAMPLE_DIR"/*.txt; do
       if [ -f "$f" ]; then
         upload_file "$f" "$SESSION_A"
-        sleep 1
+        pause 1
       fi
     done
     ok "Phase 1 complete -- documents uploaded"
@@ -262,14 +333,17 @@ for round in $(seq 1 "$ROUNDS"); do
   fi
 
   # Phase 2: Chat traffic (multiple sessions, varied delays)
-  phase "Phase 2: Chat traffic (${#CHAT_MESSAGES[@]} messages)"
-  for i in "${!CHAT_MESSAGES[@]}"; do
-    session_idx=$(( i % 3 ))
-    session="${SESSIONS[$session_idx]}"
-    send_chat "$session" "${CHAT_MESSAGES[$i]}"
-    # Sprinkle health checks to generate more nginx->api spans
-    hit_health
-    random_delay 3 8
+  # Under --load heavy the whole message set is replayed CHAT_REPEAT times.
+  phase "Phase 2: Chat traffic ($(( ${#CHAT_MESSAGES[@]} * CHAT_REPEAT )) messages)"
+  for pass in $(seq 1 "$CHAT_REPEAT"); do
+    for i in "${!CHAT_MESSAGES[@]}"; do
+      session_idx=$(( (i + pass) % 3 ))
+      session="${SESSIONS[$session_idx]}"
+      send_chat "$session" "${CHAT_MESSAGES[$i]}"
+      # Sprinkle health checks to generate more nginx->api spans
+      hit_health
+      random_delay 3 8
+    done
   done
   ok "Phase 2 complete -- chat traffic generated"
   echo ""
@@ -279,7 +353,7 @@ for round in $(seq 1 "$ROUNDS"); do
   if [ "$MCP_AVAILABLE" = "true" ]; then
     for url in "${SCRAPE_URLS[@]}"; do
       scrape_url "$url" "$SESSION_B" || true
-      sleep 3
+      pause 3
     done
     ok "Phase 3 complete"
   else
@@ -291,11 +365,11 @@ for round in $(seq 1 "$ROUNDS"); do
   phase "Phase 4: Error traffic"
   if [ "$INCLUDE_ERRORS" = "true" ]; then
     trigger_error "Simulated timeout for demo" "$SESSION_C"
-    sleep 1
+    pause 1
     trigger_error "Simulated validation failure" "$SESSION_A"
-    sleep 1
+    pause 1
     trigger_error "Simulated upstream error" "$SESSION_B"
-    sleep 1
+    pause 1
     trigger_error "Simulated rate limit exceeded" "$SESSION_C"
     ok "Phase 4 complete -- errors recorded"
   else
@@ -308,32 +382,44 @@ for round in $(seq 1 "$ROUNDS"); do
   phase "Phase 5: Cool-down -- successful requests"
   send_chat "$SESSION_A" "Summarise the key points of the leave policy"
   hit_health
-  sleep 3
+  pause 3
   send_chat "$SESSION_B" "What are the main data protection principles?"
   hit_health
-  sleep 3
+  pause 3
   send_chat "$SESSION_C" "How do I submit an expense claim?"
   hit_health
-  sleep 3
+  pause 3
   send_chat "$SESSION_A" "What is the notice period for resignation?"
   hit_health
-  sleep 3
+  pause 3
   send_chat "$SESSION_B" "Explain the whistleblowing procedure"
   ok "Phase 5 complete"
   echo ""
 
-  if [ "$round" -lt "$ROUNDS" ]; then
-    log "Pausing 10s before next round ..."
-    sleep 10
+  # Termination: by deadline in duration mode, by count otherwise.
+  if [ -n "$DURATION_MIN" ]; then
+    if [ "$(date +%s)" -ge "$DEADLINE_TS" ]; then
+      log "Duration reached after $round round(s)."
+      break
+    fi
+  elif [ "$round" -ge "$ROUNDS" ]; then
+    break
   fi
+
+  log "Pausing before next round ..."
+  pause 10
 done
+
+ELAPSED_MIN=$(( ( $(date +%s) - START_TS + 59 ) / 60 ))
 
 echo ""
 echo "=============================================="
 echo "  Simulation complete!"
 echo "=============================================="
 echo ""
-log "Total rounds: $ROUNDS"
+log "Rounds run:    $round"
+log "Elapsed:       ~${ELAPSED_MIN} min"
+log "Load level:    $LOAD"
 log "Error traffic: $INCLUDE_ERRORS"
 echo ""
 log "Open Splunk Observability Cloud and set the time picker to"
