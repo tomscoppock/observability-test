@@ -1571,10 +1571,18 @@ means:
 - The `insecure_skip_verify` workaround is therefore temporary, with a
   known exit condition, not a permanent property of this setup.
 
-**Raise it with Splunk Support** using exactly that evidence: the cert
-SAN list includes the ingest hostnames, DNS does not resolve them, so
-the HEC ingest DNS records are missing for the stack. That is far more
-actionable than "HEC doesn't work".
+On a **licensed** account, raise it with Splunk Support using exactly
+that evidence: the cert SAN list includes the ingest hostnames, DNS does
+not resolve them, so the HEC ingest DNS records are missing for the
+stack. That is far more actionable than "HEC doesn't work".
+
+> **On a trial account you cannot raise this at all.** Support cases are
+> submitted from the Splunk Cloud Platform instance (Support > Support
+> Portal), and trial accounts cannot create support cases. So on a trial
+> the `:8088` main-hostname endpoint plus
+> `SPLUNK_HEC_INSECURE_SKIP_VERIFY=true` is not a shortcut, it is the
+> only available path. The proper `http-inputs-` endpoint with trusted
+> TLS requires a licensed account.
 
 #### Activating the pipeline
 
@@ -1653,11 +1661,26 @@ calling in -- by realm, the IPs to allow are:
 Source: [Set up Log Observer Connect for Splunk Cloud
 Platform](https://help.splunk.com/en/splunk-observability-cloud/manage-data/view-splunk-platform-logs/set-up-log-observer-connect-for-splunk-cloud-platform)
 (confirm against this page before use -- Splunk may update these IPs).
-Configuring this allow list (Splunk Web, requires `sc_admin` and token
-authentication enabled) will likely clear the 303 error itself, but **on
-a trial account Log Observer Connect will still be blocked afterward** by
-the separate trial restriction documented above -- clearing this error is
-not the same as unblocking the feature.
+
+**Three independent gates block this on a trial account.** Confirmed
+2026-09-08, after working through each in turn:
+
+1. Log Observer Connect is not offered on Splunk Cloud Platform trials
+   at all. This is a licensing gate, not a configuration one.
+2. Splunk's documented route for configuring the instance IP allow list
+   for this integration is to open a support case from the Cloud
+   Platform instance so Support can apply it. (Splunk Web does also
+   expose a self-service IP allow list page for `sc_admin` roles with
+   token auth enabled, so the two paths may differ by entry type; either
+   way gate 1 still applies.)
+3. Trial accounts cannot open support cases.
+
+So configuring the allow list would at best clear the `303`, not unblock
+the feature. **Do not spend time on Log Observer Connect until a
+licensed Splunk Cloud Platform or Splunk Enterprise instance exists.**
+Logs still reach Splunk Cloud Platform via HEC and are fully searchable
+there in the meantime; it is only the correlated view inside
+Observability Cloud that is unavailable.
 
 **On Splunk Cloud Platform (as `sc_admin`):**
 

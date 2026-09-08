@@ -161,8 +161,13 @@ None.
       `https://http-inputs-<stack>.splunkcloud.com/services/collector`
       and set `SPLUNK_HEC_INSECURE_SKIP_VERIFY=false` -- that endpoint is
       covered by the publicly-trusted cert, so no bypass is needed.
-- [ ] Raise the missing HEC ingest DNS records with Splunk Support, citing
-      the cert-SAN-vs-NXDOMAIN evidence (see docs/splunk-setup.md)
+- [x] Investigated raising the missing HEC ingest DNS with Splunk Support
+      -- **not possible on this account**. Support cases are opened from
+      the Cloud Platform instance, and trial accounts cannot create them.
+      Confirmed 2026-09-08. The `:8088` + `insecure_skip_verify`
+      workaround is therefore the only available path here, not a
+      shortcut. Carry the cert-SAN-vs-NXDOMAIN evidence forward to
+      whenever a licensed account exists.
 - [x] User updates `.env`: `SPLUNK_HEC_URL=https://<stack>.splunkcloud.com:8088/services/collector`,
       `SPLUNK_HEC_INSECURE_SKIP_VERIFY=true`, then re-runs
       `setup-splunk-hec.ps1`/`.sh`
