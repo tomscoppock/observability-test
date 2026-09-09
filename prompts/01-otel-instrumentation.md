@@ -1,3 +1,79 @@
+# Prompt 1: OpenTelemetry instrumentation (backend-agnostic)
+
+Instruments a Node.js service with OpenTelemetry and gets telemetry into an
+OTel Collector. **Says nothing about where the telemetry goes** -- pair it
+with prompt 2 (Splunk) or prompt 3 (Azure Monitor), or both.
+
+Use this alone if you only want vendor-neutral instrumentation and will
+decide on a backend later. That is a legitimate and recommended order: the
+instrumentation is the durable asset, the backend is a config file.
+
+**Copy everything between the fences into your coding agent.**
+
+````text
+Instrument this project with OpenTelemetry.
+
+Start in PLAN MODE. Before proposing anything:
+  1. Read the repo and report what already exists: is there an OTel
+     Collector? Which SDK and version? Are traces, metrics AND logs all
+     exported, or only some?
+  2. Report what is missing against the requirements below.
+  3. Ask me about the runtime/language, which MCP servers are in use, and
+     anything else ambiguous. Do not guess, and do not start writing code
+     until I approve a plan.
+
+This prompt deliberately does NOT choose an observability backend. Export
+OTLP to a collector and stop there. A backend is a collector config change,
+and keeping that decision out of the application is the entire point.
+
+I want to add production-grade OpenTelemetry observability to this
+Knowledge Discovery agent, exporting to Splunk. A sister project
+(observability-test) already solved this end to end against a real
+Splunk org, and I want to apply its working implementation rather than
+rediscover it. Every snippet below is from verified working code.
+
+Start in Plan Mode. Read this repo first and tell me what already exists
+versus what is missing, and ask me about anything ambiguous before
+proposing a plan.
+
+## Priorities, in order
+
+1. **MCP discoverability** -- each MCP server should appear as its own
+   node on the Splunk APM service map, with distributed traces crossing
+   the HTTP boundary into the MCP server and back, plus per-tool latency
+   and error rates.
+2. **Token consumption** -- full LLM cost attribution: input/output/total
+   tokens by provider, model and operation, good enough to answer "what
+   did this feature cost last week".
+3. **Infrastructure monitoring** -- host, container and SurrealDB metrics
+   in Splunk Infrastructure Monitoring, correlated with APM traces.
+4. **APM and latency analysis** -- latency percentiles per internal
+   operation (retrieval, embedding, LLM call, MCP tool call), not just
+   per HTTP endpoint.
+
+## Architecture
+
+- Upstream `otel/opentelemetry-collector-contrib` image, NOT a vendor
+  distribution. Keeps the backend swappable (Splunk now, Azure Monitor or
+  Grafana later) with no application changes.
+- All config via `.env`, nothing hardcoded.
+- Three signals, and they do NOT all go to the same place:
+
+```
+  Traces  -> otlp_http/splunk -> Splunk Observability Cloud (APM)
+  Metrics -> signalfx         -> Splunk Observability Cloud (Infra Mon)
+  Logs    -> splunk_hec       -> Splunk Cloud Platform (via HEC)
+```
+
+Logs go to Splunk Cloud Platform because Splunk deprecated native Log
+Observer (direct log ingest into Observability Cloud) in January 2024.
+Observability Cloud reads them back in place via Log Observer Connect,
+which needs a licensed non-trial Splunk platform. Do not build against
+`v2/log/otlp`; it is a dead path.
+
+=============================================================
+OpenTelemetry implementation
+=============================================================
 ## 1.1 Dependencies (Node.js; these exact versions are proven)
 
 ```json
@@ -421,3 +497,154 @@ Server, PostgreSQL, Oracle). It appears as an inferred service via
 'peer.service': 'surrealdb',       // service map edge
 ```
 
+=============================================================
+Non-obvious traps -- handle ALL of these explicitly
+=============================================================
+
+Every one of these was found the hard way in the source project. Most are
+SILENT: the system reports itself healthy while emitting nothing.
+
+1. **`BatchLogRecordProcessor` takes an options object** in sdk-logs
+   0.2xx+: `new BatchLogRecordProcessor({ exporter })`. Positional leaves
+   `options.exporter` undefined and discards 100% of logs. Invisible
+   because `diag` is a no-op, and invisible to tests that mock the logger
+   provider. Verify the installed version's signature rather than
+   trusting any example, including this one.
+
+2. **Add `OTEL_LOG_LEVEL` passthrough from day one** (default empty). SDK
+   export failures are otherwise silent. This is the only reason trap 1
+   was ever found.
+
+3. **Pin or review OTel 0.x versions.** Caret ranges on pre-1.0 packages;
+   trap 1 was introduced by a caret resolving to a changed constructor.
+
+4. **Instrumentation must load before application code** (`--require`).
+
+5. **Docker Compose prefers shell env over `.env`.** Scripts must not
+    export `SPLUNK_*`. A `.env` edit does not reach a running container:
+    use `docker compose up -d --force-recreate <service>`.
+
+6. **`trace.getActiveSpan()` in Express middleware is NOT the server span.**
+    With `@opentelemetry/instrumentation-express` active, each middleware
+    layer gets its own INTERNAL span, and that is what is active inside your
+    handler. So an attribute set there lands on `middleware - <anonymous>`
+    and never reaches the SERVER span. **Every chart that groups a
+    SERVER-span metric by that tag then returns nothing, and no amount of
+    MetricSet indexing fixes it** -- the tag is on the wrong span, so
+    indexing it changes nothing. Measured in the source project: 1773
+    request records, zero carrying the attribute; 382 middleware spans
+    carrying it. Use the http instrumentation's `startIncomingSpanHook`
+    instead (section 1.2b), and confirm the option exists in your installed
+    version:
+    `node_modules/@opentelemetry/instrumentation-http/build/src/types.d.ts`.
+
+7. **Never invent a request-scoped id when the client did not send one.**
+    `req.headers['x-session-id'] || crypto.randomUUID()` looks harmless and
+    poisons every distinct-count: each healthcheck and upstream probe becomes
+    a separate "session". Measured in the source project: 3 real sessions
+    against 307 single-request phantoms, so `dcount` reported 310. Absent
+    means absent -- leave the attribute unset. Also handle the repeated
+    header (Node gives an array) and cap the length, rejecting rather than
+    truncating, since truncation silently merges distinct sessions.
+
+8. **Collector component names: several common ones are deprecated
+    aliases.** They still work, but the collector logs a warning on startup
+    and `otelcol validate` does NOT flag them, so they are invisible unless
+    you read the boot log. On collector 0.160: `cumulativetodelta` ->
+    `cumulative_to_delta`, `resourcedetection` -> `resource_detection`,
+    `hostmetrics` -> `host_metrics`, `spanmetrics` -> `span_metrics`.
+    Going the OTHER way and equally counter-intuitive: **`otlp_http` is the
+    canonical exporter name and `otlphttp` is the deprecated alias**, not
+    the reverse. It looks like a typo. Do not "fix" it.
+
+    Also, OTTL statements in a `transform` processor's `context: datapoint`
+    want the explicit `datapoint.attributes[...]` prefix. The bare
+    `attributes[...]` form works but the collector rewrites it and warns.
+
+9. **In PowerShell, a failing CLI probe aborts the whole setup script.**
+    If you ship bash/PowerShell script pairs, know that Windows PowerShell
+    5.1 wraps a native command's stderr in an ErrorRecord, so under
+    `$ErrorActionPreference = 'Stop'` any CLI call that writes to stderr
+    becomes a TERMINATING error. A "does this resource exist yet?" probe
+    therefore aborts the script on the very first run, and the error message
+    blames the missing resource rather than the redirect. Bash is unaffected
+    (a failing command in an `if` condition does not trigger errexit), which
+    is exactly how such a pair passes review with only the bash half
+    working. Route every CLI call through a helper that sets
+    `$ErrorActionPreference = 'Continue'` for the duration and returns the
+    exit code, and prefer commands that do not error on "absent".
+
+10. **`Set-Content -Encoding utf8` writes a BOM in PowerShell 5.1.** If the
+    project has an ASCII-only rule for scripts and config, your own tooling
+    will break it. In 5.1 `-Encoding utf8` means UTF-8 WITH BOM, so three
+    bytes (EF BB BF) land at the start of every rewritten file. It is
+    invisible in editors and in `git diff`. It broke this project's tracker:
+    a `#` heading preceded by a BOM stopped matching a title regex, so a
+    file that existed reported as missing.
+
+        # WRONG in 5.1
+        $text | Set-Content file.md -Encoding utf8
+        # Correct, and version-independent
+        [System.IO.File]::WriteAllText($p, $text, (New-Object System.Text.UTF8Encoding($false)))
+
+    PowerShell 7+ defaults to BOM-less UTF-8, so code that is clean on a
+    developer's PS7 can still corrupt files on a 5.1 host. Detect it in
+    whatever check enforces the ASCII rule:
+    `head -c3 file | od -An -tx1 | grep -q 'ef bb bf'`
+
+11. DO NOT GREP COLLECTOR LOGS FOR "error". The debug exporter at
+    verbosity: detailed prints every metric name and attribute value, so a
+    healthy collector emits hundreds of lines containing "error"
+    (system.network.errors, error_class: Str(-), outcome: Str(error)).
+    Measured on the source project: 381 naive matches against ONE real log
+    line, which was benign. The advice sends you hunting a problem that is
+    not there, and would bury a real one.
+
+    The collector logs tab-delimited records with the LEVEL as the second
+    field. Match that field instead:
+
+        docker compose logs otel-collector | awk -F'	' '$2 ~ /^(error|warn|fatal)$/'
+
+    A level histogram makes a better health check than any grep, because it
+    shows what normal looks like:
+
+        docker compose logs otel-collector           | awk -F'	' '$2 ~ /^[a-z]+$/ { c[$2]++ } END { for (l in c) print l, c[l] }'
+
+    Note grep -P is unavailable in some locales, so prefer awk -F'	' over
+    a Perl-regex tab.
+
+=============================================================
+Out of scope -- do not attempt
+=============================================================
+
+- **Splunk APM > AI Agent Monitoring.** Documented instrumentation is
+  Python-only (`splunk-otel-util-genai`); no Node.js path exists. It also
+  expects `invoke_agent`/`invoke_workflow`/`execute_tool` span semantics.
+  **If this repo is Python and has real agent/workflow structure, say so:
+  it may be reachable, and that changes the plan.**
+- **Splunk-side LLM evals** (hallucination, toxicity, relevance). Needs a
+  platform licence AND shipping prompt/response content to Splunk. That
+  content is PII, so it is a data protection review, not a config toggle.
+  Flag it, do not enable it.
+- **Log Observer Connect.** Needs a licensed non-trial Splunk platform.
+
+Prefer a local eval harness instead: a golden question set run against
+the live agent, checking expected sources and required phrases, plus the
+drift detectors in 2.5. That covers regression and drift without sending
+a single prompt off the stack.
+
+=============================================================
+What I want from you
+=============================================================
+
+1. Audit this repo: what exists, what is missing, what conflicts.
+2. Ask me about the runtime/language, which MCP servers are in use,
+   whether SurrealDB is already emitting OTLP, and whether a Splunk
+   platform licence is available.
+3. Propose a plan covering the four priorities, stating for each numbered
+   trap how it is handled or why it does not apply.
+4. Give each priority a verification step that proves data reached
+   Splunk, not merely that code runs. "Tests pass" is not evidence for
+   telemetry: the sister project had 63 passing tests while emitting zero
+   logs for weeks.
+````

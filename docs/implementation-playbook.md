@@ -16,10 +16,14 @@ vendor documentation and against `otelcol validate` and `az bicep build`, but
 **not yet against a live Application Insights resource**. Items awaiting that
 are marked. The Splunk material is fully runtime-verified.
 
-> To apply this to another project, see
-> `.ai/backlog/040-knowledge-discovery-observability-prompt.md` (Splunk) and
-> `.ai/backlog/048-azure-learnings-prompts.md` (Azure), which wrap this
-> material into self-contained coding-agent prompts.
+> **To apply this to another project, use [`prompts/`](../prompts/)** --
+> this material wrapped into four self-contained, paste-ready coding-agent
+> prompts you can pick from: OpenTelemetry instrumentation (backend-agnostic),
+> Splunk, Azure Monitor, and an MCP/sidecar handoff.
+>
+> This playbook is the source of truth. **Edit it first, then mirror into the
+> prompts**, which duplicate it deliberately so they can travel to a repo
+> where these docs do not exist.
 
 ## Contents
 

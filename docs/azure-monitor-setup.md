@@ -454,7 +454,7 @@ It is extremely noisy. Turn it off again afterwards.
 
 - [splunk-vs-azure-monitor.md](splunk-vs-azure-monitor.md) -- where the two
   backends genuinely differ, in both directions
-- [demo-talk-track-azure.md](demo-talk-track-azure.md) -- scripted demo of the
+- [demo-talk-track-3-azure.md](demo-talk-track-3-azure.md) -- scripted demo of the
   Azure surfaces
 - [implementation-playbook.md](implementation-playbook.md) -- how to rebuild
   all of this elsewhere, and what will silently break

@@ -1,7 +1,13 @@
-# Demo Talk Track -- RAG Agent Observability
+# Demo Talk Track 2: Splunk Observability Cloud
 
-A scripted walkthrough for demonstrating the Splunk Observability Cloud
-dashboard for the RAG Agent stack. Total runtime: ~14 minutes.
+A scripted walkthrough of the Splunk Observability Cloud surfaces for the RAG
+Agent stack. Total runtime: ~14 minutes.
+
+**Second of three.** Run [track 1](demo-talk-track-1-opentelemetry.md) first
+if the audience needs the vendor-neutral argument;
+[track 3](demo-talk-track-3-azure.md) covers Azure Monitor and runs off the
+same simulator invocation, so the two product demos can be presented back to
+back without regenerating traffic.
 
 Each section includes:
 - **[SHOW]** -- what to click/navigate to in Splunk
@@ -686,11 +692,38 @@ golden question set against the live agent, plus drift detectors on
 token count, response length and latency. That covers regression and
 drift without sending a single prompt off the stack."
 
-**[SAY]** "None of this is a limitation of OpenTelemetry. Every one of
-those gaps is a vendor entitlement or a language support boundary, and
-because the collector is upstream OpenTelemetry rather than a vendor
-distribution, the same telemetry would flow to Azure Monitor or Grafana
-without touching the application."
+**[HIGHLIGHT] -- worth being precise about, because the two gaps are
+different in kind.** "Notice that those three are not the same sort of
+problem. Log Observer Connect and the evals are **commercial**: the product
+works, we have not bought it. AI Agent Monitoring is **technical**: it is
+Python-only, so no amount of licence spend reaches it from a Node service."
+
+**[SAY]** "And it is worth saying what that leaves on the table, because it
+is not nothing. Splunk's out-of-the-box experience is the cleaner of the two
+platforms in this comparison. Service map, Tag Spotlight, Trace Analyzer and
+Related Content are polished and coherent, and we landed in all of them today
+without building anything. The AI agent screens are more of the same, sitting
+there fully built, and we simply cannot reach them from this runtime."
+
+> **Presenter note -- the honest cross-vendor comparison, if it comes up.**
+> Azure's equivalent agent dashboard is *also* empty for this application,
+> and for a related but importantly different reason. It keys off the same
+> agent span semantics (`invoke_agent`, `execute_tool`, `gen_ai.agent.name`),
+> which we do not emit because this is a RAG pipeline making direct LLM
+> calls, not an agent framework.
+>
+> The difference is what it would take to close. Azure's is a **naming**
+> problem: adopt the GenAI agent conventions and the dashboard populates,
+> because it reads standard OpenTelemetry. Splunk's is a **language** problem
+> that no naming change fixes. So Splunk has the better product surface and
+> the harder wall; Azure has the plainer surface and an open door. Do not
+> flatten that into "neither works".
+
+**[SAY]** "None of this is a limitation of OpenTelemetry. Every one of those
+gaps is a vendor entitlement or a language support boundary, and because the
+collector is upstream OpenTelemetry rather than a vendor distribution, the
+same telemetry already flows to Azure Monitor in parallel, without touching
+the application."
 
 > **Note for presenter:** if asked "so would paying fix it?", the honest
 > answer is that a licensed Splunk platform fixes log correlation

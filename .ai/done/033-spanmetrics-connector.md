@@ -112,7 +112,7 @@ After implementation:
 | `splunk/dashboard.json` | Modify | Rewrite 8 chart queries from `histogram('spans', ...)` to `data('duration/calls', ...)` |
 | `docs/splunk-setup.md` | Modify | Update section 1 (data pipeline), section 22 (TMS -- mark as optional), section 23 (automated dashboard), sections 14-15 (tutorials) |
 | `docs/opentelemetry.md` | Modify | Document the spanmetrics connector and its output metrics |
-| `docs/demo-talk-track.md` | Modify | Update any references to TMS requirement |
+| `docs/demo-talk-track-2-splunk.md` | Modify | Update any references to TMS requirement |
 
 ## Functions / classes to add or change
 
@@ -193,7 +193,7 @@ gauge metrics -- verify during implementation.
 - [ ] Re-run dashboard setup script and verify all 4 tabs show data
 - [x] Update `docs/splunk-setup.md` (sections 1, 14-15, 22, 23)
 - [x] Update `docs/opentelemetry.md` with spanmetrics connector docs
-- [x] Update `docs/demo-talk-track.md` if needed (no TMS references found -- no changes needed)
+- [x] Update `docs/demo-talk-track-2-splunk.md` if needed (no TMS references found -- no changes needed)
 - [x] Run test suite (63 tests) -- all 63 pass, 0 fail
 - [x] Commit and push (a3a0dd4)
 

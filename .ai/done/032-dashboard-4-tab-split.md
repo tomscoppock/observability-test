@@ -106,7 +106,7 @@ The empty default "RAG AGENT -- OBSERVABILITY" dashboard is deleted
 | `splunk/dashboard.json` | Rewrite | Change from single `dashboard` + `charts` to `dashboards[]` array with per-dashboard `charts[]` |
 | `scripts/setup-splunk-dashboard.sh` | Modify | Loop over `dashboards[]` instead of single `dashboard`; delete old dashboard; handle default dashboard |
 | `scripts/setup-splunk-dashboard.ps1` | Modify | Same changes as bash script |
-| `docs/demo-talk-track.md` | Modify | Update chart references to include tab names |
+| `docs/demo-talk-track-2-splunk.md` | Modify | Update chart references to include tab names |
 
 ## Functions / classes to add or change
 
@@ -152,7 +152,7 @@ The empty default "RAG AGENT -- OBSERVABILITY" dashboard is deleted
 - [x] Rewrite `splunk/dashboard.json` with 4-dashboard structure
 - [x] Update `scripts/setup-splunk-dashboard.sh` to loop over dashboards
 - [x] Update `scripts/setup-splunk-dashboard.ps1` to loop over dashboards
-- [x] Update `docs/demo-talk-track.md` chart references with tab names
+- [x] Update `docs/demo-talk-track-2-splunk.md` chart references with tab names
 - [ ] Run setup script against live Splunk instance to verify
 - [x] Update `.ai/STATUS.md`
 

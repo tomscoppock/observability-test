@@ -98,7 +98,7 @@ colours.
 | `scripts/simulate-demo-traffic.sh` | Create | Bash script for Linux/macOS |
 | `scripts/simulate-demo-traffic.ps1` | Create | PowerShell script for Windows |
 | `api/src/index.js` | Modify | Add middleware to extract `X-Session-Id` header and set `session.id` span attribute |
-| `docs/demo-talk-track.md` | Modify | Update pre-demo preparation section to reference the simulation script |
+| `docs/demo-talk-track-2-splunk.md` | Modify | Update pre-demo preparation section to reference the simulation script |
 
 ## Functions / classes to add or change
 
@@ -155,7 +155,7 @@ colours.
 - [x] Add session ID middleware to `api/src/index.js`
 - [x] Create `scripts/simulate-demo-traffic.sh` (bash)
 - [x] Create `scripts/simulate-demo-traffic.ps1` (PowerShell)
-- [x] Update `docs/demo-talk-track.md` pre-demo section to reference script
+- [x] Update `docs/demo-talk-track-2-splunk.md` pre-demo section to reference script
 - [ ] Test session ID middleware (unit test -- deferred, middleware is 4 lines)
 - [x] Run full test suite (63 pass, 0 fail)
 - [ ] Manual smoke test: run script against running stack, verify Splunk service map colours

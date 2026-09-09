@@ -9,7 +9,7 @@ Last refreshed: 2026-09-08
 ## Current focus
 
 **041 (in progress)** -- talk track click paths. Every `[SHOW]` block in
-`docs/demo-talk-track.md` now gives explicit navigation: which surface
+`docs/demo-talk-track-2-splunk.md` now gives explicit navigation: which surface
 you are on, numbered steps, literal UI labels and filter values. Three
 instructions were wrong, not merely vague, and are fixed:
 

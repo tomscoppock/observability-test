@@ -1,11 +1,13 @@
-# Demo Talk Track: Azure Monitor
+# Demo Talk Track 3: Azure Monitor
 
 Scripted walkthrough of the Azure Monitor surfaces for the RAG agent stack.
-Runtime approximately 14 minutes.
+Runtime approximately 16 minutes.
 
-Designed to run **back to back with** [demo-talk-track.md](demo-talk-track.md)
-off a single traffic simulator invocation. Use the dual collector config and
-one simulator run, then present either deck, or both.
+**Third of three.** Run [track 1](demo-talk-track-1-opentelemetry.md) first
+if the audience needs the vendor-neutral argument.
+[Track 2](demo-talk-track-2-splunk.md) covers Splunk and runs off the **same**
+simulator invocation, so the two product demos can be presented back to back
+without regenerating traffic.
 
 Last updated: 2026-09-09
 
@@ -444,7 +446,78 @@ understate Azure."
 
 ---
 
-## Section 8: Boundaries (~1.5 minutes)
+## Section 8: Prebuilt Azure content -- Grafana and the agent dashboards (~2 minutes)
+
+**[SAY]** "Everything so far was a workbook we built. Now the part we did not
+build, which is arguably the better argument for emitting standard
+conventions."
+
+**[SHOW]** In the Azure portal, open **Azure Managed Grafana** (or Grafana
+with the Azure Monitor data source configured against this Application
+Insights resource). Browse the bundled dashboards under **Azure / Insights /
+Applications**.
+
+**[SAY]** "Azure Managed Grafana ships dashboards that query Application
+Insights through the Azure Monitor data source. No plugin to buy, no
+proprietary agent. They run KQL against the same tables our workbook uses,
+which means our telemetry is already in the right shape for them."
+
+**[HIGHLIGHT]** "That is a real dividend from the semantic conventions. We
+wrote our workbook by hand, but these came free, and they would have come
+free for any service emitting the same `gen_ai.*` attributes."
+
+**[SHOW]** Open the **Agent Framework** dashboard.
+
+**[SAY]** "This one is more interesting, because it only partly populates,
+and the reason is worth understanding rather than glossing over."
+
+> **Presenter note -- the precise verdict, verified against this stack's live
+> telemetry. Do not claim it "just works", and do not claim it fails.**
+>
+> The dashboard is designed for the Microsoft Agent Framework, but it reads
+> plain OpenTelemetry GenAI conventions, so any framework emitting them can
+> drive it. Checking what we actually emit:
+>
+> | It wants | We emit |
+> |---|---|
+> | `chat <model>` span | yes -- `chat gpt-5.4-mini` |
+> | `gen_ai.client.token.usage` | yes |
+> | `gen_ai.operation.name`, `provider.name`, `request.model`, `usage.*_tokens` | yes, all |
+> | `gen_ai.client.operation.duration` | **no** |
+> | `invoke_agent <agent>` span | **no** -- we emit `chat.pipeline` |
+> | `execute_tool <func>` span | **no** -- we emit `mcp.tool.*` |
+> | `gen_ai.agent.name` / `agent.id` / `conversation.id` | **no** -- we have `session.id` |
+>
+> So the LLM and token panels populate. The agent-level and tool-execution
+> panels stay empty. The cause is not Azure and not OpenTelemetry: **this is
+> a RAG pipeline making direct LLM calls, not an agent framework**, so the
+> agent spans genuinely do not exist to be reported.
+
+**[SAY]** "The token and model panels here are live, from our data, with
+nothing built by us. The agent and tool panels are empty, because this
+application is a RAG pipeline rather than an agent framework, so there are no
+agent invocations to show."
+
+**[HIGHLIGHT]** "And here is the part that matters for a platform decision.
+That gap is a **naming** gap, not a platform wall. If we renamed
+`chat.pipeline` to `invoke_agent rag-agent`, renamed our MCP tool spans to
+`execute_tool`, and added `gen_ai.agent.name`, these panels would populate.
+It is a handful of string changes in our own code."
+
+**[SAY]** "Compare that with the Splunk side, where the equivalent AI Agent
+screens are documented for Python only. From a Node service that is a wall no
+amount of renaming or spending gets through. Same missing capability on
+paper, completely different cost to close."
+
+> **Presenter note:** resist the temptation to make the changes live during
+> the demo. They are cheap but they are not free, and adopting agent span
+> semantics for a pipeline that is not an agent would be dishonest
+> instrumentation. The point to land is that the option exists and is
+> costed, not that we should take it.
+
+---
+
+## Section 9: Boundaries (~1.5 minutes)
 
 Spoken, no navigation. Say this out loud rather than letting someone find it
 later.
@@ -548,14 +621,14 @@ Item names must match the workbook exactly. Source of truth is
 
 | Item name | Talk track section |
 |---|---|
-| `Container CPU usage (cores)` | 8 |
-| `Container memory usage (MiB)` | 8 |
-| `Container network I/O` | 8 |
-| `SurrealDB process CPU (%)` | 8 |
-| `SurrealDB process memory (MiB)` | 8 |
-| `SurrealDB transaction rate` | 8 |
-| `SurrealDB HTTP request rate` | 8 |
-| `SurrealDB active HTTP requests` | 8 |
+| `Container CPU usage (cores)` | 9 |
+| `Container memory usage (MiB)` | 9 |
+| `Container network I/O` | 9 |
+| `SurrealDB process CPU (%)` | 9 |
+| `SurrealDB process memory (MiB)` | 9 |
+| `SurrealDB transaction rate` | 9 |
+| `SurrealDB HTTP request rate` | 9 |
+| `SurrealDB active HTTP requests` | 9 |
 
 ### Logs and Traces (3 items, no Splunk equivalent)
 
@@ -571,7 +644,7 @@ splits, mapped chart by chart in
 
 ## Related
 
-- [demo-talk-track.md](demo-talk-track.md) -- the Splunk deck, runnable off
+- [demo-talk-track-2-splunk.md](demo-talk-track-2-splunk.md) -- the Splunk deck, runnable off
   the same simulator invocation
 - [splunk-vs-azure-monitor.md](splunk-vs-azure-monitor.md) -- the evidence
   behind every comparison claim above

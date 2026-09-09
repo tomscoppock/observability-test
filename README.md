@@ -9,15 +9,48 @@ observability backends.
 
 A hands-on project to explore and compare observability approaches:
 
-1. **Splunk Observability Cloud** (free edition) -- first target
-2. **Azure Monitor / Application Insights** -- implemented, and runnable in
-   parallel with Splunk off the same traffic
+1. **Splunk Observability Cloud** (free edition) -- implemented
+2. **Azure Monitor / Application Insights** -- implemented
 3. **Grafana / Tempo / Prometheus / Loki** -- future phase
+
+Splunk and Azure Monitor can run **at the same time**, receiving
+byte-identical telemetry from one traffic run. That turns a vendor comparison
+from an argument into a measurement: see
+[docs/splunk-vs-azure-monitor.md](docs/splunk-vs-azure-monitor.md), where
+counters match exactly between the two and every divergence has a stated
+cause.
 
 The application under observation is a RAG (Retrieval-Augmented Generation)
 agent that can scrape web pages or accept file uploads, store them with
 embeddings in SurrealDB, and answer questions about the content via a
 swappable LLM backend.
+
+## Take the learnings, not the code
+
+**This is the project's main deliverable.** The point of a spike is what you
+learn, and the learnings here are not discoverable by reading the code: they
+are the silent failures, the wrong units and the empty-but-plausible charts
+that cost days to find.
+
+They are packaged as **paste-ready prompts** in [`prompts/`](prompts/). Hand
+one to a coding agent in another repo and it should instrument that service
+without repeating any of it. Pick one, two or three:
+
+| Prompt | Use it when | Depends on |
+|---|---|---|
+| [1. OpenTelemetry instrumentation](prompts/01-otel-instrumentation.md) | You want vendor-neutral instrumentation: traces, metrics and logs into a collector, nothing vendor-specific | nothing |
+| [2. Splunk Observability Cloud](prompts/02-splunk-backend.md) | You want Splunk APM, Infrastructure Monitoring, dashboards and detectors as code | prompt 1 |
+| [3. Azure Monitor](prompts/03-azure-monitor-backend.md) | You want Application Insights, a Workbook and alert rules as code | prompt 1 |
+| [4. MCP or sidecar handoff](prompts/04-mcp-service-handoff.md) | A second service needs to reach the same backend | prompt 1 |
+
+Prompts 2 and 3 compose: a collector pipeline fans out to every exporter
+listed, so one service can feed both backends at once. Run prompt 1 first and
+on its own, because the instrumentation is the durable asset and the backend
+is a config file.
+
+See [`prompts/README.md`](prompts/README.md) for how to combine them, and
+[docs/implementation-playbook.md](docs/implementation-playbook.md) for the
+same material as reference documentation, including all 33 traps.
 
 ## Architecture
 
@@ -35,27 +68,37 @@ swappable LLM backend.
      |  You.com)       |   |  Qwen via .env)|
      +-----------------+   +----------------+
               |
-     +--------v--------+
+     +--------v---------+
      | OTel Collector   |
      | (contrib image)  |
-     +--+-----------+---+
-        |           |
-        | traces    | logs
-        | metrics   | (HEC)
-        v           v
-  +-------------+  +------------------+
-  | Splunk      |  | Splunk Cloud     |
-  | Observability|  | Platform /       |
-  | Cloud (APM, |  | Enterprise       |
-  | Infra Mon)  |  | (log indexes)    |
-  +-------------+  +------------------+
+     +--+----------+----+
+        |          |
+   SPLUNK PATH   AZURE PATH
+        |          |
+   +----+----+     |
+   | traces  |     | traces + metrics + logs
+   | metrics | logs|
+   v         v     v
++----------+ +-----------+ +------------------------+
+| Splunk   | | Splunk    | | Application Insights   |
+| Observ.  | | Cloud     | | requests, dependencies,|
+| Cloud    | | Platform  | | customMetrics, traces, |
+| (APM,    | | (HEC log  | | exceptions -- ALL in   |
+| Infra)   | |  indexes) | | one resource           |
++----------+ +-----------+ +------------------------+
 ```
 
-Traces and metrics go to Splunk Observability Cloud; logs go to Splunk
-Cloud Platform via HEC, because Splunk deprecated native log ingest into
-Observability Cloud in January 2024. See
-[docs/architecture.md](docs/architecture.md) for the full split and
-[docs/splunk-setup.md](docs/splunk-setup.md) for setup.
+**Splunk needs two products; Azure needs one.** On the Splunk path, traces
+and metrics go to Observability Cloud while logs go to Splunk Cloud Platform
+via HEC, because Splunk deprecated native log ingest into Observability Cloud
+in January 2024. On the Azure path all three signals land in a single
+Application Insights resource, correlated by `operation_Id`.
+
+That asymmetry is the largest single capability difference the project
+surfaced, and it is not visible on any chart. See
+[docs/architecture.md](docs/architecture.md) for the full split,
+[docs/splunk-setup.md](docs/splunk-setup.md) and
+[docs/azure-monitor-setup.md](docs/azure-monitor-setup.md) for setup.
 
 ### Switching or doubling up the backend
 
@@ -94,7 +137,17 @@ Full documentation is in the [`docs/`](docs/) folder:
 | [Splunk Setup](docs/splunk-setup.md) | Dashboards, alerts, and what free/trial accounts cannot do |
 | [Azure Monitor Setup](docs/azure-monitor-setup.md) | Azure Monitor as an endpoint: provisioning, config selection, workbook deployment |
 | [Splunk vs Azure Monitor](docs/splunk-vs-azure-monitor.md) | Where the two backends genuinely differ, in both directions |
+| [Demo Talk Track 1: OpenTelemetry](docs/demo-talk-track-1-opentelemetry.md) | ~12 min. The "why": one instrumentation, two backends, and what vendor-neutral does and does not buy |
+| [Demo Talk Track 2: Splunk](docs/demo-talk-track-2-splunk.md) | ~14 min demo of the Splunk surfaces |
+| [Demo Talk Track 3: Azure](docs/demo-talk-track-3-azure.md) | ~16 min demo of the Azure surfaces, off the same simulator run |
 | [Troubleshooting](docs/troubleshooting.md) | Common issues and fixes |
+
+### Reuse elsewhere
+
+| Resource | Description |
+|---|---|
+| [`prompts/`](prompts/) | **Paste-ready prompts** for instrumenting another codebase. Pick 1, 2 or 3 |
+| [Implementation Playbook](docs/implementation-playbook.md) | The 33 traps and the full OTel / Splunk / Azure build guides |
 
 ## Quick start
 
@@ -163,7 +216,9 @@ python3 scripts/generate_board.py
 | # | Title | Status |
 |---|---|---|
 | 001 | Docker Compose RAG Agent Stack | done |
-| 002 | OTel Collector Pipeline to Splunk | not-started |
-| 003 | Node.js OTel Instrumentation | not-started |
-| 004 | RAG Document Ingestion and Chat | not-started |
-| 005 | LLM Observability with gen_ai Semconv | not-started |
+| 002 | OTel Collector Pipeline to Splunk | done |
+| 003 | Node.js OTel Instrumentation | done |
+| 004 | RAG Document Ingestion and Chat | done |
+| 005 | LLM Observability with gen_ai Semconv | done |
+| 025 | Splunk Demo and Dashboard Automation | done |
+| 042 | Azure Monitor as a Parallel Backend | in-progress (5 of 6) |

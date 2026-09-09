@@ -50,7 +50,7 @@ The voice-over must highlight benefits:
 
 ## Expected behaviour
 
-A new file `docs/demo-talk-track.md` that contains:
+A new file `docs/demo-talk-track-2-splunk.md` that contains:
 
 1. **Opening** -- what we're looking at, why it matters (30 seconds)
 2. **Section 1: Service Map and Infrastructure** (~2 min)
@@ -82,7 +82,7 @@ Total demo length target: ~12 minutes.
 
 ## Files to create or modify
 
-- `docs/demo-talk-track.md` -- new file, the complete talk track
+- `docs/demo-talk-track-2-splunk.md` -- new file, the complete talk track
 
 ## Functions / classes to add or change
 

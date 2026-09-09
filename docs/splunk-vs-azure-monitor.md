@@ -501,6 +501,74 @@ That is a real architectural distinction between log-backed and
 metric-backed observability, and it is the thing this chart should have been
 illustrating all along.
 
+## 6a. Prebuilt AI content: both empty, for asymmetric reasons
+
+Both vendors ship agent-oriented AI dashboards. **Neither fully populates
+from this application**, and the reasons differ in a way that matters more
+than the shared outcome.
+
+### What this application actually emits
+
+Verified against live telemetry 2026-09-09:
+
+| Convention the agent dashboards want | Emitted here |
+|---|---|
+| `chat <model>` span | Yes -- `chat gpt-5.4-mini` |
+| `gen_ai.client.token.usage` | Yes |
+| `gen_ai.operation.name`, `provider.name`, `request.model`, `usage.*_tokens` | Yes, all |
+| `gen_ai.client.operation.duration` | **No** |
+| `invoke_agent <agent>` span | **No** -- we emit `chat.pipeline` |
+| `execute_tool <func>` span | **No** -- we emit `mcp.tool.*` |
+| `gen_ai.agent.name`, `gen_ai.agent.id`, `gen_ai.conversation.id` | **No** -- we have `session.id` |
+
+The shared root cause is not a backend defect: **this is a RAG pipeline
+making direct LLM calls, not an agent framework**, so the agent spans do not
+exist to be reported.
+
+### Azure: a naming gap
+
+Azure Managed Grafana ships dashboards under Azure / Insights / Applications
+that query Application Insights through the Azure Monitor data source, with
+no proprietary plugin. Its **Agent Framework** dashboard reads plain
+OpenTelemetry GenAI conventions rather than a Microsoft SDK, so any framework
+emitting them drives it.
+
+Result here: the LLM and token panels populate from our data with nothing
+built by us. The agent and tool panels stay empty.
+
+Closing that gap is a **naming decision**, not a platform change. Renaming
+`chat.pipeline` to `invoke_agent rag-agent`, renaming the MCP tool spans to
+`execute_tool`, and adding `gen_ai.agent.name` would light the panels up.
+Whether that is *honest* instrumentation for a pipeline that is not an agent
+is a separate question, and the answer here is probably no.
+
+### Splunk: a language wall
+
+Splunk's AI Agent Monitoring screens key off the same agent semantics
+(`invoke_agent`, `invoke_workflow`), but its documented instrumentation is
+**Python-only**. From a Node service that is unreachable regardless of what
+span names we adopt or what we spend.
+
+### Why the distinction is the finding
+
+Task 037 recorded Splunk's AI screens as "unreachable" and attributed it to
+two causes at once, Python-only instrumentation *and* agent span semantics.
+Running the same test against a second backend separates them:
+
+- The **span semantics** half is common to both vendors and is ours to fix.
+- The **Python-only** half is Splunk-specific and is not.
+
+So on paper both vendors lack the same capability, and in practice one of
+them has an open door. That distinction is invisible with a single backend,
+and it is exactly the sort of thing a parallel comparison is for.
+
+Set against it: Splunk's out-of-the-box surface is the cleaner of the two.
+Service map, Tag Spotlight, Trace Analyzer and Related Content are polished
+and coherent, and cost nothing to reach. Azure's prebuilt content is plainer
+but more open. The pattern repeats the one in section 7: Splunk has the
+better product and charges for the best of it, Azure has the more accessible
+surface.
+
 ## 7. Where Azure wins
 
 | Capability | Detail | Status |
@@ -508,6 +576,7 @@ illustrating all along.
 | **Logs beside spans** | Log records land in App Insights `traces` in the same resource as the spans, correlated by `operation_Id`, with no second product and no licence gate. The Splunk equivalent needs Log Observer Connect, which is blocked on a non-trial licence: three independent gates on a trial, recorded in [splunk-setup.md](splunk-setup.md) Section 26. **The largest single capability difference this spike surfaces, and it appears in none of the 31 charts** | Verified |
 | **Application Map** | All three services in one App Insights resource produce a working topology map with no configuration. Splunk's service map needed `peer.service` hand-set on outbound calls (playbook 1.5) | Reasoned |
 | **Smart Detection** | Latency and failure-rate anomaly detection arrives free with the resource | Verified |
+| **Prebuilt content reads standard OTel** | Azure Managed Grafana's bundled dashboards, including Agent Framework, query Application Insights with no proprietary plugin and key off GenAI conventions rather than a vendor SDK. Splunk's equivalent AI screens are Python-only. Both are empty here for the same reason (this is not an agent framework), but only one of them could be filled by renaming spans. See section 6a | Verified |
 | **Exact percentiles** | Raw span durations rather than interpolation across wide buckets | Verified |
 | **Semantic DB filtering** | `db.system == 'surrealdb'` rather than an explicit 13-name span list | Verified |
 | **Time-range binding** | Workbook tiles follow the time picker. The Splunk token charts hardcode a 4-hour window and carry a note asking the operator to fix it by hand | Verified |
@@ -612,5 +681,5 @@ because both halves double; counts did not. Splunk's own request count was
   and licensing boundaries in Section 26
 - [implementation-playbook.md](implementation-playbook.md) -- rebuilding this
   elsewhere, and the silent failures to expect
-- [demo-talk-track.md](demo-talk-track.md) and
-  [demo-talk-track-azure.md](demo-talk-track-azure.md) -- the two demos
+- [demo-talk-track-2-splunk.md](demo-talk-track-2-splunk.md) and
+  [demo-talk-track-3-azure.md](demo-talk-track-3-azure.md) -- the two demos

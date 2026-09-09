@@ -9,7 +9,7 @@ Tags: non-code, docs
 
 ## Description
 
-Rewrite the `[SHOW]` navigation throughout `docs/demo-talk-track.md` so a
+Rewrite the `[SHOW]` navigation throughout `docs/demo-talk-track-2-splunk.md` so a
 presenter who has never opened Splunk Observability Cloud can run the demo
 from the document alone. Fix three instructions that do not work as written.
 
@@ -56,7 +56,7 @@ offer it as a cleaner alternative to the `scrape.url` tag filter.
 
 ## Notes
 
-Triggered by a question about `demo-talk-track.md:244-245`, then widened to
+Triggered by a question about `demo-talk-track-2-splunk.md:244-245`, then widened to
 the whole document.
 
 Three defects found, all verified rather than assumed:

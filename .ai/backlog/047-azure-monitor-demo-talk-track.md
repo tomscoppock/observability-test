@@ -16,7 +16,7 @@ back with the Splunk talk track off a single traffic simulator invocation.
 
 ## Acceptance criteria
 
-- [x] `docs/demo-talk-track-azure.md` created
+- [x] `docs/demo-talk-track-3-azure.md` created
 - [x] Reuses the established `[SHOW]` / `[SAY]` / `[HIGHLIGHT]` / `[CHART]`
       marker set and `> **Presenter note:**` asides
 - [x] Every `[SHOW]` names the surface before naming controls, and gives an
@@ -68,7 +68,15 @@ Remaining, and needs a human in a browser after a simulator run:
 - [ ] S7: **Monitoring > Alerts > Alert rules** lists the three rules, and
       **Condition** shows the query
 - [ ] S7: **Investigate > Smart Detection** exists on this resource
-- [ ] Timing: the whole deck lands within ~14 minutes
+- [ ] S8: **Azure Managed Grafana** is reachable and its bundled Azure /
+      Insights / Applications dashboards render against this App Insights
+      resource
+- [ ] S8: the **Agent Framework** dashboard populates its LLM and token
+      panels and leaves the agent/tool panels empty, as section 6a of the
+      comparison predicts. If the agent panels DO populate, something emits
+      agent spans that we did not account for -- investigate before
+      presenting it
+- [ ] Timing: the whole deck lands within ~16 minutes
 
 Do not tick the acceptance criteria above on the strength of the document
 reading well. 041 is still open on exactly this gate for the Splunk track.

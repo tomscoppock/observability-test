@@ -1,6 +1,7 @@
 # 040 -- Apply OTel/Splunk learnings to the Knowledge Discovery agent
 
-Status: backlog (authoring complete 2026-09-08; blocked on the Knowledge Discovery repo for the remaining handoff items)
+Status: backlog
+Blocked: authoring complete 2026-09-08; the remaining handoff items can only be closed in the Knowledge Discovery repo
 Priority: high
 Assignee: @tom
 Epic: 025
@@ -10,6 +11,14 @@ Repo: TungstenKnowledgeDiscovery
 Stage: runtime-validation-pending
 
 ## Description
+
+> **The prompt below has been split and promoted to
+> [`prompts/`](../../prompts/)**, which is now the canonical, discoverable
+> location: `01-otel-instrumentation.md` (backend-agnostic) and
+> `02-splunk-backend.md`. The split matters -- as written here, OTel and
+> Splunk are welded together and a downstream project cannot take just the
+> instrumentation. This file is kept as the tracker record.
+
 
 Carry everything learned in this observability-test spike across to the
 full Knowledge Discovery agent, focusing on MCP discoverability, token

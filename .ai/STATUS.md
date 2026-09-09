@@ -28,6 +28,22 @@ Last updated: 2026-09-09
   span, which broke the same chart on BOTH backends and could not honestly be
   worked around in either dashboard. Fixed in `api/src/session-attributes.js`.
 
+  **Talk tracks renumbered and a third added (2026-09-09).**
+  `demo-talk-track-1-opentelemetry.md` is new: the vendor-neutral "why" track
+  covering lock-in, the dual-backend proof, and an even-handed out-of-the-box
+  comparison. The two product decks are now
+  `demo-talk-track-2-splunk.md` and `demo-talk-track-3-azure.md`.
+
+  Track 3 gained a section on Azure's prebuilt content. Verified against live
+  telemetry rather than assumed: Azure Managed Grafana's bundled dashboards
+  query App Insights with no proprietary plugin, and its **Agent Framework**
+  dashboard **partly** populates -- LLM and token panels yes, agent and tool
+  panels no, because this is a RAG pipeline rather than an agent framework.
+  Written up as comparison section 6a, and it sharpens what 037 concluded:
+  Splunk's AI screens are unreachable because the instrumentation is
+  Python-only (a wall), Azure's because of span naming (a to-do). Both
+  vendors' agent dashboards are empty here, for asymmetric reasons.
+
   Splunk-side work done under this epic, beyond the Azure deliverables:
   eight dashboard charts fixed for double counting, the Active Sessions chart
   rewritten onto `span_metrics`, deprecated collector aliases migrated, and
@@ -38,7 +54,7 @@ Last updated: 2026-09-09
 
 - **041 -- Talk track click paths (@tom)** -- doc edits complete, awaiting
   live-tenant verification. Rewrote every `[SHOW]` in
-  `docs/demo-talk-track.md` to give explicit navigation, and fixed three
+  `docs/demo-talk-track-2-splunk.md` to give explicit navigation, and fixed three
   instructions that did not work as written: the Section 4 two-service
   filter (Splunk ORs multiple values inside one filter), the Section 6
   `llm.chatCompletion` span name (does not exist; it is `chat gpt-4o-mini`),
@@ -160,7 +176,7 @@ disturbing the Splunk setup. Six children, all authored 2026-09-09:
   Verified / Reasoned / Unverified. Blocked by 043 and 045 for the
   measured-numbers table.
 - **047 -- Azure Monitor demo talk track** (medium).
-  `docs/demo-talk-track-azure.md`, runnable off the same simulator
+  `docs/demo-talk-track-3-azure.md`, runnable off the same simulator
   invocation as the Splunk deck. Blocked by 045 for live walkthrough.
 - **048 -- Learnings prompts** (medium). Two pasteable coding-agent
   prompts, plus Part 3 and traps 14-22 added to

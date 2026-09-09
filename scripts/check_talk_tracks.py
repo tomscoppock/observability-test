@@ -5,7 +5,7 @@ Usage:
     python3 scripts/check_talk_tracks.py
     python3 scripts/check_talk_tracks.py --strict   # non-zero exit on warnings
 
-Catches the drift class that left docs/demo-talk-track.md claiming 5 charts
+Catches the drift class that left docs/demo-talk-track-2-splunk.md claiming 5 charts
 on its "LLM and AI" tab while splunk/dashboard.json held 10, with five
 charts missing from its reference table entirely. A presenter following a
 stale talk track discovers that live, in front of an audience.
@@ -166,8 +166,8 @@ def main():
     all_errors = []
     all_warnings = []
     for track, tabs, source in (
-        (os.path.join(REPO_ROOT, 'docs', 'demo-talk-track.md'), s_tabs, s_path),
-        (os.path.join(REPO_ROOT, 'docs', 'demo-talk-track-azure.md'), a_tabs, a_path),
+        (os.path.join(REPO_ROOT, 'docs', 'demo-talk-track-2-splunk.md'), s_tabs, s_path),
+        (os.path.join(REPO_ROOT, 'docs', 'demo-talk-track-3-azure.md'), a_tabs, a_path),
     ):
         errors, warnings = check(track, tabs, source)
         all_errors.extend(errors)

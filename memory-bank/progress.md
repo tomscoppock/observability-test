@@ -20,7 +20,7 @@ Last refreshed: 2026-08-18
 > 006-039 are done; see `.ai/STATUS.md` and `.ai/done/` for the
 > authoritative trail.
 
-- **041 (in progress)** -- talk track click paths. `docs/demo-talk-track.md`
+- **041 (in progress)** -- talk track click paths. `docs/demo-talk-track-2-splunk.md`
   rewritten so every `[SHOW]` gives an explicit click path, plus three
   factual fixes: the Section 4 two-service filter (Splunk ORs values
   within one filter), the Section 6 `llm.chatCompletion` span name (it is

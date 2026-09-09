@@ -43,7 +43,7 @@ When this is done:
    | 16 | Container Memory Usage | Line | `container.memory.usage` by `container.name` |
    | 17 | Container Network I/O | Area | `container.network.io` by `container.name` |
 
-3. `docs/demo-talk-track.md` is updated:
+3. `docs/demo-talk-track-2-splunk.md` is updated:
    - Section 1 (Infrastructure) references the new container charts
    - Chart name reference table updated with charts 15-17
 
@@ -73,7 +73,7 @@ When this is done:
 - `scripts/setup-docker-desktop-otel.ps1` -- new, Windows script
 - `scripts/setup-docker-desktop-otel.sh` -- new, macOS/Linux script
 - `splunk/dashboard.json` -- add 3 container metric charts
-- `docs/demo-talk-track.md` -- update Section 1 and chart reference table
+- `docs/demo-talk-track-2-splunk.md` -- update Section 1 and chart reference table
 - `docs/docker-desktop-otel.md` -- add automation section
 - `docs/splunk-setup.md` -- update chart count in section 22
 
@@ -105,7 +105,7 @@ When this is done:
 - [x] Create `scripts/setup-docker-desktop-otel.ps1` (Windows)
 - [x] Create `scripts/setup-docker-desktop-otel.sh` (macOS/Linux)
 - [x] Add 3 container metric charts to `splunk/dashboard.json`
-- [x] Update `docs/demo-talk-track.md` Section 1 and chart reference
+- [x] Update `docs/demo-talk-track-2-splunk.md` Section 1 and chart reference
 - [x] Update `docs/docker-desktop-otel.md` with automation section
 - [x] Update `docs/splunk-setup.md` section 22 chart count
 - [x] Test the PS script on Windows

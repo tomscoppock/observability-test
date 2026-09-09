@@ -2,6 +2,11 @@
 
 Comprehensive guides for the Observability Test project.
 
+> **Taking this to another codebase?** Start with
+> [`../prompts/`](../prompts/) -- paste-ready prompts that carry these
+> learnings into another repo, pick 1, 2 or 3. This documentation is the
+> reference behind them.
+
 ## Guides
 
 | Document | Description |
@@ -17,8 +22,9 @@ Comprehensive guides for the Observability Test project.
 | [Splunk Setup](splunk-setup.md) | Dashboards, alerts, and monitoring in Splunk Observability Cloud |
 | [Azure Monitor Setup](azure-monitor-setup.md) | Azure Monitor as an endpoint: resource provisioning, the three collector configs, workbook and alert deployment |
 | [Splunk vs Azure Monitor](splunk-vs-azure-monitor.md) | Where the two backends genuinely differ, in both directions, chart by chart |
-| [Demo Talk Track](demo-talk-track.md) | Scripted ~14 min demo walkthrough: Observability Cloud dashboards plus Splunk Cloud Platform log analytics |
-| [Demo Talk Track: Azure](demo-talk-track-azure.md) | Scripted ~14 min Azure Monitor walkthrough, runnable off the same simulator invocation |
+| [Demo Talk Track 1: OpenTelemetry](demo-talk-track-1-opentelemetry.md) | ~12 min. The "why" track: one instrumentation, two backends, and the limits of vendor-neutral. Run this first |
+| [Demo Talk Track 2: Splunk](demo-talk-track-2-splunk.md) | ~14 min: Observability Cloud dashboards plus Splunk Cloud Platform log analytics |
+| [Demo Talk Track 3: Azure](demo-talk-track-3-azure.md) | ~16 min: Application Insights, the workbook, and the prebuilt Grafana content. Runs off the same simulator invocation as track 2 |
 | [RAG Testing Guide](rag-testing-guide.md) | End-to-end testing of the RAG pipeline |
 | [Troubleshooting](troubleshooting.md) | Common issues and fixes |
 
