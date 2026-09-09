@@ -164,6 +164,36 @@ exporters: [debug, otlp_http/splunk, azure_monitor, span_metrics]
 comparison is controlled: no second instrumentation, no sampling difference,
 no timing difference in what was captured."
 
+> **Presenter note -- head this off before someone asks.** Three of those
+> four entries are exporters. `span_metrics` is not: it is a **connector**,
+> and connectors are one of the four component types the OpenTelemetry
+> Collector defines, alongside receivers, processors and exporters. A
+> connector bridges two pipelines by acting as an exporter on one end and a
+> receiver on the other, which is why it shows up in an `exporters:` list
+> here and again as a receiver in the metrics pipeline below.
+>
+> It is worth being explicit that this is **built into the collector**, not
+> something we installed. It ships in the upstream
+> `otel/opentelemetry-collector-contrib` image we already run. Nothing to
+> add, no vendor plugin, no third-party dependency -- it is configuration.
+> If it reads as a bolt-on, the lock-in argument gets weaker than it should
+> be, because a standard OTel component doing this work is precisely the
+> point.
+
+**[SHOW]** Scroll down to the `connectors:` block, then to the
+`metrics/splunk` pipeline where `span_metrics` appears again, this time as a
+receiver.
+
+**[SAY]** "Here it is doing both jobs. It reads every span leaving the traces
+pipeline and derives request-rate, error-rate and duration metrics from them,
+then feeds those into the metrics pipeline as if they had arrived from the
+application."
+
+**[HIGHLIGHT]** "Which is a good illustration of the wider point. That is a
+standard OpenTelemetry component turning traces into metrics, in the
+collector, once. Without it we would need a vendor agent to do the same job,
+and we would need a different one per vendor."
+
 **[SHOW]** Run the comparison:
 
 ```bash

@@ -210,12 +210,26 @@ everything the application does that is not waiting on the model.
 
 **[SAY]** "There is something structurally interesting here. Every one of
 these spans is an internal or client span, not an HTTP server span. On the
-Splunk side, getting metrics out of those spans required adding a spanmetrics
-connector to the collector, because Splunk's metric sets only cover server
-spans. That was a whole task on its own. In Azure these are rows in the
-dependencies table with their own duration, so there is nothing to configure.
-The connector is not just unnecessary here, it would actively make things
-worse, because the histogram it produces loses its buckets on the way in."
+Splunk side, getting metrics out of them meant switching on the
+`span_metrics` connector, because Splunk's metric sets only cover server
+spans. In Azure these are already rows in the dependencies table with their
+own duration, so there is nothing to configure at all."
+
+> **Presenter note -- say "switching on", not "adding".** `span_metrics` is a
+> **connector**, one of the four OpenTelemetry Collector component types
+> alongside receivers, processors and exporters. It ships in the upstream
+> `otel/opentelemetry-collector-contrib` image, so enabling it is a block of
+> YAML, not an install, a plugin or a dependency. Track 1 explains connectors
+> properly if the audience has not seen it.
+>
+> Describing it as something we bolted on makes the Splunk path sound more
+> bespoke than it is, and makes a standard OTel capability sound like vendor
+> tooling.
+
+**[HIGHLIGHT]** "And here it is not merely unnecessary, it would make things
+worse. The connector emits a histogram, and Application Insights discards
+histogram buckets at ingest, so routing it here would give us strictly less
+than the raw table we are already reading."
 
 **[CHART]** `RAG upload pipeline latency, P50 by step (ms)`
 

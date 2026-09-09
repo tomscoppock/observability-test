@@ -125,7 +125,7 @@ In dual mode, traces and logs are single fan-out pipelines: collector
 pipelines send to every exporter listed, so both backends receive
 byte-identical data. Metrics is split into `metrics/splunk` and
 `metrics/azure`, because the two backends need different inputs.
-`spanmetrics` and `hostmetrics` are Splunk-only; `cumulative_to_delta` and
+`span_metrics` and `host_metrics` are Splunk-only; `cumulative_to_delta` and
 `transform/azure_dims` are Azure-only. The reasoning for each is in
 [splunk-vs-azure-monitor.md](splunk-vs-azure-monitor.md), and the setup is in
 [azure-monitor-setup.md](azure-monitor-setup.md).

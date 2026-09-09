@@ -104,7 +104,7 @@ docker run --rm -v "$(pwd)/otel-collector-config.yaml:/etc/otelcol/config.yaml:r
 ### 5. Splunk MetricSets only cover SERVER and CONSUMER spans
 
 LLM calls, DB queries and MCP tool calls are INTERNAL/CLIENT spans, so
-they produce no metrics by default. The `spanmetrics` connector is what
+they produce no metrics by default. The `span_metrics` connector is what
 makes per-operation latency chartable at all. Without it there is
 nothing to build latency analysis on.
 
@@ -186,7 +186,7 @@ docker inspect <container> --format '{{range .Config.Env}}{{println .}}{{end}}' 
 **Troubleshooting MetricSets** power Tag Spotlight. **Monitoring
 MetricSets** power dashboards, alerting and 13-month retention. Indexing
 a tag as TMS will not make it available to dashboards. Dashboards built
-on spanmetrics need neither, because the dimensions arrive as real
+on span_metrics need neither, because the dimensions arrive as real
 metric dimensions.
 
 ### 14. The Azure exporter type has an underscore
@@ -250,7 +250,7 @@ cumulative counter is charted literally as its running total.
 
 `OTEL_EXPORTER_OTLP_METRICS_TEMPORALITY_PREFERENCE=delta` only affects the
 application SDK. It does **not** affect collector receivers such as
-`docker_stats` or `hostmetrics`, and it does not affect other services with
+`docker_stats` or `host_metrics`, and it does not affect other services with
 their own SDKs (SurrealDB's Rust SDK defaults to cumulative). Those arrive
 cumulative regardless.
 
@@ -328,11 +328,11 @@ as a **span attribute** as well as a histogram, then percentile the span. This
 project got away with it by accident. Design for it deliberately.
 
 Corollary, worth stating because it inverts the usual advice: **do not send
-the `spanmetrics` connector output to Azure.** Splunk needs spanmetrics
+the `span_metrics` connector output to Azure.** Splunk needs span_metrics
 because its MetricSets cover only SERVER and CONSUMER spans (trap 5).
 Application Insights turns every CLIENT and INTERNAL span into a
 `dependencies` row with a native `duration`, so raw-table percentiles are both
-available and exact. Routing spanmetrics there gives strictly less.
+available and exact. Routing span_metrics there gives strictly less.
 
 ### 21. `spaneventsenabled` gates the entire `exceptions` table
 
@@ -1000,11 +1000,11 @@ Networking trap: inside Docker, `localhost` is the container. Use
 Full config in [`otel-collector-config.yaml`](../otel-collector-config.yaml).
 The parts that are load-bearing:
 
-- **`spanmetrics` connector** with dimensions for
+- **`span_metrics` connector** with dimensions for
   `gen_ai.operation.name`, `gen_ai.provider.name`, `gen_ai.request.model`
   and `deployment.environment`. This is what produces metrics for
   INTERNAL/CLIENT spans (trap 5).
-- **`resourcedetection`** sets `host.name`, which is required for APM to
+- **`resource_detection`** sets `host.name`, which is required for APM to
   Infrastructure Related Content correlation.
 - **`filter/logs`** drops DEBUG and TRACE before export
   (`severity_number < SEVERITY_NUMBER_INFO`) to cut ingest volume.

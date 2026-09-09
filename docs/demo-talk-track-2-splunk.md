@@ -223,7 +223,7 @@ between P50 and P99 is a red flag for inconsistent performance."
 >
 > Also, **the latency numbers on this tab are nanoseconds**, while the RAG
 > Pipeline and LLM tabs are milliseconds. `service.request` is nanoseconds;
-> the spanmetrics connector sets `unit: ms`. Splunk renders the shape
+> the `span_metrics` connector sets `unit: ms`. Splunk renders the shape
 > correctly either way, so trends are trustworthy and only the absolute
 > value needs care. Both traps are written up in `docs/splunk-setup.md`
 > section 27.
@@ -233,6 +233,21 @@ breakdown charts.
 
 **[CHART]** `RAG Chat Pipeline Latency`, `RAG Upload Pipeline Latency`
 (RAG Pipeline tab)
+
+> **Presenter note -- what makes these charts possible, and it is not a
+> Splunk feature.** Splunk's Monitoring MetricSets only cover SERVER and
+> CONSUMER spans, so the internal and client spans behind this pipeline
+> produce no metrics on their own. What fills the gap is the `span_metrics`
+> **connector**: one of the four OpenTelemetry Collector component types
+> (receivers, processors, exporters, connectors), which derives duration and
+> call-count metrics from every span regardless of kind.
+>
+> Say "switched on", not "installed". It ships in the upstream
+> `otel/opentelemetry-collector-contrib` image, so it is a block of YAML
+> rather than a plugin or a dependency. That distinction matters here: this
+> is a standard OpenTelemetry capability compensating for a vendor
+> limitation, which is a decent advert for the architecture rather than an
+> embarrassment for it.
 
 **[SAY]** "This is where it gets interesting for RAG specifically. We
 instrument each step of the pipeline with custom spans -- embedding
@@ -265,7 +280,7 @@ attribute the application sets from an `X-Session-Id` header."
 > Fixing it needed a second step here that Azure did not need. Grouping
 > `service.request` by a span tag requires indexing it as a Monitoring
 > MetricSet dimension, and Splunk has **no public API for MetricSets** --
-> it is a UI-only operation. So the chart reads the spanmetrics connector
+> it is a UI-only operation. So the chart reads the `span_metrics` connector
 > instead, where a configured dimension arrives as a real metric dimension.
 > That keeps the whole dashboard deployable as code. If asked about
 > cardinality: the app sets the tag on server spans only and never invents

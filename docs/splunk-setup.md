@@ -56,7 +56,7 @@ Observability Cloud for the observability-test RAG Agent stack.
 
 ### Dashboard Automation
 
-22. [Spanmetrics connector and Custom MetricSets](#22-spanmetrics-connector-and-custom-metricsets)
+22. [Spanmetrics connector and Custom MetricSets](#22-span_metrics-connector-and-custom-metricsets)
 23. [Automated dashboard setup](#23-automated-dashboard-setup)
 
 ### Reference
@@ -122,7 +122,7 @@ Connect](#log-observer-connect-splunk-cloud-platform) subsection for the
 full setup. Note that Log Observer Connect is not available on Splunk
 Cloud Platform trial accounts, only licensed instances.
 
-**Key concept -- Monitoring MetricSets (MMS) and spanmetrics:**
+**Key concept -- Monitoring MetricSets (MMS) and span_metrics:**
 
 Splunk APM automatically creates histogram metrics from your trace data.
 The primary one is `service.request` (an MMS metric). Because it is a
@@ -145,14 +145,14 @@ different functions:
 `span.kind = INTERNAL` or `CLIENT` and are invisible to MMS.
 
 To get latency and call-count metrics for ALL spans, this project uses
-the **spanmetrics connector** in the OTel Collector. It generates two
+the **span_metrics connector** in the OTel Collector. It generates two
 metrics -- `traces.span.metrics.duration` (histogram) and
 `traces.span.metrics.calls` (counter) -- with dimensions
 `service.name`, `span.name`, `gen_ai.operation.name`, etc. These are
 queryable in SignalFlow with
 `histogram('traces.span.metrics.duration', ...)` and
 `data('traces.span.metrics.calls', ...)`. See
-[opentelemetry.md](opentelemetry.md#spanmetrics-connector) for full
+[opentelemetry.md](opentelemetry.md#span_metrics-connector) for full
 details.
 
 **Dimension names:** APM dimensions use the `sf_` prefix:
@@ -682,8 +682,8 @@ D = data('surrealdb.network.sent', filter=filter('service.name', 'surrealdb')).r
 > `{operation} {model}` (e.g. `embeddings text-embedding-3-small`).
 > The automated dashboard uses `gen_ai.operation.name` = `embeddings`
 > to filter model-independently. The queries below use the
-> `duration` histogram from the spanmetrics connector (see
-> [opentelemetry.md](opentelemetry.md#spanmetrics-connector)).
+> `duration` histogram from the span_metrics connector (see
+> [opentelemetry.md](opentelemetry.md#span_metrics-connector)).
 
 ### Finding upload traces
 
@@ -733,8 +733,8 @@ C = histogram('traces.span.metrics.duration', filter=filter_ and filter('span.na
 > convention `{operation} {model}` (e.g. `chat gpt-4o-mini`,
 > `embeddings text-embedding-3-small`). The automated dashboard uses
 > `gen_ai.operation.name` to filter model-independently. The queries
-> below use the `duration` histogram from the spanmetrics connector
-> (see [opentelemetry.md](opentelemetry.md#spanmetrics-connector)).
+> below use the `duration` histogram from the span_metrics connector
+> (see [opentelemetry.md](opentelemetry.md#span_metrics-connector)).
 
 ### Builder tab (chat latency by step)
 
@@ -790,9 +790,9 @@ D = histogram('traces.span.metrics.duration', filter=filter_ and filter('gen_ai.
    - `gen_ai.request.model`
    - `gen_ai.response.finish_reason`
 
-### Custom chart: LLM latency (using spanmetrics duration)
+### Custom chart: LLM latency (using span_metrics duration)
 
-With the spanmetrics connector enabled, you can chart LLM latency
+With the span_metrics connector enabled, you can chart LLM latency
 using the `duration` histogram metric:
 
 ```signalflow
@@ -800,7 +800,7 @@ filter_ = filter('service.name', 'rag-api') and filter('deployment.environment',
 A = histogram('traces.span.metrics.duration', filter=filter_ and filter('gen_ai.operation.name', 'chat')).percentile(pct=50).publish(label='LLM Latency')
 ```
 
-No manual Splunk UI configuration is needed -- the spanmetrics
+No manual Splunk UI configuration is needed -- the span_metrics
 connector generates these metrics automatically from trace spans.
 
 ### Custom chart: Token usage (using OTel SDK histogram)
@@ -1162,7 +1162,7 @@ C = histogram('traces.span.metrics.duration', filter=filter_mcp and filter('span
 
 ## 22. Spanmetrics connector and Custom MetricSets
 
-> **What:** The spanmetrics connector in the OTel Collector generates
+> **What:** The span_metrics connector in the OTel Collector generates
 > `duration` and `calls` metrics from ALL trace spans, making custom
 > span latency available in dashboard charts without manual Splunk
 > configuration.
@@ -1170,7 +1170,7 @@ C = histogram('traces.span.metrics.duration', filter=filter_mcp and filter('span
 > only covers spans with `span.kind = SERVER` or `CONSUMER`. Custom
 > spans like `chat.pipeline`, `db.vectorSearch`, and `chat <model>`
 > have `span.kind = INTERNAL` or `CLIENT` and are invisible to MMS.
-> **How:** The spanmetrics connector is configured in
+> **How:** The span_metrics connector is configured in
 > `otel-collector-config.yaml` and runs automatically. No manual
 > Splunk UI steps are needed for the dashboard to work.
 
@@ -1179,14 +1179,14 @@ C = histogram('traces.span.metrics.duration', filter=filter_mcp and filter('span
 | Metric source | Covers | Manual setup? |
 |---|---|---|
 | `histogram('service.request', ...)` (MMS) | SERVER/CONSUMER spans only | No (automatic) |
-| `histogram('traces.span.metrics.duration', ...)` (spanmetrics) | ALL spans (INTERNAL, CLIENT, SERVER) | No (automatic) |
-| `data('traces.span.metrics.calls', ...)` (spanmetrics) | ALL spans | No (automatic) |
+| `histogram('traces.span.metrics.duration', ...)` (span_metrics) | ALL spans (INTERNAL, CLIENT, SERVER) | No (automatic) |
+| `data('traces.span.metrics.calls', ...)` (span_metrics) | ALL spans | No (automatic) |
 
-The spanmetrics connector is wired as an exporter in the traces
+The span_metrics connector is wired as an exporter in the traces
 pipeline and a receiver in the metrics pipeline:
 
 ```
-Traces pipeline --> spanmetrics connector --> Metrics pipeline --> signalfx --> Splunk
+Traces pipeline --> span_metrics connector --> Metrics pipeline --> signalfx --> Splunk
 ```
 
 The signalfx exporter has `send_otlp_histograms: true` to forward the
@@ -1223,7 +1223,7 @@ Instead of creating charts manually, you can use the provided automation
 script to create the entire dashboard group via the Splunk Observability
 Cloud REST API.
 
-> **Important:** The RAG Pipeline and LLM tabs require the spanmetrics
+> **Important:** The RAG Pipeline and LLM tabs require the span_metrics
 > connector to be running in the OTel Collector. This is already
 > configured in `otel-collector-config.yaml` -- just ensure the
 > collector is running (`docker compose up -d`).
@@ -1232,7 +1232,7 @@ Cloud REST API.
 
 - `SPLUNK_ACCESS_TOKEN` and `SPLUNK_REALM` set in your `.env` file
 - `curl` and `jq` (Linux/macOS) or PowerShell 5.1+ (Windows)
-- OTel Collector running with spanmetrics connector (default config)
+- OTel Collector running with span_metrics connector (default config)
 
 ### Using the setup script
 
@@ -1295,7 +1295,7 @@ See the [Splunk Observability Cloud API reference](https://dev.splunk.com/observ
 for full documentation.
 
 > **Note:** All dashboard metrics are fully automated -- no manual
-> Splunk UI configuration is needed. The spanmetrics connector generates
+> Splunk UI configuration is needed. The span_metrics connector generates
 > `duration` and `calls` metrics from trace spans automatically.
 
 ---
@@ -1343,8 +1343,8 @@ configuration.
 | **Database Query Perf** | Partial | `db.*` span attributes | SurrealDB shows as inferred service; full query analytics requires supported `db.system` value |
 | **Log Observer (native)** | Deprecated | N/A | Splunk deprecated direct OTLP/HEC log ingest into Observability Cloud in Jan 2024. Do not build against this. |
 | **Log Observer Connect** | Needs config | Logs in Splunk Cloud Platform/Enterprise, live-queried | Logs sent via `splunk_hec/logs` to Splunk Cloud Platform; requires a licensed (non-trial) Platform instance and admin-console linking. See [Log Observer Connect](#log-observer-connect-splunk-cloud-platform) below. |
-| **Infrastructure** | Working | `docker_stats` + `hostmetrics` | Container and host metrics via collector receivers |
-| **Related Content** | Working | `host.name` + `trace_id` | `resourcedetection` processor sets `host.name`; logs include `trace_id` |
+| **Infrastructure** | Working | `docker_stats` + `host_metrics` | Container and host metrics via collector receivers |
+| **Related Content** | Working | `host.name` + `trace_id` | `resource_detection` processor sets `host.name`; logs include `trace_id` |
 | **Metric Finder** | Working | All metrics | All custom and built-in metrics searchable |
 
 ### AI Agent Monitoring setup
@@ -1439,8 +1439,8 @@ and query details are visible in trace span attributes.
 
 ### Infrastructure and Related Content
 
-The collector includes `hostmetrics` and `docker_stats` receivers plus
-a `resourcedetection` processor that sets `host.name`. This enables:
+The collector includes `host_metrics` and `docker_stats` receivers plus
+a `resource_detection` processor that sets `host.name`. This enables:
 
 - **Infrastructure views** -- host CPU, memory, disk, network metrics
 - **Container metrics** -- per-container resource usage
@@ -1756,13 +1756,13 @@ each one cost real time to establish.
 | Capability | Notes |
 |---|---|
 | APM: traces, service map, Trace Analyzer | Full fidelity. SurrealDB and LLM providers appear as inferred services |
-| Infrastructure Monitoring | Host and container metrics via the `hostmetrics` and `docker_stats` receivers |
+| Infrastructure Monitoring | Host and container metrics via the `host_metrics` and `docker_stats` receivers |
 | Custom dashboards and charts via REST API | `scripts/setup-splunk-dashboard.*`, using `/v2/dashboard`, `/v2/chart` |
 | Detectors / alerting via REST API | Three LLM drift detectors, see Section 18.5 |
 | Tag Spotlight | Requires TMS MetricSets to be indexed manually, see Section 25 |
 | `gen_ai.*` span attributes | All 14 visible on spans in APM |
-| Token and response-length metrics | Via OTel SDK histograms plus the `spanmetrics` connector |
-| Related Content (APM to Infrastructure) | Needs the `resourcedetection` processor for `host.name` |
+| Token and response-length metrics | Via OTel SDK histograms plus the `span_metrics` connector |
+| Related Content (APM to Infrastructure) | Needs the `resource_detection` processor for `host.name` |
 | **Logs into Splunk Cloud Platform via HEC** | Ingested and fully searchable in Splunk Web (`index=main sourcetype=otel`), with `trace_id` and `span_id` attached |
 
 ### Does not work, and why

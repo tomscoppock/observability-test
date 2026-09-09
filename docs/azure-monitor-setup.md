@@ -160,12 +160,12 @@ because the two backends need different inputs:
 
 | | `metrics/splunk` | `metrics/azure` |
 |---|---|---|
-| Receivers | `otlp`, `docker_stats`, `hostmetrics`, `spanmetrics` | `otlp`, `docker_stats` |
+| Receivers | `otlp`, `docker_stats`, `host_metrics`, `span_metrics` | `otlp`, `docker_stats` |
 | Extra processors | none | `cumulative_to_delta`, `transform/azure_dims` |
 
-`spanmetrics` is Splunk-only because Splunk's MetricSets cover only SERVER and
+`span_metrics` is Splunk-only because Splunk's MetricSets cover only SERVER and
 CONSUMER spans, so without the connector its LLM, DB and MCP spans produce no
-metrics at all. App Insights has no such gap. `hostmetrics` is Splunk-only
+metrics at all. App Insights has no such gap. `host_metrics` is Splunk-only
 because its purpose is Related Content correlation, which App Insights has no
 counterpart for. `cumulative_to_delta` is Azure-only because
 `customMetrics` has no counter semantics. Full reasoning in

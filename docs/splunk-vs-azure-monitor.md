@@ -41,11 +41,24 @@ One asymmetry is unavoidable and deliberate: the metrics signal is split into
 `metrics/splunk` and `metrics/azure` pipelines, because the two backends need
 different inputs. That difference is itself a finding, covered next.
 
-## 1. spanmetrics: needed by Splunk, actively harmful to Azure
+## 1. The span_metrics connector: needed by Splunk, actively harmful to Azure
 
 **Verified.**
 
-Splunk needs the `spanmetrics` connector. Its Monitoring MetricSets cover only
+First, what it is, because the name reads like a third-party add-on and it is
+not. `span_metrics` is a **connector**: one of the four component types the
+OpenTelemetry Collector defines, alongside receivers, processors and
+exporters. A connector bridges two pipelines, acting as an exporter on one
+end and a receiver on the other, which is why it appears in both an
+`exporters:` list and a `receivers:` list in the same config. It derives
+duration and call-count metrics from spans.
+
+It ships in the upstream `otel/opentelemetry-collector-contrib` image this
+project already runs, so using it is configuration rather than an install, a
+plugin or a dependency. Nothing about it is Splunk's, and nothing about it is
+ours.
+
+Splunk needs the `span_metrics` connector. Its Monitoring MetricSets cover only
 SERVER and CONSUMER spans, so without the connector every LLM, DB, MCP and
 pipeline span in this application produces no metric at all. This is trap 5 in
 the [implementation playbook](implementation-playbook.md), and fixing it was
@@ -55,7 +68,7 @@ Application Insights has no such gap. Every CLIENT and INTERNAL span becomes a
 `dependencies` row carrying its own `duration` in milliseconds, so KQL
 percentiles work directly off the raw table.
 
-Routing spanmetrics into `azure_monitor` would give strictly *less* than the
+Routing `span_metrics` output into `azure_monitor` would give strictly *less* than the
 raw table: `traces.span.metrics.duration` is an explicit-bucket histogram, the
 exporter flattens histograms, and `traces.span.metrics.calls` merely
 duplicates `sum(itemCount)`. So the Azure metrics pipeline drops it.
@@ -229,7 +242,7 @@ Two related facts worth recording:
 
 Splunk gives you Infrastructure Navigators, per-host dashboards, and
 APM-to-Infrastructure Related Content keyed on `host.name`. That last one is
-precisely why `resourcedetection` is in the collector config.
+precisely why `resource_detection` is in the collector config.
 
 Azure Monitor's equivalents, VM Insights and Container Insights, run off the
 Azure Monitor Agent or the Container Insights DaemonSet against a Log
@@ -240,9 +253,9 @@ metric alerts live.
 
 So: the four Infrastructure charts are reproducible as workbook queries, and
 the tab will *look* comparable. Everything around it is not, and
-`resourcedetection`'s `host.name` buys nothing on the Azure side.
+`resource_detection`'s `host.name` buys nothing on the Azure side.
 
-Follow-on decision: `hostmetrics` is dropped from the Azure pipeline
+Follow-on decision: `host_metrics` is dropped from the Azure pipeline
 entirely. No chart uses it, its Splunk purpose has no Azure counterpart, and
 its `cpu` and `filesystem` scrapers emit per-core and per-mount data points
 that would each become a billable `customMetrics` row. That is a defensible
@@ -351,7 +364,7 @@ omitting it would understate Azure.
 | Service Latency P50/P90/P99 | `overview-service-latency` | Source changes from interpolated histogram to raw `requests.duration`. Numbers will differ |
 | Error Count by Endpoint | `overview-errors-by-endpoint` | Direct. `requests.name` replaces `sf_operation` |
 | Top Endpoints | `overview-top-endpoints` | Direct |
-| RAG Chat Pipeline Latency | `rag-chat-pipeline-latency` | Source changes from spanmetrics to `dependencies` |
+| RAG Chat Pipeline Latency | `rag-chat-pipeline-latency` | Source changes from span_metrics to `dependencies` |
 | RAG Upload Pipeline Latency | `rag-upload-pipeline-latency` | Same |
 | MCP Scrape Latency | `rag-mcp-scrape-latency` | Simplified: both services live in one App Insights resource, so one query replaces Splunk's two filter variables |
 | Embedding Latency P50/P90 | `rag-embedding-latency` | Source change |
@@ -607,7 +620,7 @@ receiving identical telemetry from one traffic run and queried over the
 | Service latency P50 (ms) | 0.9 | 0.8 | Agrees. Median of per-minute P50 on both sides |
 | Service latency P90 (ms) | 1.1 | 1.2 | Agrees |
 | Service latency P99 (ms) | 1.1 | 1.2 | Agrees |
-| LLM call latency P90 (ms) | 1891.7 | 1766.0 | **7% divergence**, the largest here, exactly where predicted: LLM latencies land in the 2s-to-5s spanmetrics bucket where Splunk interpolates |
+| LLM call latency P90 (ms) | 1891.7 | 1766.0 | **7% divergence**, the largest here, exactly where predicted: LLM latencies land in the 2s-to-5s span_metrics bucket where Splunk interpolates |
 | Vector search P50 (ms) | 11.5 | 10.1 | 14% divergence, same cause at smaller absolute scale |
 | Total input tokens | 120630 | 120630 | **Exact match** |
 | Total output tokens | 7444 | 7444 | **Exact match** |

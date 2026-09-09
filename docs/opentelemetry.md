@@ -61,13 +61,13 @@ project root. It is mounted into the container at
 
 The collector uses three separate exporters for Splunk, one per signal
 type, plus the debug exporter for local troubleshooting. The
-**spanmetrics connector** bridges the traces and metrics pipelines,
+**span_metrics connector** bridges the traces and metrics pipelines,
 generating duration and call-count metrics from all spans.
 
 | Signal | Exporter | Splunk destination |
 |---|---|---|
 | **Traces** | `otlp_http/splunk` | Splunk APM (`/v2/trace/otlp`) |
-| **Traces** | `spanmetrics` (connector) | Metrics pipeline (generates `duration` + `calls`) |
+| **Traces** | `span_metrics` (connector) | Metrics pipeline (generates `duration` + `calls`) |
 | **Metrics** | `signalfx` | Splunk Infrastructure Monitoring |
 | **Logs** | `splunk_hec/logs` | Splunk Cloud Platform / Enterprise, via HEC |
 | **All** | `debug` | Collector stdout (always on) |
@@ -78,8 +78,8 @@ generating duration and call-count metrics from all spans.
 |---|---|---|
 | `otlp` (gRPC + HTTP) | Traces, Metrics, Logs | App telemetry from Node.js API and SurrealDB |
 | `docker_stats` | Metrics | Container CPU/memory/network via Docker socket |
-| `hostmetrics` | Metrics | Host-level CPU, memory, filesystem, network |
-| `spanmetrics` (connector) | Metrics | RED metrics derived from trace spans |
+| `host_metrics` | Metrics | Host-level CPU, memory, filesystem, network |
+| `span_metrics` (connector) | Metrics | RED metrics derived from trace spans |
 
 **Processors:**
 
@@ -87,13 +87,24 @@ generating duration and call-count metrics from all spans.
 |---|---|---|
 | `gen_ai_normalizer` | Traces | Normalise OpenLLMetry spans to gen_ai.* semconv |
 | `filter/logs` | Logs | Drop DEBUG/TRACE log records (severity < INFO) to reduce Splunk ingest |
-| `resourcedetection` | All | Set `host.name` for Splunk Related Content correlation |
+| `resource_detection` | All | Set `host.name` for Splunk Related Content correlation |
 | `batch` | All | Batch telemetry for efficient export |
 | `resource/splunk` | All | Add `deployment.environment` resource attribute |
 
-### Spanmetrics connector
+### The span_metrics connector
 
-The `spanmetrics` connector generates RED (Request/Error/Duration)
+**What a connector is.** The OpenTelemetry Collector defines four component
+types: receivers, processors, exporters and **connectors**. A connector joins
+two pipelines by acting as an *exporter* on one and a *receiver* on the
+other, which is why `span_metrics` appears in the traces pipeline's
+`exporters:` list and again in the metrics pipeline's `receivers:` list.
+
+It is **built into the collector**, shipping in the upstream
+`otel/opentelemetry-collector-contrib` image this project runs. Enabling it
+is a block of YAML, not an install, a plugin or a third-party dependency, and
+nothing about it is vendor-specific.
+
+The `span_metrics` connector generates RED (Request/Error/Duration)
 metrics from trace spans. Unlike Splunk's built-in MMS (which only
 covers `SERVER`/`CONSUMER` spans), the connector processes ALL spans
 including `INTERNAL` and `CLIENT` -- making custom span latency
@@ -227,8 +238,8 @@ exporters:
 Collector pipelines fan out to every exporter listed, so in dual mode both
 backends receive byte-identical telemetry from one traffic run. The metrics
 signal is the exception and is split into `metrics/splunk` and `metrics/azure`
-pipelines, because the two backends need different inputs: `spanmetrics` and
-`hostmetrics` are Splunk-only, and `cumulative_to_delta` is Azure-only.
+pipelines, because the two backends need different inputs: `span_metrics` and
+`host_metrics` are Splunk-only, and `cumulative_to_delta` is Azure-only.
 
 See [docs/azure-monitor-setup.md](azure-monitor-setup.md) for setup and
 [docs/splunk-vs-azure-monitor.md](splunk-vs-azure-monitor.md) for where the
