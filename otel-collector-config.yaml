@@ -1,4 +1,14 @@
-# OpenTelemetry Collector configuration
+# OpenTelemetry Collector configuration -- SPLUNK ONLY (the baseline)
+#
+# Sibling files (select one via OTEL_COLLECTOR_CONFIG in .env):
+#   otel-collector-config.yaml        Splunk only (this file, the default)
+#   otel-collector-config.azure.yaml  Azure Monitor only
+#   otel-collector-config.dual.yaml   both backends in parallel
+#
+# This file is the reference Splunk configuration and is deliberately
+# kept static -- see docs/azure-monitor-setup.md. Changes that apply to
+# both backends must be mirrored into the two sibling files by hand.
+#
 # Receives OTLP telemetry from the Node.js API and exports to:
 #   1. debug (stdout) -- always on, for local troubleshooting
 #   2. Splunk Observability Cloud -- when SPLUNK_ACCESS_TOKEN is set
@@ -17,8 +27,18 @@
 # for the full architecture and linking steps.
 #
 # Connectors:
-#   spanmetrics -- generates duration + calls metrics from ALL spans
-#                  (including INTERNAL/CLIENT), exported via signalfx
+#   span_metrics -- generates duration + calls metrics from ALL spans
+#                   (including INTERNAL/CLIENT), exported via signalfx
+#
+# Component names use the current spellings, not the older one-word
+# aliases (hostmetrics, resourcedetection, spanmetrics, cumulativetodelta),
+# which collector 0.160 logs as deprecated on startup. `otelcol validate`
+# does NOT flag them, so they are invisible unless you read the boot log.
+#
+# VERIFIED SAFE: renaming the connector does NOT change the metric names it
+# emits. The namespace is not derived from the component instance name --
+# a connector named `span_metrics` still emits `traces.span.metrics.calls`
+# and `traces.span.metrics.duration`, so no dashboard chart breaks.
 
 receivers:
   otlp:
@@ -40,7 +60,7 @@ receivers:
   # Host-level metrics (CPU, memory, disk, network).
   # Required for Splunk Infrastructure views and Related Content
   # correlation between APM traces and infrastructure data.
-  hostmetrics:
+  host_metrics:
     collection_interval: 15s
     scrapers:
       cpu: {}
@@ -70,7 +90,7 @@ processors:
 
   # Detect host.name and os.type from the environment.
   # Required for Splunk Related Content (APM <-> Infrastructure correlation).
-  resourcedetection:
+  resource_detection:
     detectors: [env, system]
     system:
       hostname_sources: [os]
@@ -91,7 +111,7 @@ connectors:
   #   calls     -- counter of span invocations
   # Dimensions: service.name, span.name, span.kind, status.code,
   #             plus any custom dimensions listed below.
-  spanmetrics:
+  span_metrics:
     histogram:
       explicit:
         buckets: [2ms, 5ms, 10ms, 25ms, 50ms, 100ms, 250ms, 500ms, 1s, 2s, 5s, 10s, 30s]
@@ -101,6 +121,32 @@ connectors:
       - name: gen_ai.provider.name
       - name: gen_ai.request.model
       - name: deployment.environment
+      # session.id makes the Active Sessions chart possible WITHOUT the
+      # manual Splunk step. Splunk has no public API for APM MetricSets
+      # (UI only, Settings > APM & RUM MetricSets), so indexing a tag as a
+      # Monitoring MetricSet dimension cannot be automated -- but a
+      # span_metrics dimension arrives as a real metric dimension and needs
+      # no indexing at all. Same trick task 033 used for custom span
+      # latency.
+      #
+      # CARDINALITY WARNING, and read this before copying it anywhere near
+      # production. Every dimension multiplies the metric time series
+      # count. session.id is a high-cardinality identifier, so the cost is
+      # roughly (distinct endpoints) x (active sessions).
+      #
+      # Two things keep it safe HERE, and both are deliberate:
+      #   1. The app sets session.id on the SERVER span only, so child
+      #      spans are unaffected. VERIFIED: a span without the attribute
+      #      has the dimension OMITTED from its datapoint entirely, not set
+      #      to empty, so it costs nothing.
+      #   2. The app never invents a session id, so unheadered traffic
+      #      (healthchecks, probes) adds no series at all.
+      #
+      # For this demo that is ~6 endpoints x ~3 sessions. For a real
+      # service with 10k concurrent sessions it is 60k extra MTS and a
+      # bill to match. If you need distinct-session counts at that scale,
+      # ask a log-based backend, not a dimensional-metrics one.
+      - name: session.id
     metrics_flush_interval: 15s
 
 exporters:
@@ -119,7 +165,7 @@ exporters:
   signalfx:
     access_token: "${SPLUNK_ACCESS_TOKEN}"
     realm: "${SPLUNK_REALM}"
-    # Required to send histogram metrics (e.g. duration from spanmetrics)
+    # Required to send histogram metrics (e.g. duration from span_metrics)
     send_otlp_histograms: true
 
   # Logs -> Splunk Cloud Platform / Enterprise via HTTP Event Collector (HEC)
@@ -144,13 +190,13 @@ service:
   pipelines:
     traces:
       receivers: [otlp]
-      processors: [gen_ai_normalizer, resourcedetection, batch, resource/splunk]
-      exporters: [debug, otlp_http/splunk, spanmetrics]
+      processors: [gen_ai_normalizer, resource_detection, batch, resource/splunk]
+      exporters: [debug, otlp_http/splunk, span_metrics]
     metrics:
-      receivers: [otlp, docker_stats, hostmetrics, spanmetrics]
-      processors: [resourcedetection, batch, resource/splunk]
+      receivers: [otlp, docker_stats, host_metrics, span_metrics]
+      processors: [resource_detection, batch, resource/splunk]
       exporters: [debug, signalfx]
     logs:
       receivers: [otlp]
-      processors: [filter/logs, resourcedetection, batch, resource/splunk]
+      processors: [filter/logs, resource_detection, batch, resource/splunk]
       exporters: [debug, splunk_hec/logs]

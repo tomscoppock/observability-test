@@ -104,11 +104,44 @@ the main stack hostname at port 8088 instead -- see
 for the diagnostic steps and why `SPLUNK_HEC_INSECURE_SKIP_VERIFY` may
 also be needed in that case.
 
-### Azure Monitor (future)
+### Azure Monitor
 
 | Variable | Default | Description |
 |---|---|---|
-| `APPLICATIONINSIGHTS_CONNECTION_STRING` | (commented out) | App Insights connection string |
+| `APPLICATIONINSIGHTS_CONNECTION_STRING` | inert placeholder | App Insights connection string. **A credential** -- see the warning below |
+| `AZURE_SUBSCRIPTION_ID` | (empty) | Target subscription. Defaults to the `az` CLI's current subscription if unset |
+| `AZURE_RESOURCE_GROUP` | `rg-observability-test` | Resource group the setup script creates |
+| `AZURE_LOCATION` | `uksouth` | Azure region for all created resources |
+| `AZURE_APP_INSIGHTS_NAME` | `appi-rag-agent` | Application Insights resource name |
+| `AZURE_LOG_ANALYTICS_NAME` | `law-rag-agent` | Log Analytics workspace name (App Insights is workspace-based, so this is required) |
+| `AZURE_TAG_PURPOSE` | (empty) | Value for the `Purpose` tag on the resource group |
+| `AZURE_TAG_RESPONSIBLE_OWNER` | (empty) | Value for the `Responsible Owner` tag on the resource group |
+
+`scripts/setup-azure-monitor.sh` / `.ps1` creates the resource group, the Log
+Analytics workspace and the Application Insights resource, tags the resource
+group with `Purpose` and `Responsible Owner`, and prints the connection string
+to paste into `.env`. You need an `az login` and nothing else.
+
+> **The connection string cannot be rotated.** It embeds an ingestion key, so
+> unlike `SPLUNK_ACCESS_TOKEN` there is no rotate-in-place remedy. If it
+> leaks, the fix is creating a new Application Insights resource and
+> repointing, which loses continuity of the data. Keep it in `.env` only.
+
+### Choosing the observability backend
+
+| Variable | Default | Description |
+|---|---|---|
+| `OTEL_COLLECTOR_CONFIG` | `./otel-collector-config.yaml` | Which collector config to mount, and therefore which backend receives telemetry |
+
+| Value | Backend |
+|---|---|
+| `./otel-collector-config.yaml` | Splunk only |
+| `./otel-collector-config.azure.yaml` | Azure Monitor only |
+| `./otel-collector-config.dual.yaml` | Both, in parallel |
+
+Dual mode sends byte-identical telemetry to both backends from one traffic
+run, which is what makes a side-by-side comparison controlled rather than
+approximate. See [azure-monitor-setup.md](azure-monitor-setup.md).
 
 ### MCP Services
 

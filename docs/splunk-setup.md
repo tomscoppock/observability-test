@@ -514,7 +514,12 @@ derived from traces. You use `data('metric.name')` in SignalFlow (not
 1. Navigate to **Metric Finder** (left nav > **Metrics**).
 2. Search for `surrealdb`.
 3. You should see the metrics listed above. If not, check:
-   - `docker compose logs otel-collector` for export errors
+   - `docker compose logs otel-collector` for export errors. Match the
+     tab-delimited LEVEL field rather than grepping for the word
+     "error" -- the debug exporter prints every metric name and
+     attribute at `verbosity: detailed`, so a naive search returns
+     hundreds of false positives:
+     `docker compose logs otel-collector | awk -F'	' '$2 ~ /^(error|warn|fatal)$/'`
    - `docker compose logs surrealdb` for telemetry init messages
    - Ensure `SURREAL_TELEMETRY_PROVIDER=otlp` is set in `docker-compose.yml`
 
@@ -1793,3 +1798,94 @@ requiring Python instrumentation).
 ---
 
 *Last updated: 2026-09-08*
+
+---
+
+## 27. Two traps in `service.request`: units and double counting
+
+Both were live defects in this project's own dashboard, found only when a
+second backend was put next to it. Both produce charts that look entirely
+plausible.
+
+### 27.1 `service.request` is in NANOSECONDS
+
+`service.request` is nanoseconds. The `span_metrics` connector's
+`traces.span.metrics.duration` is **milliseconds**, because
+`otel-collector-config.yaml` sets `unit: ms` on the connector.
+
+So this dashboard shows two different time units on two different tabs, both
+labelled only "Latency":
+
+| Chart | Metric | Unit |
+|---|---|---|
+| Service Latency (P50/P90/P99), Service Overview | `service.request` | nanoseconds |
+| RAG Chat Pipeline Latency, RAG Pipeline | `traces.span.metrics.duration` | milliseconds |
+| LLM Call Latency, LLM and AI | `traces.span.metrics.duration` | milliseconds |
+
+Splunk renders the shape correctly either way, so a trend chart looks fine
+and only the absolute value is wrong. Sanity-check against something you
+know: a P50 of 940,000 on an endpoint you know is sub-millisecond is the
+tell.
+
+Measured against Azure Monitor over the same traffic, `service.request`
+scaled by 1e-6 agrees with Azure's millisecond `requests.duration` to within
+rounding.
+
+### 27.2 `service.request` DOUBLE-COUNTS without `sf_dimensionalized`
+
+`service.request` emits **two** MetricSets for the same traffic:
+
+| MetricSet | `sf_dimensionalized` |
+|---|---|
+| Endpoint-level | `'true'` |
+| Service-level | property **absent** |
+
+A filter that does not mention the property matches both, so
+`.count().sum()` counts every request twice. Measured over one 10-minute
+window on this stack:
+
+| Filter | Count |
+|---|---|
+| none | 132 |
+| `filter('sf_dimensionalized', 'true')` | 66 |
+| Azure Monitor, same traffic | 58 |
+
+Always include the filter on any count:
+
+```
+A = histogram('service.request',
+      filter=filter('sf_service', 'rag-api')
+         and filter('sf_environment', 'dev')
+         and filter('sf_dimensionalized', 'true')
+    ).count().sum().publish(label='Requests')
+```
+
+`filter('sf_dimensionalized', 'false')` returns **zero**. The service-level
+series does not carry the property at all rather than carrying it as false,
+so you cannot select the other half by negating.
+
+**Which charts this silently spares, and why that made it hard to spot.**
+Ratios are immune, because numerator and denominator both double: the Error
+Rate % chart was perfectly correct while the request-count chart beside it
+read 2x. Percentiles are immune too, since the percentile of a duplicated
+population is unchanged. Only counts were wrong, so the dashboard was mostly
+right and gave no hint.
+
+Eight charts in `splunk/dashboard.json` were affected and are now fixed. The
+detectors in `splunk/detectors.json` already carried the filter, which is
+where the clue came from.
+
+### 27.3 Related: `session.id` needs no MetricSet indexing
+
+The Active Sessions chart reads the `span_metrics` connector, not
+`service.request`, because grouping `service.request` by a span tag requires
+that tag to be indexed as a Monitoring MetricSet dimension, and **Splunk
+exposes no public API for MetricSets** (Settings > APM & RUM MetricSets is
+UI-only, with no REST endpoint and no Terraform resource).
+
+A `span_metrics` dimension arrives as a real metric dimension needing no
+indexing, which keeps the whole dashboard deployable as code. See
+`docs/splunk-vs-azure-monitor.md` section 6 for the cardinality reasoning,
+and note that this only became correct after an application fix: the app was
+setting `session.id` on the Express middleware span rather than the HTTP
+server span, so no backend could see it.

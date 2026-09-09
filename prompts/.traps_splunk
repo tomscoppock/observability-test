@@ -1,0 +1,122 @@
+1. **`splunk_hec` rejects an empty endpoint or token at config validation**,
+   stopping the ENTIRE collector including traces and metrics. Use
+   non-empty placeholder defaults and run `validate` (section 2.2).
+
+    GENERALISE THIS: any exporter with a required credential field is a
+    whole-collector outage waiting to happen, not just splunk_hec. The
+    same bug exists in azure_monitor's connection_string, and in any
+    vendor exporter you add later. Give EVERY such field a non-empty
+    placeholder default in compose, and run `otelcol validate` before
+    starting. An invalid config takes down every signal, not only the one
+    whose credentials are missing.
+
+2. **Splunk MetricSets only cover SERVER/CONSUMER spans.** Add the
+   `spanmetrics` connector for INTERNAL/CLIENT spans, or priority 4 has
+   no data.
+
+3. **Splunk drops cumulative histograms.** Set delta temporality on the
+   app and `send_otlp_histograms: true` on the signalfx exporter.
+
+4. **The access token needs BOTH Ingest and API scopes** (section 2.1).
+
+5. **HEC: leave indexer acknowledgement unchecked** (section 2.1).
+
+6. **The HEC index must be in the token's Allowed Indexes.**
+
+7. **HEC hostnames vary and may not be provisioned** (section 2.1).
+
+8. **TMS vs MMS** (section 2.6).
+
+9. **APM MetricSets have NO public API, so design around them.**
+    Dashboards, charts and detectors are fully automatable via
+    `/v2/dashboard`, `/v2/chart` and `/v2/detector`. MetricSets are not:
+    creating a Troubleshooting or Monitoring MetricSet is a UI-only
+    operation (Settings > APM & RUM MetricSets), with no documented REST
+    endpoint and no Terraform resource. This blocks more than it looks
+    like, because a Monitoring MetricSet dimension is what lets a chart
+    GROUP `service.request` by a span tag. "Index the tag" therefore
+    becomes a manual click-path that cannot be committed or reproduced in
+    another org.
+
+    Design around it with the `span_metrics` connector, whose dimensions
+    arrive as real metric dimensions needing no indexing:
+
+        span_metrics:
+          dimensions:
+            - name: gen_ai.operation.name
+            - name: session.id      # read the cardinality note below
+
+    CARDINALITY, stated precisely rather than hand-waved. Every dimension
+    multiplies the metric time series count, so a high-cardinality
+    identifier is dangerous. Two things bound it, both verified by sending
+    spans through a probe collector:
+      - A span that LACKS the attribute has the dimension omitted from its
+        datapoint entirely, not set to empty. So confining an attribute to
+        the server span leaves child spans free.
+      - If the app never fabricates the value (trap 15), unheadered traffic
+        such as healthchecks adds no series at all.
+    Practical cost is roughly (distinct endpoints) x (distinct values).
+    Tens of series for a demo; a bill for a service with 10k concurrent
+    sessions. If you need distinct-count over a high-cardinality identifier
+    at scale, ask a log-based backend, not a dimensional-metrics one.
+
+10. **`service.request` IS IN NANOSECONDS, AND IT DOUBLE-COUNTS.** Two
+    independent traps in one metric, each producing a plausible-looking
+    dashboard that is quietly wrong.
+
+    UNITS: service.request is nanoseconds, while the spanmetrics connector's
+    traces.span.metrics.duration is MILLISECONDS because you set unit: ms in
+    its config. One dashboard can therefore show ns on one tab and ms on
+    another, both labelled "Latency". Sanity-check against a known value: a
+    P50 of 940,000 for an endpoint you know is sub-millisecond is the tell.
+
+    DOUBLE COUNTING: service.request emits TWO MetricSets -- an
+    endpoint-level one carrying sf_dimensionalized='true', and a
+    service-level one where the property is ABSENT. Both match a filter that
+    does not mention it, so .count().sum() counts every request twice.
+    Measured on the source project over one 10-minute window: 132
+    unfiltered, 66 filtered, 58 in a second backend for the same traffic.
+
+        A = histogram('service.request',
+              filter=filter('sf_service', 'my-service')
+                 and filter('sf_environment', 'dev')
+                 and filter('sf_dimensionalized', 'true')
+            ).count().sum().publish(label='requests')
+
+    Note filter('sf_dimensionalized', 'false') returns ZERO -- the
+    service-level series lacks the property rather than setting it false, so
+    you cannot select the other half by negating.
+
+    What makes it nasty is which charts survive. RATIOS ARE IMMUNE, because
+    numerator and denominator both double, so an error-rate chart looks
+    perfect while the request-count chart beside it is 2x. Percentiles are
+    immune too. Only counts are wrong, so a dashboard can be 80% right and
+    give no hint. This was a live defect across eight charts in the source
+    project, invisible until a second backend sat next to it.
+
+11. **SignalFlow is reachable over PLAIN HTTP -- no websocket client.** The
+    assumption that it needs a streaming client is what stops people
+    automating Splunk reads, and it is wrong. You can read dashboard numbers
+    programmatically for regression checks or backend comparisons:
+
+        POST https://stream.${REALM}.signalfx.com/v2/signalflow/execute
+             ?start=${START_MS}&stop=${STOP_MS}&immediate=true&resolution=60000
+        X-SF-Token: ${TOKEN}
+        Accept: text/event-stream
+        {"programText": "A = data('cpu.utilization').mean().publish(label='v')"}
+
+    Four details that each cost a round of trial and error:
+      - Accept MUST be text/event-stream (or absent, or */*). Sending
+        application/json returns a bare HTTP 406 with no explanation.
+      - immediate=true with a bounded start/stop is what makes it TERMINATE.
+        Without it the response stays open waiting for future data, which is
+        the behaviour mistaken for needing a websocket.
+      - The response is SSE: blocks separated by a blank line, each with an
+        "event:" type and a "data:" JSON payload. Join on tsId -- "metadata"
+        maps tsId to properties including sf_streamLabel (your publish label),
+        and "data" carries {"data":[{"tsId":...,"value":...}]}.
+      - resolution is honoured, but asking for one window-wide bucket
+        produced a boundary artefact (a spurious 1.44e9 point). Prefer a
+        normal resolution and aggregate yourself: SUM counters, but take the
+        MEDIAN of per-interval percentiles, never the mean (see trap 15's
+        reasoning about collapsing statistics).

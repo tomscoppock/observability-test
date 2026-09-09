@@ -1,0 +1,189 @@
+# OpenTelemetry Collector configuration -- Azure Monitor ONLY
+#
+# Sibling files (select one via OTEL_COLLECTOR_CONFIG in .env):
+#   otel-collector-config.yaml        Splunk only (the baseline)
+#   otel-collector-config.azure.yaml  Azure Monitor only (this file)
+#   otel-collector-config.dual.yaml   both backends in parallel
+#
+# Exporters:
+#   Traces  -> azure_monitor  (App Insights "requests" + "dependencies")
+#   Metrics -> azure_monitor  (App Insights "customMetrics")
+#   Logs    -> azure_monitor  (App Insights "traces", plus "exceptions")
+#
+# Unlike Splunk, all three signals land in ONE Application Insights
+# resource, correlated by operation_Id. There is no second product to
+# license and no equivalent of the Log Observer Connect gate.
+#
+# Deliberate differences from the Splunk baseline -- see
+# docs/splunk-vs-azure-monitor.md for the full reasoning:
+#
+#   1. NO spanmetrics connector. Splunk needs it because its MetricSets
+#      cover only SERVER/CONSUMER spans, so LLM/DB/MCP spans would
+#      produce no metrics at all. App Insights has no such gap: every
+#      CLIENT and INTERNAL span becomes a "dependencies" row carrying
+#      its own duration, so KQL percentiles work directly off the raw
+#      table. Routing spanmetrics here would give strictly LESS, because
+#      the exporter flattens histograms to sum/count/min/max and yields
+#      no percentiles at all.
+#
+#   2. NO host_metrics receiver. No chart uses it; its Splunk purpose is
+#      APM-to-Infrastructure Related Content, which has no App Insights
+#      counterpart. Its cpu and filesystem scrapers emit per-core and
+#      per-mount data points that would each become a billable
+#      customMetrics row.
+#
+#   3. cumulative_to_delta on the infrastructure counters. See the
+#      processor comment below -- without it those charts are ramps.
+
+receivers:
+  otlp:
+    protocols:
+      grpc:
+        endpoint: 0.0.0.0:4317
+      http:
+        endpoint: 0.0.0.0:4318
+
+  # Container resource metrics via the Docker daemon socket.
+  # Requires /var/run/docker.sock mounted into the collector container.
+  docker_stats:
+    endpoint: unix:///var/run/docker.sock
+    collection_interval: 15s
+    container_labels_to_metric_labels:
+      com.docker.compose.service: compose.service
+      com.docker.compose.project: compose.project
+
+processors:
+  batch:
+    send_batch_size: 512
+    timeout: 5s
+
+  # Normalise OpenLLMetry (Traceloop) spans to official gen_ai.* semconv.
+  # Built-in source -- no custom mappings needed.
+  gen_ai_normalizer:
+    sources:
+      - name: openllmetry
+
+  # Drop DEBUG and TRACE log records before export. Only INFO (9),
+  # WARN (13), ERROR (17), and FATAL (21) reach App Insights "traces".
+  filter/logs:
+    error_mode: ignore
+    logs:
+      log_record:
+        - 'severity_number < SEVERITY_NUMBER_INFO'
+
+  # All three configs now use the current component spellings. The older
+  # one-word aliases (resourcedetection, cumulativetodelta, hostmetrics,
+  # spanmetrics) still work but collector 0.160 logs them as deprecated on
+  # startup, and `otelcol validate` does not flag them.
+  resource_detection:
+    detectors: [env, system]
+    system:
+      hostname_sources: [os]
+    override: false
+
+  # Stamp deployment.environment. Note this is a RESOURCE attribute, and
+  # whether the azure_monitor exporter surfaces resource attributes in
+  # customDimensions is not documented -- so the workbook queries in
+  # azure/workbook.json deliberately do NOT filter on it. Kept because
+  # it is correct telemetry regardless of what the backend does with it.
+  resource/deployment_env:
+    attributes:
+      - key: deployment.environment
+        value: "${OTEL_DEPLOYMENT_ENV}"
+        action: upsert
+
+  # App Insights customMetrics has no counter semantics: a data point is
+  # just a value. So a CUMULATIVE counter charts as a straight monotonic
+  # ramp rather than a rate.
+  #
+  # OTEL_EXPORTER_OTLP_METRICS_TEMPORALITY_PREFERENCE=delta in
+  # docker-compose.yml only affects the Node SDK. It does NOT affect
+  # collector receivers, and SurrealDB sets no such variable (its Rust
+  # SDK defaults to cumulative). So these five arrive cumulative and
+  # must be converted here.
+  #
+  # The Splunk path needs none of this: the signalfx exporter
+  # understands counter semantics and Splunk's UI applies .rate().
+  #
+  # Strict include list, not a regex. A broad ^container\..* would also
+  # sweep in container.memory.usage.total, which is a GAUGE, and
+  # surrealdb.http.active_requests is an in-flight gauge -- delta
+  # conversion of either would be wrong.
+  #
+  # Named "cumulative_to_delta": the one-word spelling is a deprecated
+  # alias in collector 0.160.
+  cumulative_to_delta:
+    include:
+      match_type: strict
+      metrics:
+        - container.cpu.usage.total
+        - container.network.io.usage.rx_bytes
+        - container.network.io.usage.tx_bytes
+        - surrealdb.transaction
+        - surrealdb.http.request
+
+  # container.name / container.id / compose.service arrive as RESOURCE
+  # attributes on the docker_stats output. Copy the two the
+  # Infrastructure tab groups by onto the DATA POINTS, so they are
+  # guaranteed to reach customDimensions.
+  #
+  # Without this, every container's data point may be
+  # indistinguishable and the container charts become meaningless.
+  # container_labels_to_metric_labels above may already put
+  # compose.service on the data point; this makes it deterministic
+  # rather than relying on that, and the workbook queries coalesce over
+  # both keys.
+  # Paths are written with the explicit "datapoint." prefix. The bare
+  # attributes[...] form still works but the collector rewrites it and
+  # logs a warning asking for the prefixed form.
+  transform/azure_dims:
+    error_mode: ignore
+    metric_statements:
+      - context: datapoint
+        statements:
+          - set(datapoint.attributes["container.name"], resource.attributes["container.name"]) where resource.attributes["container.name"] != nil
+          - set(datapoint.attributes["compose.service"], resource.attributes["compose.service"]) where resource.attributes["compose.service"] != nil
+
+exporters:
+  # Local debug output (always active)
+  debug:
+    verbosity: detailed
+
+  # All three signals -> one Application Insights resource.
+  #
+  # NOTE the underscore: the component type is "azure_monitor", NOT
+  # "azuremonitor". The latter fails config validation and stops the
+  # WHOLE collector.
+  #
+  # connection_string embeds an ingestion key and IS a credential --
+  # .env only. Unlike a Splunk access token it CANNOT be rotated: the
+  # remediation for a leak is creating a new App Insights resource and
+  # repointing, which loses continuity of the data.
+  #
+  # docker-compose.yml supplies an inert placeholder default because an
+  # EMPTY connection string fails validation at config-decode time and
+  # would stop the whole collector, exactly as an empty HEC token does
+  # on the Splunk path.
+  azure_monitor:
+    connection_string: "${APPLICATIONINSIGHTS_CONNECTION_STRING}"
+    # Routes span events to the App Insights "exceptions" table.
+    # recordException() is called in api/src/{llm,embeddings,db}.js and
+    # api/src/index.js; with this off (the default) none of it surfaces
+    # and error diagnosis is materially worse than in Splunk, where
+    # span events ride on the span natively.
+    spaneventsenabled: true
+
+service:
+  pipelines:
+    traces:
+      receivers: [otlp]
+      processors: [gen_ai_normalizer, resource_detection, batch, resource/deployment_env]
+      exporters: [debug, azure_monitor]
+    metrics:
+      receivers: [otlp, docker_stats]
+      processors: [resource_detection, cumulative_to_delta, transform/azure_dims, batch, resource/deployment_env]
+      exporters: [debug, azure_monitor]
+    logs:
+      receivers: [otlp]
+      processors: [filter/logs, resource_detection, batch, resource/deployment_env]
+      exporters: [debug, azure_monitor]

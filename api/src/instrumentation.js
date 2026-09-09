@@ -20,6 +20,7 @@ const { OTLPLogExporter } = require('@opentelemetry/exporter-logs-otlp-http');
 const { PeriodicExportingMetricReader } = require('@opentelemetry/sdk-metrics');
 const { BatchLogRecordProcessor } = require('@opentelemetry/sdk-logs');
 const { resourceFromAttributes } = require('@opentelemetry/resources');
+const { sessionAttributes } = require('./session-attributes');
 const {
   ATTR_SERVICE_NAME,
   ATTR_SERVICE_VERSION,
@@ -55,6 +56,21 @@ const sdkOptions = {
     getNodeAutoInstrumentations({
       // Disable fs instrumentation -- too noisy for a learning project.
       '@opentelemetry/instrumentation-fs': { enabled: false },
+
+      // session.id has to be stamped on the HTTP SERVER span, and
+      // startIncomingSpanHook is the hook that guarantees it: it fires for
+      // incoming requests only, and its return value is applied as the
+      // server span is created.
+      //
+      // This used to live in an Express middleware in index.js using
+      // trace.getActiveSpan(). That returns the middleware layer's own
+      // INTERNAL span, so the attribute landed on a child span and never
+      // reached the request -- which silently broke every dashboard chart
+      // that groups a SERVER-span metric by session, on BOTH backends.
+      // See docs/implementation-playbook.md trap 26.
+      '@opentelemetry/instrumentation-http': {
+        startIncomingSpanHook: (request) => sessionAttributes(request.headers),
+      },
     }),
   ],
 };

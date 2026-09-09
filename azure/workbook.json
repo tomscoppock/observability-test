@@ -1,0 +1,1035 @@
+{
+  "version": "Notebook/1.0",
+  "isLocked": false,
+  "items": [
+    {
+      "type": 9,
+      "content": {
+        "version": "KqlParameterItem/1.0",
+        "crossComponentResources": [],
+        "parameters": [
+          {
+            "id": "p-timerange",
+            "version": "KqlParameterItem/1.0",
+            "name": "TimeRange",
+            "label": "Time range",
+            "type": 4,
+            "isRequired": true,
+            "value": {
+              "durationMs": 3600000
+            },
+            "typeSettings": {
+              "selectableValues": [
+                {
+                  "durationMs": 900000
+                },
+                {
+                  "durationMs": 1800000
+                },
+                {
+                  "durationMs": 3600000
+                },
+                {
+                  "durationMs": 14400000
+                },
+                {
+                  "durationMs": 86400000
+                },
+                {
+                  "durationMs": 604800000
+                }
+              ],
+              "allowCustom": true
+            }
+          }
+        ],
+        "style": "pills",
+        "queryType": 0,
+        "resourceType": "microsoft.insights/components"
+      },
+      "name": "parameters"
+    },
+    {
+      "type": 11,
+      "content": {
+        "version": "LinkItem/1.0",
+        "style": "tabs",
+        "links": [
+          {
+            "id": "tab-overview",
+            "cellValue": "selectedTab",
+            "linkTarget": "parameter",
+            "linkLabel": "Service Overview",
+            "subTarget": "overview",
+            "style": "link"
+          },
+          {
+            "id": "tab-rag",
+            "cellValue": "selectedTab",
+            "linkTarget": "parameter",
+            "linkLabel": "RAG Pipeline",
+            "subTarget": "rag",
+            "style": "link"
+          },
+          {
+            "id": "tab-llm",
+            "cellValue": "selectedTab",
+            "linkTarget": "parameter",
+            "linkLabel": "LLM and AI",
+            "subTarget": "llm",
+            "style": "link"
+          },
+          {
+            "id": "tab-infra",
+            "cellValue": "selectedTab",
+            "linkTarget": "parameter",
+            "linkLabel": "Infrastructure",
+            "subTarget": "infra",
+            "style": "link"
+          },
+          {
+            "id": "tab-logs",
+            "cellValue": "selectedTab",
+            "linkTarget": "parameter",
+            "linkLabel": "Logs and Traces",
+            "subTarget": "logs",
+            "style": "link"
+          }
+        ]
+      },
+      "name": "tabs"
+    },
+    {
+      "type": 12,
+      "conditionalVisibility": {
+        "parameterName": "selectedTab",
+        "comparison": "isEqualTo",
+        "value": "overview"
+      },
+      "content": {
+        "version": "NotebookGroup/1.0",
+        "groupType": "editable",
+        "items": [
+          {
+            "type": 1,
+            "content": {
+              "json": "## Service Overview\n\nRED signals per service. Mirrors the Splunk `Service Overview` dashboard tab.\n\nRequest data comes from the App Insights `requests` table, which the `azure_monitor` exporter populates from SERVER and CONSUMER spans."
+            },
+            "name": "overview-header"
+          },
+          {
+            "type": 3,
+            "content": {
+              "version": "KqlItem/1.0",
+              "query": "requests\n| summarize Requests = sum(itemCount), Errors = sumif(itemCount, tobool(success) == false)\n    by Service = cloud_RoleName\n| extend ['Error rate %'] = iff(Requests == 0, 0.0, round(100.0 * Errors / Requests, 2))\n| order by Requests desc",
+              "size": 3,
+              "title": "Requests and error rate by service",
+              "timeContextFromParameter": "TimeRange",
+              "queryType": 0,
+              "resourceType": "microsoft.insights/components",
+              "visualization": "tiles",
+              "tileSettings": {
+                "titleContent": {
+                  "columnMatch": "Service",
+                  "formatter": 1
+                },
+                "leftContent": {
+                  "columnMatch": "Requests",
+                  "formatter": 12,
+                  "formatOptions": {
+                    "palette": "auto"
+                  },
+                  "numberFormat": {
+                    "unit": 0,
+                    "options": {
+                      "style": "decimal",
+                      "maximumFractionDigits": 0
+                    }
+                  }
+                },
+                "secondaryContent": {
+                  "columnMatch": "Error rate %",
+                  "formatter": 1,
+                  "numberFormat": {
+                    "unit": 1,
+                    "options": {
+                      "style": "decimal",
+                      "maximumFractionDigits": 2
+                    }
+                  }
+                },
+                "showBorder": true
+              }
+            },
+            "name": "overview-service-tiles"
+          },
+          {
+            "type": 3,
+            "content": {
+              "version": "KqlItem/1.0",
+              "query": "let bin_ = {TimeRange:grain};\nrequests\n| where cloud_RoleName == 'rag-api'\n| summarize Requests = sum(itemCount) by bin(timestamp, bin_)\n| project timestamp, ['Requests/s'] = todouble(Requests) / (bin_ / 1s)\n| order by timestamp asc",
+              "size": 0,
+              "title": "Request rate (rag-api)",
+              "timeContextFromParameter": "TimeRange",
+              "queryType": 0,
+              "resourceType": "microsoft.insights/components",
+              "visualization": "linechart",
+              "chartSettings": {
+                "xAxis": "timestamp",
+                "yAxis": [
+                  "Requests/s"
+                ]
+              }
+            },
+            "styleSettings": {
+              "maxWidth": "50"
+            },
+            "name": "overview-request-rate"
+          },
+          {
+            "type": 3,
+            "content": {
+              "version": "KqlItem/1.0",
+              "query": "let bin_ = {TimeRange:grain};\nrequests\n| where cloud_RoleName == 'rag-api'\n| summarize P50 = percentile(duration, 50),\n            P90 = percentile(duration, 90),\n            P99 = percentile(duration, 99)\n    by bin(timestamp, bin_)\n| order by timestamp asc",
+              "size": 0,
+              "title": "Service latency P50 / P90 / P99 (ms)",
+              "timeContextFromParameter": "TimeRange",
+              "queryType": 0,
+              "resourceType": "microsoft.insights/components",
+              "visualization": "linechart",
+              "chartSettings": {
+                "xAxis": "timestamp",
+                "yAxis": [
+                  "P50",
+                  "P90",
+                  "P99"
+                ]
+              }
+            },
+            "styleSettings": {
+              "maxWidth": "50"
+            },
+            "name": "overview-service-latency"
+          },
+          {
+            "type": 3,
+            "content": {
+              "version": "KqlItem/1.0",
+              "query": "requests\n| where cloud_RoleName == 'rag-api' and tobool(success) == false\n| summarize Errors = sum(itemCount) by Endpoint = name\n| top 5 by Errors desc",
+              "size": 0,
+              "title": "Error count by endpoint (top 5)",
+              "timeContextFromParameter": "TimeRange",
+              "queryType": 0,
+              "resourceType": "microsoft.insights/components",
+              "visualization": "table",
+              "gridSettings": {
+                "formatters": [
+                  {
+                    "columnMatch": "Errors",
+                    "formatter": 8,
+                    "formatOptions": {
+                      "palette": "red"
+                    }
+                  }
+                ]
+              }
+            },
+            "styleSettings": {
+              "maxWidth": "50"
+            },
+            "name": "overview-errors-by-endpoint"
+          },
+          {
+            "type": 3,
+            "content": {
+              "version": "KqlItem/1.0",
+              "query": "requests\n| where cloud_RoleName == 'rag-api'\n| summarize Requests = sum(itemCount) by Endpoint = name\n| top 10 by Requests desc",
+              "size": 0,
+              "title": "Top endpoints (top 10)",
+              "timeContextFromParameter": "TimeRange",
+              "queryType": 0,
+              "resourceType": "microsoft.insights/components",
+              "visualization": "table",
+              "gridSettings": {
+                "formatters": [
+                  {
+                    "columnMatch": "Requests",
+                    "formatter": 8,
+                    "formatOptions": {
+                      "palette": "blue"
+                    }
+                  }
+                ]
+              }
+            },
+            "styleSettings": {
+              "maxWidth": "50"
+            },
+            "name": "overview-top-endpoints"
+          },
+          {
+            "type": 1,
+            "content": {
+              "json": "> The `/health` endpoint is not filtered out of the two tables above, matching the Splunk charts exactly. Docker's healthcheck plus the Nginx upstream probe will dominate `Top endpoints` as a result."
+            },
+            "name": "overview-footnote"
+          }
+        ]
+      },
+      "name": "group-overview"
+    },
+    {
+      "type": 12,
+      "conditionalVisibility": {
+        "parameterName": "selectedTab",
+        "comparison": "isEqualTo",
+        "value": "rag"
+      },
+      "content": {
+        "version": "NotebookGroup/1.0",
+        "groupType": "editable",
+        "items": [
+          {
+            "type": 1,
+            "content": {
+              "json": "## RAG Pipeline\n\nPer-step latency through the retrieval and ingestion pipelines.\n\nEvery span on this tab is CLIENT or INTERNAL, so all of it lands in the `dependencies` table with its native per-span `duration`. **No spanmetrics connector is involved.** Splunk needs one because its MetricSets cover only SERVER and CONSUMER spans; App Insights has no such gap. See `docs/splunk-vs-azure-monitor.md`.\n\n> **Active sessions counts only real sessions.** `session.id` is stamped on the HTTP SERVER span by the http instrumentation's `startIncomingSpanHook`, and is never invented when a client sends no `X-Session-Id` header. It previously came from Express middleware via `trace.getActiveSpan()`, which returns the middleware's own INTERNAL span, so it never reached `requests` at all and this tile read 0. Fixed in `api/src/session-attributes.js`."
+            },
+            "name": "rag-header"
+          },
+          {
+            "type": 3,
+            "content": {
+              "version": "KqlItem/1.0",
+              "query": "let bin_ = {TimeRange:grain};\ndependencies\n| where cloud_RoleName == 'rag-api'\n| extend genai_op = tostring(customDimensions['gen_ai.operation.name'])\n| extend Step = case(\n    name in ('chat.pipeline', 'chat.pipeline.stream'), 'Total Chat',\n    name == 'db.vectorSearch',                         'Vector Search',\n    genai_op == 'chat',                                'LLM Completion',\n    genai_op == 'embeddings',                          'Query Embedding',\n    '')\n| where Step != ''\n| summarize P50 = percentile(duration, 50) by bin(timestamp, bin_), Step\n| order by timestamp asc",
+              "size": 0,
+              "title": "RAG chat pipeline latency, P50 by step (ms)",
+              "timeContextFromParameter": "TimeRange",
+              "queryType": 0,
+              "resourceType": "microsoft.insights/components",
+              "visualization": "linechart",
+              "chartSettings": {
+                "xAxis": "timestamp",
+                "group": "Step",
+                "yAxis": [
+                  "P50"
+                ]
+              }
+            },
+            "styleSettings": {
+              "maxWidth": "50"
+            },
+            "name": "rag-chat-pipeline-latency"
+          },
+          {
+            "type": 3,
+            "content": {
+              "version": "KqlItem/1.0",
+              "query": "let bin_ = {TimeRange:grain};\ndependencies\n| where cloud_RoleName == 'rag-api'\n| extend genai_op = tostring(customDimensions['gen_ai.operation.name'])\n| extend Step = case(\n    name == 'upload.pipeline', 'Total Upload',\n    genai_op == 'embeddings',  'Embedding',\n    name == 'db.insertChunks', 'DB Insert',\n    '')\n| where Step != ''\n| summarize P50 = percentile(duration, 50) by bin(timestamp, bin_), Step\n| order by timestamp asc",
+              "size": 0,
+              "title": "RAG upload pipeline latency, P50 by step (ms)",
+              "timeContextFromParameter": "TimeRange",
+              "queryType": 0,
+              "resourceType": "microsoft.insights/components",
+              "visualization": "linechart",
+              "chartSettings": {
+                "xAxis": "timestamp",
+                "group": "Step",
+                "yAxis": [
+                  "P50"
+                ]
+              }
+            },
+            "styleSettings": {
+              "maxWidth": "50"
+            },
+            "name": "rag-upload-pipeline-latency"
+          },
+          {
+            "type": 3,
+            "content": {
+              "version": "KqlItem/1.0",
+              "query": "let bin_ = {TimeRange:grain};\ndependencies\n| extend Step = case(\n    cloud_RoleName == 'rag-api'        and name == 'mcp.scrape',                'Total Scrape',\n    cloud_RoleName == 'playwright-mcp' and name == 'mcp.tool.browser_navigate', 'Navigate',\n    cloud_RoleName == 'playwright-mcp' and name == 'mcp.tool.browser_get_text', 'Get Text',\n    '')\n| where Step != ''\n| summarize P50 = percentile(duration, 50) by bin(timestamp, bin_), Step\n| order by timestamp asc",
+              "size": 0,
+              "title": "MCP scrape latency, P50 by step (ms)",
+              "timeContextFromParameter": "TimeRange",
+              "queryType": 0,
+              "resourceType": "microsoft.insights/components",
+              "visualization": "linechart",
+              "chartSettings": {
+                "xAxis": "timestamp",
+                "group": "Step",
+                "yAxis": [
+                  "P50"
+                ]
+              }
+            },
+            "styleSettings": {
+              "maxWidth": "50"
+            },
+            "name": "rag-mcp-scrape-latency"
+          },
+          {
+            "type": 3,
+            "content": {
+              "version": "KqlItem/1.0",
+              "query": "let bin_ = {TimeRange:grain};\ndependencies\n| where cloud_RoleName == 'rag-api'\n| where tostring(customDimensions['gen_ai.operation.name']) == 'embeddings'\n| summarize P50 = percentile(duration, 50), P90 = percentile(duration, 90)\n    by bin(timestamp, bin_)\n| order by timestamp asc",
+              "size": 0,
+              "title": "Embedding latency P50 / P90 (ms)",
+              "timeContextFromParameter": "TimeRange",
+              "queryType": 0,
+              "resourceType": "microsoft.insights/components",
+              "visualization": "linechart",
+              "chartSettings": {
+                "xAxis": "timestamp",
+                "yAxis": [
+                  "P50",
+                  "P90"
+                ]
+              }
+            },
+            "styleSettings": {
+              "maxWidth": "50"
+            },
+            "name": "rag-embedding-latency"
+          },
+          {
+            "type": 3,
+            "content": {
+              "version": "KqlItem/1.0",
+              "query": "dependencies\n| where cloud_RoleName == 'rag-api'\n| where tostring(customDimensions['db.system']) == 'surrealdb'\n| summarize Calls = sum(itemCount), ['P50 ms'] = round(percentile(duration, 50), 1)\n    by Operation = name\n| top 20 by Calls desc",
+              "size": 0,
+              "title": "DB operation breakdown",
+              "timeContextFromParameter": "TimeRange",
+              "queryType": 0,
+              "resourceType": "microsoft.insights/components",
+              "visualization": "table",
+              "gridSettings": {
+                "formatters": [
+                  {
+                    "columnMatch": "Calls",
+                    "formatter": 8,
+                    "formatOptions": {
+                      "palette": "blue"
+                    }
+                  }
+                ]
+              }
+            },
+            "styleSettings": {
+              "maxWidth": "50"
+            },
+            "name": "rag-db-operation-breakdown"
+          },
+          {
+            "type": 3,
+            "content": {
+              "version": "KqlItem/1.0",
+              "query": "let bin_ = {TimeRange:grain};\ndependencies\n| where cloud_RoleName == 'rag-api' and name == 'db.vectorSearch'\n| summarize P50 = percentile(duration, 50), P90 = percentile(duration, 90)\n    by bin(timestamp, bin_)\n| order by timestamp asc",
+              "size": 0,
+              "title": "Vector search latency P50 / P90 (ms)",
+              "timeContextFromParameter": "TimeRange",
+              "queryType": 0,
+              "resourceType": "microsoft.insights/components",
+              "visualization": "linechart",
+              "chartSettings": {
+                "xAxis": "timestamp",
+                "yAxis": [
+                  "P50",
+                  "P90"
+                ]
+              }
+            },
+            "styleSettings": {
+              "maxWidth": "50"
+            },
+            "name": "rag-vector-search-latency"
+          },
+          {
+            "type": 3,
+            "content": {
+              "version": "KqlItem/1.0",
+              "query": "requests\n| where cloud_RoleName == 'rag-api'\n| extend SessionId = tostring(customDimensions['session.id'])\n| where isnotempty(SessionId)\n| summarize ['Active sessions'] = dcount(SessionId)",
+              "size": 3,
+              "title": "Active sessions",
+              "timeContextFromParameter": "TimeRange",
+              "queryType": 0,
+              "resourceType": "microsoft.insights/components",
+              "visualization": "tiles",
+              "tileSettings": {
+                "titleContent": {
+                  "columnMatch": "Active sessions",
+                  "formatter": 1
+                },
+                "leftContent": {
+                  "columnMatch": "Active sessions",
+                  "formatter": 12,
+                  "formatOptions": {
+                    "palette": "auto"
+                  },
+                  "numberFormat": {
+                    "unit": 0,
+                    "options": {
+                      "style": "decimal",
+                      "maximumFractionDigits": 0
+                    }
+                  }
+                },
+                "showBorder": true
+              }
+            },
+            "styleSettings": {
+              "maxWidth": "50"
+            },
+            "name": "rag-active-sessions"
+          }
+        ]
+      },
+      "name": "group-rag"
+    },
+    {
+      "type": 12,
+      "conditionalVisibility": {
+        "parameterName": "selectedTab",
+        "comparison": "isEqualTo",
+        "value": "llm"
+      },
+      "content": {
+        "version": "NotebookGroup/1.0",
+        "groupType": "editable",
+        "items": [
+          {
+            "type": 1,
+            "content": {
+              "json": "## LLM and AI\n\nToken economics, model attribution and inference latency, from `gen_ai.*` semantic-convention attributes.\n\nToken totals read the `gen_ai.client.token.count` counter in `customMetrics`. That is only correct because the counter arrives with **delta** temporality (`OTEL_EXPORTER_OTLP_METRICS_TEMPORALITY_PREFERENCE=delta` in `docker-compose.yml`). Under cumulative temporality `sum(valueSum)` would sum a monotonic ramp.\n\nResponse length percentiles read the **span attribute**, not the histogram metric: the `azure_monitor` exporter flattens histogram buckets, so a true P90 cannot be recovered from `customMetrics`."
+            },
+            "name": "llm-header"
+          },
+          {
+            "type": 3,
+            "content": {
+              "version": "KqlItem/1.0",
+              "query": "customMetrics\n| where name == 'gen_ai.client.token.count' and cloud_RoleName == 'rag-api'\n| summarize Tokens = tolong(sum(valueSum))\n    by ['Token type'] = tostring(customDimensions['gen_ai.token.type'])\n| order by ['Token type'] asc",
+              "size": 3,
+              "title": "Total tokens by type",
+              "timeContextFromParameter": "TimeRange",
+              "queryType": 0,
+              "resourceType": "microsoft.insights/components",
+              "visualization": "tiles",
+              "tileSettings": {
+                "titleContent": {
+                  "columnMatch": "Token type",
+                  "formatter": 1
+                },
+                "leftContent": {
+                  "columnMatch": "Tokens",
+                  "formatter": 12,
+                  "formatOptions": {
+                    "palette": "auto"
+                  },
+                  "numberFormat": {
+                    "unit": 0,
+                    "options": {
+                      "style": "decimal",
+                      "maximumFractionDigits": 0
+                    }
+                  }
+                },
+                "showBorder": true
+              }
+            },
+            "name": "llm-token-totals"
+          },
+          {
+            "type": 3,
+            "content": {
+              "version": "KqlItem/1.0",
+              "query": "dependencies\n| where cloud_RoleName == 'rag-api'\n| where tostring(customDimensions['gen_ai.operation.name']) == 'chat'\n| summarize Calls = sum(itemCount),\n            ['P50 ms']        = round(percentile(duration, 50), 0),\n            ['Input tokens']  = sum(tolong(tostring(customDimensions['gen_ai.usage.input_tokens']))),\n            ['Output tokens'] = sum(tolong(tostring(customDimensions['gen_ai.usage.output_tokens'])))\n    by Provider          = tostring(customDimensions['gen_ai.provider.name']),\n       ['Request model']  = tostring(customDimensions['gen_ai.request.model']),\n       ['Response model'] = tostring(customDimensions['gen_ai.response.model'])\n| order by Calls desc",
+              "size": 0,
+              "title": "LLM provider and model",
+              "timeContextFromParameter": "TimeRange",
+              "queryType": 0,
+              "resourceType": "microsoft.insights/components",
+              "visualization": "table"
+            },
+            "styleSettings": {
+              "maxWidth": "50"
+            },
+            "name": "llm-provider-and-model"
+          },
+          {
+            "type": 3,
+            "content": {
+              "version": "KqlItem/1.0",
+              "query": "dependencies\n| where cloud_RoleName == 'rag-api'\n| where tostring(customDimensions['gen_ai.operation.name']) == 'embeddings'\n| summarize Calls = sum(itemCount),\n            ['P50 ms']       = round(percentile(duration, 50), 0),\n            ['Input tokens'] = sum(tolong(tostring(customDimensions['gen_ai.usage.input_tokens'])))\n    by Provider   = tostring(customDimensions['gen_ai.provider.name']),\n       Model      = tostring(customDimensions['gen_ai.request.model']),\n       Dimensions = tostring(customDimensions['gen_ai.response.dimensions'])\n| order by Calls desc",
+              "size": 0,
+              "title": "Embedding model",
+              "timeContextFromParameter": "TimeRange",
+              "queryType": 0,
+              "resourceType": "microsoft.insights/components",
+              "visualization": "table"
+            },
+            "styleSettings": {
+              "maxWidth": "50"
+            },
+            "name": "llm-embedding-model"
+          },
+          {
+            "type": 3,
+            "content": {
+              "version": "KqlItem/1.0",
+              "query": "let bin_ = {TimeRange:grain};\ncustomMetrics\n| where name == 'gen_ai.client.token.count' and cloud_RoleName == 'rag-api'\n| extend ['Token type'] = tostring(customDimensions['gen_ai.token.type'])\n| summarize Tokens = sum(valueSum) by bin(timestamp, bin_), ['Token type']\n| order by timestamp asc",
+              "size": 0,
+              "title": "Token usage over time (all operations)",
+              "timeContextFromParameter": "TimeRange",
+              "queryType": 0,
+              "resourceType": "microsoft.insights/components",
+              "visualization": "linechart",
+              "chartSettings": {
+                "xAxis": "timestamp",
+                "group": "Token type",
+                "yAxis": [
+                  "Tokens"
+                ]
+              }
+            },
+            "styleSettings": {
+              "maxWidth": "50"
+            },
+            "name": "llm-token-usage-over-time"
+          },
+          {
+            "type": 3,
+            "content": {
+              "version": "KqlItem/1.0",
+              "query": "let bin_ = {TimeRange:grain};\ncustomMetrics\n| where name == 'gen_ai.client.token.count' and cloud_RoleName == 'rag-api'\n| where tostring(customDimensions['gen_ai.operation.name']) == 'chat'\n| extend ['Token type'] = tostring(customDimensions['gen_ai.token.type'])\n| summarize Tokens = sum(valueSum) by bin(timestamp, bin_), ['Token type']\n| order by timestamp asc",
+              "size": 0,
+              "title": "LLM tokens over time (chat only)",
+              "timeContextFromParameter": "TimeRange",
+              "queryType": 0,
+              "resourceType": "microsoft.insights/components",
+              "visualization": "linechart",
+              "chartSettings": {
+                "xAxis": "timestamp",
+                "group": "Token type",
+                "yAxis": [
+                  "Tokens"
+                ]
+              }
+            },
+            "styleSettings": {
+              "maxWidth": "50"
+            },
+            "name": "llm-tokens-over-time"
+          },
+          {
+            "type": 3,
+            "content": {
+              "version": "KqlItem/1.0",
+              "query": "let bin_ = {TimeRange:grain};\ncustomMetrics\n| where name == 'gen_ai.client.token.count' and cloud_RoleName == 'rag-api'\n| where tostring(customDimensions['gen_ai.operation.name']) == 'embeddings'\n| extend ['Token type'] = tostring(customDimensions['gen_ai.token.type'])\n| summarize Tokens = sum(valueSum) by bin(timestamp, bin_), ['Token type']\n| order by timestamp asc",
+              "size": 0,
+              "title": "Embedding tokens over time",
+              "timeContextFromParameter": "TimeRange",
+              "queryType": 0,
+              "resourceType": "microsoft.insights/components",
+              "visualization": "linechart",
+              "chartSettings": {
+                "xAxis": "timestamp",
+                "group": "Token type",
+                "yAxis": [
+                  "Tokens"
+                ]
+              }
+            },
+            "styleSettings": {
+              "maxWidth": "50"
+            },
+            "name": "llm-embedding-tokens-over-time"
+          },
+          {
+            "type": 3,
+            "content": {
+              "version": "KqlItem/1.0",
+              "query": "let bin_ = {TimeRange:grain};\ndependencies\n| where cloud_RoleName == 'rag-api'\n| where tostring(customDimensions['gen_ai.operation.name']) == 'chat'\n| summarize P50 = percentile(duration, 50),\n            P90 = percentile(duration, 90),\n            P99 = percentile(duration, 99)\n    by bin(timestamp, bin_)\n| order by timestamp asc",
+              "size": 0,
+              "title": "LLM call latency P50 / P90 / P99 (ms)",
+              "timeContextFromParameter": "TimeRange",
+              "queryType": 0,
+              "resourceType": "microsoft.insights/components",
+              "visualization": "linechart",
+              "chartSettings": {
+                "xAxis": "timestamp",
+                "yAxis": [
+                  "P50",
+                  "P90",
+                  "P99"
+                ]
+              }
+            },
+            "styleSettings": {
+              "maxWidth": "50"
+            },
+            "name": "llm-call-latency"
+          },
+          {
+            "type": 3,
+            "content": {
+              "version": "KqlItem/1.0",
+              "query": "let bin_ = {TimeRange:grain};\ndependencies\n| where cloud_RoleName == 'rag-api'\n| where tostring(customDimensions['gen_ai.operation.name']) == 'embeddings'\n| summarize P50 = percentile(duration, 50) by bin(timestamp, bin_)\n| order by timestamp asc",
+              "size": 0,
+              "title": "Embedding API latency P50 (ms)",
+              "timeContextFromParameter": "TimeRange",
+              "queryType": 0,
+              "resourceType": "microsoft.insights/components",
+              "visualization": "linechart",
+              "chartSettings": {
+                "xAxis": "timestamp",
+                "yAxis": [
+                  "P50"
+                ]
+              }
+            },
+            "styleSettings": {
+              "maxWidth": "50"
+            },
+            "name": "llm-embedding-api-latency"
+          },
+          {
+            "type": 3,
+            "content": {
+              "version": "KqlItem/1.0",
+              "query": "let bin_ = {TimeRange:grain};\ndependencies\n| where cloud_RoleName == 'rag-api'\n| extend RespLen = tolong(tostring(customDimensions['gen_ai.response.length']))\n| where isnotnull(RespLen)\n| summarize ['Mean length'] = round(avg(RespLen), 0),\n            ['P90 length']  = round(percentile(RespLen, 90), 0)\n    by bin(timestamp, bin_)\n| order by timestamp asc",
+              "size": 0,
+              "title": "Response length over time (characters)",
+              "timeContextFromParameter": "TimeRange",
+              "queryType": 0,
+              "resourceType": "microsoft.insights/components",
+              "visualization": "linechart",
+              "chartSettings": {
+                "xAxis": "timestamp",
+                "yAxis": [
+                  "Mean length",
+                  "P90 length"
+                ]
+              }
+            },
+            "styleSettings": {
+              "maxWidth": "50"
+            },
+            "name": "llm-response-length"
+          }
+        ]
+      },
+      "name": "group-llm"
+    },
+    {
+      "type": 12,
+      "conditionalVisibility": {
+        "parameterName": "selectedTab",
+        "comparison": "isEqualTo",
+        "value": "infra"
+      },
+      "content": {
+        "version": "NotebookGroup/1.0",
+        "groupType": "editable",
+        "items": [
+          {
+            "type": 1,
+            "content": {
+              "json": "## Infrastructure\n\nContainer and SurrealDB resource metrics, from the collector's `docker_stats` receiver and SurrealDB's own OTLP export.\n\n> **These charts reach parity; the product around them does not.** Application Insights has no infrastructure experience. Splunk's Infrastructure Navigators and APM-to-Infrastructure Related Content, keyed on `host.name`, have no App Insights counterpart, so `resourcedetection` buys nothing here. Azure's equivalents (VM Insights, Container Insights) run off the Azure Monitor Agent against a Log Analytics workspace, not off custom metrics. See `docs/splunk-vs-azure-monitor.md`.\n\nThe counters below are delta-converted by `cumulativetodelta` in the collector. Without that they would render as monotonic ramps, because `customMetrics` has no counter semantics."
+            },
+            "name": "infra-header"
+          },
+          {
+            "type": 3,
+            "content": {
+              "version": "KqlItem/1.0",
+              "query": "let bin_ = {TimeRange:grain};\ncustomMetrics\n| where name == 'container.cpu.usage.total'\n| extend Container = coalesce(tostring(customDimensions['compose.service']),\n                              tostring(customDimensions['container.name']))\n| summarize CpuNs = sum(valueSum) by bin(timestamp, bin_), Container\n| project timestamp, Container, ['CPU cores'] = round(todouble(CpuNs) / 1e9 / (bin_ / 1s), 3)\n| order by timestamp asc",
+              "size": 0,
+              "title": "Container CPU usage (cores)",
+              "timeContextFromParameter": "TimeRange",
+              "queryType": 0,
+              "resourceType": "microsoft.insights/components",
+              "visualization": "linechart",
+              "chartSettings": {
+                "xAxis": "timestamp",
+                "group": "Container",
+                "yAxis": [
+                  "CPU cores"
+                ]
+              }
+            },
+            "styleSettings": {
+              "maxWidth": "50"
+            },
+            "name": "infra-container-cpu"
+          },
+          {
+            "type": 3,
+            "content": {
+              "version": "KqlItem/1.0",
+              "query": "let bin_ = {TimeRange:grain};\ncustomMetrics\n| where name == 'container.memory.usage.total'\n| extend Container = coalesce(tostring(customDimensions['compose.service']),\n                              tostring(customDimensions['container.name']))\n| summarize ['Memory MiB'] = round(avg(valueSum) / 1048576.0, 1)\n    by bin(timestamp, bin_), Container\n| order by timestamp asc",
+              "size": 0,
+              "title": "Container memory usage (MiB)",
+              "timeContextFromParameter": "TimeRange",
+              "queryType": 0,
+              "resourceType": "microsoft.insights/components",
+              "visualization": "linechart",
+              "chartSettings": {
+                "xAxis": "timestamp",
+                "group": "Container",
+                "yAxis": [
+                  "Memory MiB"
+                ]
+              }
+            },
+            "styleSettings": {
+              "maxWidth": "50"
+            },
+            "name": "infra-container-memory"
+          },
+          {
+            "type": 3,
+            "content": {
+              "version": "KqlItem/1.0",
+              "query": "let bin_ = {TimeRange:grain};\ncustomMetrics\n| where name in ('container.network.io.usage.rx_bytes', 'container.network.io.usage.tx_bytes')\n| extend Direction = iff(name endswith 'rx_bytes', 'Received bytes/s', 'Sent bytes/s')\n| summarize Bytes = sum(valueSum) by bin(timestamp, bin_), Direction\n| project timestamp, Direction, ['Bytes/s'] = round(todouble(Bytes) / (bin_ / 1s), 1)\n| order by timestamp asc",
+              "size": 0,
+              "title": "Container network I/O",
+              "timeContextFromParameter": "TimeRange",
+              "queryType": 0,
+              "resourceType": "microsoft.insights/components",
+              "visualization": "areachart",
+              "chartSettings": {
+                "xAxis": "timestamp",
+                "group": "Direction",
+                "yAxis": [
+                  "Bytes/s"
+                ]
+              }
+            },
+            "styleSettings": {
+              "maxWidth": "50"
+            },
+            "name": "infra-container-network"
+          },
+          {
+            "type": 3,
+            "content": {
+              "version": "KqlItem/1.0",
+              "query": "let bin_ = {TimeRange:grain};\ncustomMetrics\n| where cloud_RoleName == 'surrealdb' and name == 'surrealdb.process.cpu_percent'\n| summarize ['CPU %'] = round(avg(valueSum), 2) by bin(timestamp, bin_)\n| order by timestamp asc",
+              "size": 0,
+              "title": "SurrealDB process CPU (%)",
+              "timeContextFromParameter": "TimeRange",
+              "queryType": 0,
+              "resourceType": "microsoft.insights/components",
+              "visualization": "linechart",
+              "chartSettings": {
+                "xAxis": "timestamp",
+                "yAxis": [
+                  "CPU %"
+                ]
+              }
+            },
+            "styleSettings": {
+              "maxWidth": "50"
+            },
+            "name": "infra-surrealdb-cpu"
+          },
+          {
+            "type": 3,
+            "content": {
+              "version": "KqlItem/1.0",
+              "query": "let bin_ = {TimeRange:grain};\ncustomMetrics\n| where cloud_RoleName == 'surrealdb' and name == 'surrealdb.process.memory'\n| summarize ['Memory MiB'] = round(avg(valueSum) / 1048576.0, 1) by bin(timestamp, bin_)\n| order by timestamp asc",
+              "size": 0,
+              "title": "SurrealDB process memory (MiB)",
+              "timeContextFromParameter": "TimeRange",
+              "queryType": 0,
+              "resourceType": "microsoft.insights/components",
+              "visualization": "linechart",
+              "chartSettings": {
+                "xAxis": "timestamp",
+                "yAxis": [
+                  "Memory MiB"
+                ]
+              }
+            },
+            "styleSettings": {
+              "maxWidth": "50"
+            },
+            "name": "infra-surrealdb-memory"
+          },
+          {
+            "type": 3,
+            "content": {
+              "version": "KqlItem/1.0",
+              "query": "let bin_ = {TimeRange:grain};\ncustomMetrics\n| where cloud_RoleName == 'surrealdb' and name == 'surrealdb.transaction'\n| summarize Tx = sum(valueSum) by bin(timestamp, bin_)\n| project timestamp, ['Tx/s'] = round(todouble(Tx) / (bin_ / 1s), 2)\n| order by timestamp asc",
+              "size": 0,
+              "title": "SurrealDB transaction rate",
+              "timeContextFromParameter": "TimeRange",
+              "queryType": 0,
+              "resourceType": "microsoft.insights/components",
+              "visualization": "linechart",
+              "chartSettings": {
+                "xAxis": "timestamp",
+                "yAxis": [
+                  "Tx/s"
+                ]
+              }
+            },
+            "styleSettings": {
+              "maxWidth": "50"
+            },
+            "name": "infra-surrealdb-transactions"
+          },
+          {
+            "type": 3,
+            "content": {
+              "version": "KqlItem/1.0",
+              "query": "let bin_ = {TimeRange:grain};\ncustomMetrics\n| where cloud_RoleName == 'surrealdb' and name == 'surrealdb.http.request'\n| summarize Req = sum(valueSum) by bin(timestamp, bin_)\n| project timestamp, ['HTTP req/s'] = round(todouble(Req) / (bin_ / 1s), 2)\n| order by timestamp asc",
+              "size": 0,
+              "title": "SurrealDB HTTP request rate",
+              "timeContextFromParameter": "TimeRange",
+              "queryType": 0,
+              "resourceType": "microsoft.insights/components",
+              "visualization": "linechart",
+              "chartSettings": {
+                "xAxis": "timestamp",
+                "yAxis": [
+                  "HTTP req/s"
+                ]
+              }
+            },
+            "styleSettings": {
+              "maxWidth": "50"
+            },
+            "name": "infra-surrealdb-http-rate"
+          },
+          {
+            "type": 3,
+            "content": {
+              "version": "KqlItem/1.0",
+              "query": "let bin_ = {TimeRange:grain};\ncustomMetrics\n| where cloud_RoleName == 'surrealdb' and name == 'surrealdb.http.active_requests'\n| summarize ['Active requests'] = avg(valueSum) by bin(timestamp, bin_)\n| order by timestamp asc",
+              "size": 0,
+              "title": "SurrealDB active HTTP requests",
+              "timeContextFromParameter": "TimeRange",
+              "queryType": 0,
+              "resourceType": "microsoft.insights/components",
+              "visualization": "linechart",
+              "chartSettings": {
+                "xAxis": "timestamp",
+                "yAxis": [
+                  "Active requests"
+                ]
+              }
+            },
+            "styleSettings": {
+              "maxWidth": "50"
+            },
+            "name": "infra-surrealdb-active-requests"
+          }
+        ]
+      },
+      "name": "group-infra"
+    },
+    {
+      "type": 12,
+      "conditionalVisibility": {
+        "parameterName": "selectedTab",
+        "comparison": "isEqualTo",
+        "value": "logs"
+      },
+      "content": {
+        "version": "NotebookGroup/1.0",
+        "groupType": "editable",
+        "items": [
+          {
+            "type": 1,
+            "content": {
+              "json": "## Logs and Traces\n\n**This tab has no Splunk equivalent in this project, and that is the point.**\n\nApplication logs land in the App Insights `traces` table in the same resource as the spans, correlated by `operation_Id`, with no extra configuration and no second product. On the Splunk side logs go to Splunk Cloud Platform via HEC, and the single-pane correlation view (Log Observer Connect) is blocked on a non-trial licence -- see `docs/splunk-setup.md` Section 26.\n\nDEBUG and TRACE records are dropped by the collector's `filter/logs` processor before egress, so only INFO and above appear here."
+            },
+            "name": "logs-header"
+          },
+          {
+            "type": 3,
+            "content": {
+              "version": "KqlItem/1.0",
+              "query": "let bin_ = {TimeRange:grain};\ntraces\n| extend Severity = case(severityLevel == 0, 'VERBOSE',\n                         severityLevel == 1, 'INFO',\n                         severityLevel == 2, 'WARN',\n                         severityLevel == 3, 'ERROR',\n                         severityLevel == 4, 'CRITICAL',\n                         'UNKNOWN')\n| summarize Records = count() by bin(timestamp, bin_), Severity\n| order by timestamp asc",
+              "size": 0,
+              "title": "Log volume by severity",
+              "timeContextFromParameter": "TimeRange",
+              "queryType": 0,
+              "resourceType": "microsoft.insights/components",
+              "visualization": "areachart",
+              "chartSettings": {
+                "xAxis": "timestamp",
+                "group": "Severity",
+                "yAxis": [
+                  "Records"
+                ]
+              }
+            },
+            "styleSettings": {
+              "maxWidth": "50"
+            },
+            "name": "logs-volume-by-severity"
+          },
+          {
+            "type": 3,
+            "content": {
+              "version": "KqlItem/1.0",
+              "query": "exceptions\n| summarize Count = sum(itemCount), ['Last seen'] = max(timestamp)\n    by Type = type, Method = outerMethod\n| top 20 by Count desc",
+              "size": 0,
+              "title": "Exceptions by type",
+              "timeContextFromParameter": "TimeRange",
+              "queryType": 0,
+              "resourceType": "microsoft.insights/components",
+              "visualization": "table",
+              "gridSettings": {
+                "formatters": [
+                  {
+                    "columnMatch": "Count",
+                    "formatter": 8,
+                    "formatOptions": {
+                      "palette": "red"
+                    }
+                  }
+                ]
+              }
+            },
+            "styleSettings": {
+              "maxWidth": "50"
+            },
+            "name": "logs-exceptions-by-type"
+          },
+          {
+            "type": 3,
+            "content": {
+              "version": "KqlItem/1.0",
+              "query": "traces\n| where severityLevel >= 3\n| project timestamp, Service = cloud_RoleName, Message = message,\n          Operation = operation_Name, ['Trace ID'] = operation_Id\n| order by timestamp desc\n| take 100",
+              "size": 0,
+              "title": "Recent errors (click a Trace ID to correlate with its spans)",
+              "timeContextFromParameter": "TimeRange",
+              "queryType": 0,
+              "resourceType": "microsoft.insights/components",
+              "visualization": "table",
+              "gridSettings": {
+                "formatters": [
+                  {
+                    "columnMatch": "Trace ID",
+                    "formatter": 7,
+                    "formatOptions": {
+                      "linkTarget": "OpenBladeSearch",
+                      "linkLabel": "",
+                      "linkIsContextBlade": true
+                    }
+                  }
+                ]
+              }
+            },
+            "name": "logs-recent-errors"
+          }
+        ]
+      },
+      "name": "group-logs"
+    }
+  ]
+}

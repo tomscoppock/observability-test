@@ -2,7 +2,6 @@
 
 const express = require('express');
 const cors = require('cors');
-const crypto = require('node:crypto');
 const { trace } = require('@opentelemetry/api');
 const logger = require('./logger');
 const uploadRouter = require('./routes/upload');
@@ -21,17 +20,17 @@ const PORT = process.env.PORT || 3000;
 app.use(cors());
 app.use(express.json());
 
-// Session ID tracking -- sets session.id span attribute for trace correlation.
-// Clients send X-Session-Id header; if absent a random ID is generated.
-app.use((req, _res, next) => {
-  const sessionId = req.headers['x-session-id'] || crypto.randomUUID();
-  req.sessionId = sessionId;
-  const span = trace.getActiveSpan();
-  if (span) {
-    span.setAttribute('session.id', sessionId);
-  }
-  next();
-});
+// NOTE: session.id is deliberately NOT set here.
+//
+// It used to be, via trace.getActiveSpan() in this middleware, which returns
+// the Express middleware layer's own INTERNAL span rather than the HTTP
+// SERVER span. The attribute therefore landed on a child span and never
+// reached the request, silently breaking every dashboard chart that groups a
+// SERVER-span metric by session.
+//
+// It is now applied to the server span itself by the http instrumentation's
+// startIncomingSpanHook -- see src/session-attributes.js and
+// src/instrumentation.js.
 
 // ---------------------------------------------------------------------------
 // Routes

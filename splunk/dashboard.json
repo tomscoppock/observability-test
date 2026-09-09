@@ -10,51 +10,51 @@
       "charts": [
         {
           "name": "rag-api Requests",
-          "description": "Total request count for the rag-api service.",
+          "description": "Total request count for the rag-api service. Filters sf_dimensionalized='true' because service.request emits BOTH an endpoint-level MetricSet (that property) and a service-level one (property absent); summing both counts every request twice.",
           "chartType": "SingleValue",
-          "programText": "A = histogram('service.request', filter=filter('sf_service', 'rag-api') and filter('sf_environment', 'dev')).count().sum().publish(label='rag-api')"
+          "programText": "A = histogram('service.request', filter=filter('sf_service', 'rag-api') and filter('sf_environment', 'dev') and filter('sf_dimensionalized', 'true')).count().sum().publish(label='rag-api')"
         },
         {
           "name": "surrealdb Requests",
-          "description": "Total request count for the surrealdb service.",
+          "description": "Total request count for the surrealdb service. Filters sf_dimensionalized='true' because service.request emits BOTH an endpoint-level MetricSet (that property) and a service-level one (property absent); summing both counts every request twice.",
           "chartType": "SingleValue",
-          "programText": "A = histogram('service.request', filter=filter('sf_service', 'surrealdb') and filter('sf_environment', 'dev')).count().sum().publish(label='surrealdb')"
+          "programText": "A = histogram('service.request', filter=filter('sf_service', 'surrealdb') and filter('sf_environment', 'dev') and filter('sf_dimensionalized', 'true')).count().sum().publish(label='surrealdb')"
         },
         {
           "name": "playwright-mcp Requests",
-          "description": "Total request count for the playwright-mcp service.",
+          "description": "Total request count for the playwright-mcp service. Filters sf_dimensionalized='true' because service.request emits BOTH an endpoint-level MetricSet (that property) and a service-level one (property absent); summing both counts every request twice.",
           "chartType": "SingleValue",
-          "programText": "A = histogram('service.request', filter=filter('sf_service', 'playwright-mcp') and filter('sf_environment', 'dev')).count().sum().publish(label='playwright-mcp')"
+          "programText": "A = histogram('service.request', filter=filter('sf_service', 'playwright-mcp') and filter('sf_environment', 'dev') and filter('sf_dimensionalized', 'true')).count().sum().publish(label='playwright-mcp')"
         },
         {
           "name": "Error Rate %",
-          "description": "Percentage of rag-api requests resulting in an error.",
+          "description": "Percentage of rag-api requests resulting in an error. Filters sf_dimensionalized='true' because service.request emits BOTH an endpoint-level MetricSet (that property) and a service-level one (property absent); summing both counts every request twice.",
           "chartType": "SingleValue",
-          "programText": "A = histogram('service.request', filter=filter('sf_service', 'rag-api') and filter('sf_environment', 'dev') and filter('sf_error', 'true')).count().publish(label='Errors', enable=False)\nB = histogram('service.request', filter=filter('sf_service', 'rag-api') and filter('sf_environment', 'dev')).count().publish(label='Total', enable=False)\nC = (A / B * 100).publish(label='Error Rate %')"
+          "programText": "A = histogram('service.request', filter=filter('sf_service', 'rag-api') and filter('sf_environment', 'dev') and filter('sf_dimensionalized', 'true') and filter('sf_error', 'true')).count().publish(label='Errors', enable=False)\nB = histogram('service.request', filter=filter('sf_service', 'rag-api') and filter('sf_environment', 'dev') and filter('sf_dimensionalized', 'true')).count().publish(label='Total', enable=False)\nC = (A / B * 100).publish(label='Error Rate %')"
         },
         {
           "name": "Request Rate",
-          "description": "Requests per second for the rag-api service.",
+          "description": "Requests per second for the rag-api service. Filters sf_dimensionalized='true' because service.request emits BOTH an endpoint-level MetricSet (that property) and a service-level one (property absent); summing both counts every request twice.",
           "chartType": "Line",
-          "programText": "A = histogram('service.request', filter=filter('sf_service', 'rag-api') and filter('sf_environment', 'dev')).count().rate().publish(label='Request Rate')"
+          "programText": "A = histogram('service.request', filter=filter('sf_service', 'rag-api') and filter('sf_environment', 'dev') and filter('sf_dimensionalized', 'true')).count().rate().publish(label='Request Rate')"
         },
         {
           "name": "Service Latency (P50/P90/P99)",
-          "description": "Request latency percentiles for the rag-api service.",
+          "description": "Request latency percentiles for the rag-api service. Filters sf_dimensionalized='true' because service.request emits BOTH an endpoint-level MetricSet (that property) and a service-level one (property absent); summing both counts every request twice.",
           "chartType": "Line",
-          "programText": "filter_ = filter('sf_service', 'rag-api') and filter('sf_environment', 'dev')\nA = histogram('service.request', filter=filter_).percentile(pct=50).publish(label='P50')\nB = histogram('service.request', filter=filter_).percentile(pct=90).publish(label='P90')\nC = histogram('service.request', filter=filter_).percentile(pct=99).publish(label='P99')"
+          "programText": "filter_ = filter('sf_service', 'rag-api') and filter('sf_environment', 'dev') and filter('sf_dimensionalized', 'true')\nA = histogram('service.request', filter=filter_).percentile(pct=50).publish(label='P50')\nB = histogram('service.request', filter=filter_).percentile(pct=90).publish(label='P90')\nC = histogram('service.request', filter=filter_).percentile(pct=99).publish(label='P99')"
         },
         {
           "name": "Error Count by Endpoint",
-          "description": "Top 5 endpoints by error count.",
+          "description": "Top 5 endpoints by error count. Filters sf_dimensionalized='true' because service.request emits BOTH an endpoint-level MetricSet (that property) and a service-level one (property absent); summing both counts every request twice.",
           "chartType": "List",
-          "programText": "A = histogram('service.request', filter=filter('sf_service', 'rag-api') and filter('sf_environment', 'dev') and filter('sf_error', 'true')).count().sum(by=['sf_operation']).top(count=5).publish(label='Errors by Endpoint')"
+          "programText": "A = histogram('service.request', filter=filter('sf_service', 'rag-api') and filter('sf_environment', 'dev') and filter('sf_dimensionalized', 'true') and filter('sf_error', 'true')).count().sum(by=['sf_operation']).top(count=5).publish(label='Errors by Endpoint')"
         },
         {
           "name": "Top Endpoints",
-          "description": "Top 10 endpoints by request count.",
+          "description": "Top 10 endpoints by request count. Filters sf_dimensionalized='true' because service.request emits BOTH an endpoint-level MetricSet (that property) and a service-level one (property absent); summing both counts every request twice.",
           "chartType": "List",
-          "programText": "A = histogram('service.request', filter=filter('sf_service', 'rag-api') and filter('sf_environment', 'dev')).count().top(count=10).publish(label='Top Endpoints')"
+          "programText": "A = histogram('service.request', filter=filter('sf_service', 'rag-api') and filter('sf_environment', 'dev') and filter('sf_dimensionalized', 'true')).count().top(count=10).publish(label='Top Endpoints')"
         }
       ]
     },
@@ -100,9 +100,9 @@
         },
         {
           "name": "Active Sessions",
-          "description": "Count of unique session IDs in the current time window.",
+          "description": "Count of distinct client-supplied session IDs. Reads the span_metrics connector output, NOT service.request: session.id is a span attribute, and grouping service.request by it would require indexing it as a Monitoring MetricSet dimension (UI-only, no public API). The span_metrics dimension arrives as a real metric dimension instead. SPAN_KIND_SERVER because the app sets session.id on the server span only; filter('session.id', '*') excludes datapoints where the dimension is absent.",
           "chartType": "SingleValue",
-          "programText": "A = histogram('service.request', filter=filter('sf_service', 'rag-api') and filter('sf_environment', 'dev')).count().sum(by=['session.id']).count().publish(label='Active Sessions')"
+          "programText": "A = data('traces.span.metrics.calls', filter=filter('service.name', 'rag-api') and filter('deployment.environment', 'dev') and filter('span.kind', 'SPAN_KIND_SERVER') and filter('session.id', '*')).sum(by=['session.id']).count().publish(label='Active Sessions')"
         }
       ]
     },

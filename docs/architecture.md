@@ -55,8 +55,9 @@ All services emit telemetry via OTLP:
 |   (metrics)        |  | - Received via HEC   |
 +--------------------+  +----------------------+
 
-(Azure Monitor and Grafana are alternative backends, swappable
- via the collector config -- see docs/opentelemetry.md)
+(Azure Monitor is a second, selectable backend -- see below.
+ Grafana remains a future phase. Both are collector config
+ changes only -- see docs/opentelemetry.md)
 ```
 
 **Traces and metrics go to a different Splunk product than logs.** This
@@ -78,6 +79,56 @@ span), and Log Observer Connect uses those to join them back to the
 traces in APM. See [splunk-setup.md](splunk-setup.md#log-observer-connect-splunk-cloud-platform)
 for the full setup, including the licensing constraint that Log Observer
 Connect is not available on Splunk Cloud Platform trial accounts.
+
+### The Azure Monitor leg
+
+Azure Monitor is a second, selectable destination. It takes all three
+signals into **one** Application Insights resource, which is the sharpest
+architectural contrast with the Splunk split above:
+
+```
++--------------------+
+|  OTel Collector    |
++---+------------+---+
+    |            |
+    | Splunk     | Azure
+    | (as above) |
+    v            v
+              +--------------------------+
+              | Application Insights     |
+              | - requests, dependencies |
+              | - customMetrics          |
+              | - traces, exceptions     |
+              | All correlated by        |
+              | operation_Id             |
+              +--------------------------+
+```
+
+| Signal | Exporter | Destination table |
+|---|---|---|
+| Traces (SERVER, CONSUMER) | `azure_monitor` | `requests` |
+| Traces (CLIENT, PRODUCER, INTERNAL) | `azure_monitor` | `dependencies` |
+| Metrics | `azure_monitor` | `customMetrics` |
+| Logs | `azure_monitor` | `traces` |
+| Span events | `azure_monitor` | `exceptions` |
+
+Which backend is active is chosen by `OTEL_COLLECTOR_CONFIG` on the
+collector's config bind mount:
+
+| Config file | Backend |
+|---|---|
+| `otel-collector-config.yaml` (default) | Splunk only |
+| `otel-collector-config.azure.yaml` | Azure Monitor only |
+| `otel-collector-config.dual.yaml` | Both, in parallel |
+
+In dual mode, traces and logs are single fan-out pipelines: collector
+pipelines send to every exporter listed, so both backends receive
+byte-identical data. Metrics is split into `metrics/splunk` and
+`metrics/azure`, because the two backends need different inputs.
+`spanmetrics` and `hostmetrics` are Splunk-only; `cumulative_to_delta` and
+`transform/azure_dims` are Azure-only. The reasoning for each is in
+[splunk-vs-azure-monitor.md](splunk-vs-azure-monitor.md), and the setup is in
+[azure-monitor-setup.md](azure-monitor-setup.md).
 
 ## Services
 

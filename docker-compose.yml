@@ -99,6 +99,13 @@ services:
   # to Splunk Cloud Platform / Enterprise via HEC when SPLUNK_HEC_TOKEN
   # is set (Observability Cloud no longer accepts direct log ingest --
   # see docs/splunk-setup.md).
+  #
+  # The BACKEND is chosen by which config file is mounted, via
+  # OTEL_COLLECTOR_CONFIG in .env:
+  #   ./otel-collector-config.yaml        Splunk only (default)
+  #   ./otel-collector-config.azure.yaml  Azure Monitor only
+  #   ./otel-collector-config.dual.yaml   both in parallel
+  # See docs/azure-monitor-setup.md.
   otel-collector:
     image: otel/opentelemetry-collector-contrib:latest
     # Run as root so the docker_stats receiver can read /var/run/docker.sock.
@@ -125,9 +132,20 @@ services:
       # Only set to true against a Splunk instance still using its default
       # self-signed cert (e.g. an unprovisioned trial) -- never in production.
       - SPLUNK_HEC_INSECURE_SKIP_VERIFY=${SPLUNK_HEC_INSECURE_SKIP_VERIFY:-false}
+      # The azure_monitor exporter rejects an EMPTY connection string at
+      # config-validation time, which would stop the WHOLE collector --
+      # the same failure mode as the HEC placeholders above, so it gets
+      # the same treatment: an inert placeholder default. Until this is
+      # set in .env, Azure exports fail with warnings while everything
+      # else keeps working.
+      # This value embeds an ingestion key and IS a credential. Unlike
+      # the Splunk token it CANNOT be rotated -- remediation for a leak
+      # is a new App Insights resource and losing data continuity.
+      - APPLICATIONINSIGHTS_CONNECTION_STRING=${APPLICATIONINSIGHTS_CONNECTION_STRING:-InstrumentationKey=00000000-0000-0000-0000-000000000000;IngestionEndpoint=https://localhost/}
       - OTEL_DEPLOYMENT_ENV=dev
     volumes:
-      - ./otel-collector-config.yaml:/etc/otelcol/config.yaml:ro
+      # Backend selector -- see the comment above this service.
+      - ${OTEL_COLLECTOR_CONFIG:-./otel-collector-config.yaml}:/etc/otelcol/config.yaml:ro
       - /var/run/docker.sock:/var/run/docker.sock:ro
     restart: unless-stopped
 

@@ -11,7 +11,9 @@
       "Bash(cd /tmp)",
       "Bash(bash --version)",
       "Bash(bash /tmp/t.sh)",
-      "Bash(echo \"exit=$?\")"
+      "Bash(echo \"exit=$?\")",
+      "Bash(docker --version)",
+      "Bash(az version *)"
     ],
     "deny": [
       "Read(./.env)",

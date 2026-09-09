@@ -162,6 +162,7 @@ const { PeriodicExportingMetricReader } = require('@opentelemetry/sdk-metrics');
 const { BatchLogRecordProcessor } = require('@opentelemetry/sdk-logs');
 const { resourceFromAttributes } = require('@opentelemetry/resources');
 const { ATTR_SERVICE_NAME, ATTR_SERVICE_VERSION } = require('@opentelemetry/semantic-conventions');
+const { sessionAttributes } = require('./session-attributes'); // see 1.2b
 
 const otlpEndpoint = process.env.OTEL_EXPORTER_OTLP_ENDPOINT;
 
@@ -173,6 +174,14 @@ const sdkOptions = {
   instrumentations: [
     getNodeAutoInstrumentations({
       '@opentelemetry/instrumentation-fs': { enabled: false }, // too noisy
+
+      // Request-scoped attributes MUST be stamped on the SERVER span, and
+      // this is the hook that guarantees it: incoming-only, and its return
+      // value is applied as the server span is created. See trap 14 -- do
+      // NOT do this from Express middleware with trace.getActiveSpan().
+      '@opentelemetry/instrumentation-http': {
+        startIncomingSpanHook: (request) => sessionAttributes(request.headers),
+      },
     }),
   ],
 };
@@ -200,6 +209,64 @@ process.on('SIGTERM', () => {
   sdk.shutdown().finally(() => process.exit(0));
 });
 ```
+
+## 1.2b Request-scoped attributes (session id, tenant, user) -- get this right
+
+Any attribute you want to slice dashboards by has to be on the **HTTP SERVER
+span**, because that is the span every backend turns into its request record
+(App Insights `requests`, Splunk's `service.request` metric). Put it anywhere
+else and the charts are silently empty.
+
+Keep the derivation in its own pure module, so it can be unit tested --
+instrumentation.js starts the SDK on require and cannot be imported by tests:
+
+```js
+// src/session-attributes.js
+'use strict';
+
+const SESSION_ID_HEADER = 'x-session-id';   // Node lower-cases header names
+const ATTR_SESSION_ID = 'session.id';       // OTel semantic convention
+const MAX_SESSION_ID_LENGTH = 200;
+
+function sessionAttributes(headers) {
+  if (!headers) return {};
+  // A repeated header arrives as an array; take the first value.
+  const raw = headers[SESSION_ID_HEADER];
+  const value = Array.isArray(raw) ? raw[0] : raw;
+  if (typeof value !== 'string') return {};
+  const sessionId = value.trim();
+  // Reject rather than truncate: truncating merges distinct sessions.
+  // This is attacker-influenced input that lands in the telemetry backend
+  // and, once indexed as a metric dimension, its cardinality budget.
+  if (!sessionId || sessionId.length > MAX_SESSION_ID_LENGTH) return {};
+  return { [ATTR_SESSION_ID]: sessionId };
+}
+
+module.exports = { sessionAttributes, SESSION_ID_HEADER, ATTR_SESSION_ID, MAX_SESSION_ID_LENGTH };
+```
+
+Two rules that both cost real debugging time to learn (traps 14 and 15):
+
+1. **Never set it from Express middleware via `trace.getActiveSpan()`.** That
+   returns the middleware layer's own INTERNAL span, not the request.
+2. **Never invent the value when the header is absent.** A generated
+   per-request id is not a session, and it makes every healthcheck look like
+   a distinct user.
+
+Verify it landed in the right place before building any chart on it:
+
+```
+# Splunk (Trace Analyzer): the tag must be present on the SERVER span,
+# not only on a child span. Then index it as a Monitoring MetricSet
+# dimension -- see section 2.6 -- or dashboards still cannot group by it.
+
+# App Insights equivalent, if you also run that backend:
+requests | extend s = tostring(customDimensions['session.id'])
+| summarize total = count(), withSession = countif(isnotempty(s))
+```
+
+`withSession` should equal the number of requests that actually carried the
+header, and no more.
 
 ## 1.3 Logger -- OTel logs API with automatic trace correlation
 
@@ -353,7 +420,7 @@ processors:
       log_record:
         - 'severity_number < SEVERITY_NUMBER_INFO'
   # Sets host.name -- REQUIRED for APM <-> Infrastructure Related Content
-  resourcedetection:
+  resource_detection:
     detectors: [env, system]
     system: { hostname_sources: [os] }
     override: false
@@ -405,15 +472,15 @@ service:
   pipelines:
     traces:
       receivers: [otlp]
-      processors: [resourcedetection, batch, resource/splunk]
+      processors: [resource_detection, batch, resource/splunk]
       exporters: [debug, otlp_http/splunk, spanmetrics]
     metrics:
       receivers: [otlp, docker_stats, hostmetrics, spanmetrics]
-      processors: [resourcedetection, batch, resource/splunk]
+      processors: [resource_detection, batch, resource/splunk]
       exporters: [debug, signalfx]
     logs:
       receivers: [otlp]
-      processors: [filter/logs, resourcedetection, batch, resource/splunk]
+      processors: [filter/logs, resource_detection, batch, resource/splunk]
       exporters: [debug, splunk_hec/logs]
 ```
 
@@ -705,6 +772,14 @@ emitting nothing.
 4. **`splunk_hec` rejects an empty endpoint or token at config validation**,
    stopping the ENTIRE collector including traces and metrics. Use
    non-empty placeholder defaults and run `validate` (section 2.2).
+
+    GENERALISE THIS: any exporter with a required credential field is a
+    whole-collector outage waiting to happen, not just splunk_hec. The
+    same bug exists in azure_monitor's connection_string, and in any
+    vendor exporter you add later. Give EVERY such field a non-empty
+    placeholder default in compose, and run `otelcol validate` before
+    starting. An invalid config takes down every signal, not only the one
+    whose credentials are missing.
 5. **Splunk MetricSets only cover SERVER/CONSUMER spans.** Add the
    `spanmetrics` connector for INTERNAL/CLIENT spans, or priority 4 has
    no data.
@@ -719,6 +794,189 @@ emitting nothing.
     export `SPLUNK_*`. A `.env` edit does not reach a running container:
     use `docker compose up -d --force-recreate <service>`.
 13. **TMS vs MMS** (section 2.6).
+
+14. **`trace.getActiveSpan()` in Express middleware is NOT the server span.**
+    With `@opentelemetry/instrumentation-express` active, each middleware
+    layer gets its own INTERNAL span, and that is what is active inside your
+    handler. So an attribute set there lands on `middleware - <anonymous>`
+    and never reaches the SERVER span. **Every chart that groups a
+    SERVER-span metric by that tag then returns nothing, and no amount of
+    MetricSet indexing fixes it** -- the tag is on the wrong span, so
+    indexing it changes nothing. Measured in the source project: 1773
+    request records, zero carrying the attribute; 382 middleware spans
+    carrying it. Use the http instrumentation's `startIncomingSpanHook`
+    instead (section 1.2b), and confirm the option exists in your installed
+    version:
+    `node_modules/@opentelemetry/instrumentation-http/build/src/types.d.ts`.
+
+15. **Never invent a request-scoped id when the client did not send one.**
+    `req.headers['x-session-id'] || crypto.randomUUID()` looks harmless and
+    poisons every distinct-count: each healthcheck and upstream probe becomes
+    a separate "session". Measured in the source project: 3 real sessions
+    against 307 single-request phantoms, so `dcount` reported 310. Absent
+    means absent -- leave the attribute unset. Also handle the repeated
+    header (Node gives an array) and cap the length, rejecting rather than
+    truncating, since truncation silently merges distinct sessions.
+
+16. **Collector component names: several common ones are deprecated
+    aliases.** They still work, but the collector logs a warning on startup
+    and `otelcol validate` does NOT flag them, so they are invisible unless
+    you read the boot log. On collector 0.160: `cumulativetodelta` ->
+    `cumulative_to_delta`, `resourcedetection` -> `resource_detection`,
+    `hostmetrics` -> `host_metrics`, `spanmetrics` -> `span_metrics`.
+    Going the OTHER way and equally counter-intuitive: **`otlp_http` is the
+    canonical exporter name and `otlphttp` is the deprecated alias**, not
+    the reverse. It looks like a typo. Do not "fix" it.
+
+    Also, OTTL statements in a `transform` processor's `context: datapoint`
+    want the explicit `datapoint.attributes[...]` prefix. The bare
+    `attributes[...]` form works but the collector rewrites it and warns.
+
+17. **In PowerShell, a failing CLI probe aborts the whole setup script.**
+    If you ship bash/PowerShell script pairs, know that Windows PowerShell
+    5.1 wraps a native command's stderr in an ErrorRecord, so under
+    `$ErrorActionPreference = 'Stop'` any CLI call that writes to stderr
+    becomes a TERMINATING error. A "does this resource exist yet?" probe
+    therefore aborts the script on the very first run, and the error message
+    blames the missing resource rather than the redirect. Bash is unaffected
+    (a failing command in an `if` condition does not trigger errexit), which
+    is exactly how such a pair passes review with only the bash half
+    working. Route every CLI call through a helper that sets
+    `$ErrorActionPreference = 'Continue'` for the duration and returns the
+    exit code, and prefer commands that do not error on "absent".
+
+18. **APM MetricSets have NO public API, so design around them.**
+    Dashboards, charts and detectors are fully automatable via
+    `/v2/dashboard`, `/v2/chart` and `/v2/detector`. MetricSets are not:
+    creating a Troubleshooting or Monitoring MetricSet is a UI-only
+    operation (Settings > APM & RUM MetricSets), with no documented REST
+    endpoint and no Terraform resource. This blocks more than it looks
+    like, because a Monitoring MetricSet dimension is what lets a chart
+    GROUP `service.request` by a span tag. "Index the tag" therefore
+    becomes a manual click-path that cannot be committed or reproduced in
+    another org.
+
+    Design around it with the `span_metrics` connector, whose dimensions
+    arrive as real metric dimensions needing no indexing:
+
+        span_metrics:
+          dimensions:
+            - name: gen_ai.operation.name
+            - name: session.id      # read the cardinality note below
+
+    CARDINALITY, stated precisely rather than hand-waved. Every dimension
+    multiplies the metric time series count, so a high-cardinality
+    identifier is dangerous. Two things bound it, both verified by sending
+    spans through a probe collector:
+      - A span that LACKS the attribute has the dimension omitted from its
+        datapoint entirely, not set to empty. So confining an attribute to
+        the server span leaves child spans free.
+      - If the app never fabricates the value (trap 15), unheadered traffic
+        such as healthchecks adds no series at all.
+    Practical cost is roughly (distinct endpoints) x (distinct values).
+    Tens of series for a demo; a bill for a service with 10k concurrent
+    sessions. If you need distinct-count over a high-cardinality identifier
+    at scale, ask a log-based backend, not a dimensional-metrics one.
+
+19. **`Set-Content -Encoding utf8` writes a BOM in PowerShell 5.1.** If the
+    project has an ASCII-only rule for scripts and config, your own tooling
+    will break it. In 5.1 `-Encoding utf8` means UTF-8 WITH BOM, so three
+    bytes (EF BB BF) land at the start of every rewritten file. It is
+    invisible in editors and in `git diff`. It broke this project's tracker:
+    a `#` heading preceded by a BOM stopped matching a title regex, so a
+    file that existed reported as missing.
+
+        # WRONG in 5.1
+        $text | Set-Content file.md -Encoding utf8
+        # Correct, and version-independent
+        [System.IO.File]::WriteAllText($p, $text, (New-Object System.Text.UTF8Encoding($false)))
+
+    PowerShell 7+ defaults to BOM-less UTF-8, so code that is clean on a
+    developer's PS7 can still corrupt files on a 5.1 host. Detect it in
+    whatever check enforces the ASCII rule:
+    `head -c3 file | od -An -tx1 | grep -q 'ef bb bf'`
+
+20. DO NOT GREP COLLECTOR LOGS FOR "error". The debug exporter at
+    verbosity: detailed prints every metric name and attribute value, so a
+    healthy collector emits hundreds of lines containing "error"
+    (system.network.errors, error_class: Str(-), outcome: Str(error)).
+    Measured on the source project: 381 naive matches against ONE real log
+    line, which was benign. The advice sends you hunting a problem that is
+    not there, and would bury a real one.
+
+    The collector logs tab-delimited records with the LEVEL as the second
+    field. Match that field instead:
+
+        docker compose logs otel-collector | awk -F'	' '$2 ~ /^(error|warn|fatal)$/'
+
+    A level histogram makes a better health check than any grep, because it
+    shows what normal looks like:
+
+        docker compose logs otel-collector           | awk -F'	' '$2 ~ /^[a-z]+$/ { c[$2]++ } END { for (l in c) print l, c[l] }'
+
+    Note grep -P is unavailable in some locales, so prefer awk -F'	' over
+    a Perl-regex tab.
+
+21. **`service.request` IS IN NANOSECONDS, AND IT DOUBLE-COUNTS.** Two
+    independent traps in one metric, each producing a plausible-looking
+    dashboard that is quietly wrong.
+
+    UNITS: service.request is nanoseconds, while the spanmetrics connector's
+    traces.span.metrics.duration is MILLISECONDS because you set unit: ms in
+    its config. One dashboard can therefore show ns on one tab and ms on
+    another, both labelled "Latency". Sanity-check against a known value: a
+    P50 of 940,000 for an endpoint you know is sub-millisecond is the tell.
+
+    DOUBLE COUNTING: service.request emits TWO MetricSets -- an
+    endpoint-level one carrying sf_dimensionalized='true', and a
+    service-level one where the property is ABSENT. Both match a filter that
+    does not mention it, so .count().sum() counts every request twice.
+    Measured on the source project over one 10-minute window: 132
+    unfiltered, 66 filtered, 58 in a second backend for the same traffic.
+
+        A = histogram('service.request',
+              filter=filter('sf_service', 'my-service')
+                 and filter('sf_environment', 'dev')
+                 and filter('sf_dimensionalized', 'true')
+            ).count().sum().publish(label='requests')
+
+    Note filter('sf_dimensionalized', 'false') returns ZERO -- the
+    service-level series lacks the property rather than setting it false, so
+    you cannot select the other half by negating.
+
+    What makes it nasty is which charts survive. RATIOS ARE IMMUNE, because
+    numerator and denominator both double, so an error-rate chart looks
+    perfect while the request-count chart beside it is 2x. Percentiles are
+    immune too. Only counts are wrong, so a dashboard can be 80% right and
+    give no hint. This was a live defect across eight charts in the source
+    project, invisible until a second backend sat next to it.
+
+22. **SignalFlow is reachable over PLAIN HTTP -- no websocket client.** The
+    assumption that it needs a streaming client is what stops people
+    automating Splunk reads, and it is wrong. You can read dashboard numbers
+    programmatically for regression checks or backend comparisons:
+
+        POST https://stream.${REALM}.signalfx.com/v2/signalflow/execute
+             ?start=${START_MS}&stop=${STOP_MS}&immediate=true&resolution=60000
+        X-SF-Token: ${TOKEN}
+        Accept: text/event-stream
+        {"programText": "A = data('cpu.utilization').mean().publish(label='v')"}
+
+    Four details that each cost a round of trial and error:
+      - Accept MUST be text/event-stream (or absent, or */*). Sending
+        application/json returns a bare HTTP 406 with no explanation.
+      - immediate=true with a bounded start/stop is what makes it TERMINATE.
+        Without it the response stays open waiting for future data, which is
+        the behaviour mistaken for needing a websocket.
+      - The response is SSE: blocks separated by a blank line, each with an
+        "event:" type and a "data:" JSON payload. Join on tsId -- "metadata"
+        maps tsId to properties including sf_streamLabel (your publish label),
+        and "data" carries {"data":[{"tsId":...,"value":...}]}.
+      - resolution is honoured, but asking for one window-wide bucket
+        produced a boundary artefact (a spurious 1.44e9 point). Prefer a
+        normal resolution and aggregate yourself: SUM counters, but take the
+        MEDIAN of per-interval percentiles, never the mean (see trap 15's
+        reasoning about collapsing statistics).
 
 =============================================================
 Out of scope -- do not attempt

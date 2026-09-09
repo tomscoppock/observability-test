@@ -1,0 +1,151 @@
+{
+  "_comment": [
+    "Backend comparison query set, used by scripts/compare_backends.py to fill",
+    "the measured-numbers table in docs/splunk-vs-azure-monitor.md.",
+    "",
+    "BOTH sides are captured automatically. Azure via the App Insights query",
+    "API; Splunk via POST /v2/signalflow/execute on stream.<realm>.signalfx.com,",
+    "which is plain HTTP Server-Sent Events and terminates on its own when",
+    "given immediate=true with a bounded start/stop. Credentials come from",
+    ".env, exactly as the dashboard REST scripts do.",
+    "",
+    "THREE THINGS THAT MAKE A NAIVE SIDE-BY-SIDE TABLE WRONG, all measured:",
+    "",
+    "1. UNITS DIFFER, AND NOT JUST BETWEEN BACKENDS. Splunk's service.request",
+    "   histogram is in NANOSECONDS, while its own traces.span.metrics.duration",
+    "   is in MILLISECONDS (that unit is set by the span_metrics connector",
+    "   config). Azure's requests.duration is milliseconds. splunkScale below",
+    "   normalises everything to milliseconds. Without it, Service Overview",
+    "   latency reads 1000x high.",
+    "",
+    "2. A PERCENTILE CANNOT BE COLLAPSED BY AVERAGING. Taking the mean of",
+    "   per-interval P90s is not the window P90 -- the same error trap 22",
+    "   records for standard deviation. Asking SignalFlow for one",
+    "   window-wide bucket also produced a boundary artefact (a spurious",
+    "   1.44e9 point). So percentile rows compare the MEDIAN OF PER-INTERVAL",
+    "   percentiles on both sides, and the Azure KQL is written to compute",
+    "   exactly that. Apples to apples, and honest about what it is.",
+    "",
+    "3. DISTINCT-COUNT IS NOT THE SAME QUESTION ON BOTH SIDES. Azure's dcount",
+    "   is a true distinct count over the window. Splunk's dimensional metrics",
+    "   can only give a distinct count per interval, so the best available is",
+    "   the peak. Those are different statistics and the row says so. This is",
+    "   the log-backed versus metric-backed distinction, not a defect.",
+    "",
+    "4. SPLUNK service.request DOUBLE-COUNTS WITHOUT filter('sf_dimensionalized',",
+    "   'true'). It emits an endpoint-level MetricSet carrying that property AND a",
+    "   service-level one where the property is absent; summing both counts every",
+    "   request twice. Measured: 132 unfiltered vs 66 filtered vs 58 in Azure over",
+    "   the same window. Ratios such as error rate escape it because both halves",
+    "   double; counts do not. This was a live defect in splunk/dashboard.json.",
+    "",
+    "splunkAggregate: sum | median | max | mean | ratio",
+    "  ratio expects the program to publish labels 'errors' and 'total', and",
+    "  divides the summed series rather than averaging per-interval ratios."
+  ],
+  "rows": [
+    {
+      "metric": "Request count",
+      "splunkChart": "rag-api Requests",
+      "splunkTab": "Service Overview",
+      "kql": "requests | where cloud_RoleName == 'rag-api' | summarize v = sum(itemCount) | project tostring(v)",
+      "splunkflow": "A = histogram('service.request', filter=filter('sf_service', 'rag-api') and filter('sf_environment', 'dev') and filter('sf_dimensionalized', 'true')).count().sum().publish(label='v')",
+      "splunkAggregate": "sum",
+      "expectation": "Match expected. Both count the same server spans."
+    },
+    {
+      "metric": "Error rate %",
+      "splunkChart": "Error Rate %",
+      "splunkTab": "Service Overview",
+      "kql": "requests | where cloud_RoleName == 'rag-api' | summarize t = sum(itemCount), e = sumif(itemCount, tobool(success) == false) | project tostring(iff(t == 0, 0.0, round(100.0 * e / t, 2)))",
+      "splunkflow": "F = filter('sf_service', 'rag-api') and filter('sf_environment', 'dev') and filter('sf_dimensionalized', 'true')\nA = histogram('service.request', filter=F and filter('sf_error', 'true')).count().sum().publish(label='errors')\nB = histogram('service.request', filter=F).count().sum().publish(label='total')",
+      "splunkAggregate": "ratio",
+      "splunkScale": 100,
+      "expectation": "Match expected. Summed then divided, not averaged per interval."
+    },
+    {
+      "metric": "Service latency P50 (ms)",
+      "splunkChart": "Service Latency (P50/P90/P99)",
+      "splunkTab": "Service Overview",
+      "kql": "requests | where cloud_RoleName == 'rag-api' | summarize p = percentile(duration, 50) by bin(timestamp, 1m) | summarize v = round(percentile(p, 50), 1) | project tostring(v)",
+      "splunkflow": "A = histogram('service.request', filter=filter('sf_service', 'rag-api') and filter('sf_environment', 'dev') and filter('sf_dimensionalized', 'true')).percentile(pct=50).publish(label='v')",
+      "splunkAggregate": "median",
+      "splunkScale": 1e-06,
+      "expectation": "Median of per-minute P50. Splunk service.request is NANOSECONDS, scaled to ms."
+    },
+    {
+      "metric": "Service latency P90 (ms)",
+      "splunkChart": "Service Latency (P50/P90/P99)",
+      "splunkTab": "Service Overview",
+      "kql": "requests | where cloud_RoleName == 'rag-api' | summarize p = percentile(duration, 90) by bin(timestamp, 1m) | summarize v = round(percentile(p, 50), 1) | project tostring(v)",
+      "splunkflow": "A = histogram('service.request', filter=filter('sf_service', 'rag-api') and filter('sf_environment', 'dev') and filter('sf_dimensionalized', 'true')).percentile(pct=90).publish(label='v')",
+      "splunkAggregate": "median",
+      "splunkScale": 1e-06,
+      "expectation": "Divergence expected: Splunk interpolates within histogram buckets."
+    },
+    {
+      "metric": "Service latency P99 (ms)",
+      "splunkChart": "Service Latency (P50/P90/P99)",
+      "splunkTab": "Service Overview",
+      "kql": "requests | where cloud_RoleName == 'rag-api' | summarize p = percentile(duration, 99) by bin(timestamp, 1m) | summarize v = round(percentile(p, 50), 1) | project tostring(v)",
+      "splunkflow": "A = histogram('service.request', filter=filter('sf_service', 'rag-api') and filter('sf_environment', 'dev') and filter('sf_dimensionalized', 'true')).percentile(pct=99).publish(label='v')",
+      "splunkAggregate": "median",
+      "splunkScale": 1e-06,
+      "expectation": "Largest divergence expected, for the same reason."
+    },
+    {
+      "metric": "LLM call latency P90 (ms)",
+      "splunkChart": "LLM Call Latency (P50/P90/P99)",
+      "splunkTab": "LLM and AI",
+      "kql": "dependencies | where cloud_RoleName == 'rag-api' | where tostring(customDimensions['gen_ai.operation.name']) == 'chat' | summarize p = percentile(duration, 90) by bin(timestamp, 1m) | summarize v = round(percentile(p, 50), 1) | project tostring(v)",
+      "splunkflow": "A = histogram('traces.span.metrics.duration', filter=filter('service.name', 'rag-api') and filter('gen_ai.operation.name', 'chat')).percentile(pct=90).publish(label='v')",
+      "splunkAggregate": "median",
+      "expectation": "span_metrics duration is ALREADY milliseconds, so no scaling. Divergence from bucket interpolation: LLM latencies land in the 2s-to-5s bucket."
+    },
+    {
+      "metric": "Vector search P50 (ms)",
+      "splunkChart": "Vector Search Latency (P50/P90)",
+      "splunkTab": "RAG Pipeline",
+      "kql": "dependencies | where cloud_RoleName == 'rag-api' and name == 'db.vectorSearch' | summarize p = percentile(duration, 50) by bin(timestamp, 1m) | summarize v = round(percentile(p, 50), 1) | project tostring(v)",
+      "splunkflow": "A = histogram('traces.span.metrics.duration', filter=filter('service.name', 'rag-api') and filter('span.name', 'db.vectorSearch')).percentile(pct=50).publish(label='v')",
+      "splunkAggregate": "median",
+      "expectation": "Both read the same span durations in ms; divergence from interpolation only."
+    },
+    {
+      "metric": "Total input tokens",
+      "splunkChart": "Total Input Tokens",
+      "splunkTab": "LLM and AI",
+      "kql": "customMetrics | where name == 'gen_ai.client.token.count' and cloud_RoleName == 'rag-api' | where tostring(customDimensions['gen_ai.token.type']) == 'input' | summarize v = tolong(sum(valueSum)) | project tostring(v)",
+      "splunkflow": "A = data('gen_ai.client.token.count', filter=filter('gen_ai.token.type', 'input') and filter('service.name', 'rag-api'), rollup='delta').sum().publish(label='v')",
+      "splunkAggregate": "sum",
+      "expectation": "Match expected. Both sum a delta counter over the window."
+    },
+    {
+      "metric": "Total output tokens",
+      "splunkChart": "Total Output Tokens",
+      "splunkTab": "LLM and AI",
+      "kql": "customMetrics | where name == 'gen_ai.client.token.count' and cloud_RoleName == 'rag-api' | where tostring(customDimensions['gen_ai.token.type']) == 'output' | summarize v = tolong(sum(valueSum)) | project tostring(v)",
+      "splunkflow": "A = data('gen_ai.client.token.count', filter=filter('gen_ai.token.type', 'output') and filter('service.name', 'rag-api'), rollup='delta').sum().publish(label='v')",
+      "splunkAggregate": "sum",
+      "expectation": "Same. Note the dashboard chart hardcodes a 4h window; this query does not."
+    },
+    {
+      "metric": "db.vectorSearch calls",
+      "splunkChart": "DB Operation Breakdown",
+      "splunkTab": "RAG Pipeline",
+      "kql": "dependencies | where cloud_RoleName == 'rag-api' and name == 'db.vectorSearch' | summarize v = sum(itemCount) | project tostring(v)",
+      "splunkflow": "A = data('traces.span.metrics.calls', filter=filter('service.name', 'rag-api') and filter('span.name', 'db.vectorSearch')).sum().publish(label='v')",
+      "splunkAggregate": "sum",
+      "expectation": "Match expected."
+    },
+    {
+      "metric": "Active sessions",
+      "splunkChart": "Active Sessions",
+      "splunkTab": "RAG Pipeline",
+      "kql": "requests | where cloud_RoleName == 'rag-api' | extend s = tostring(customDimensions['session.id']) | where isnotempty(s) | summarize v = dcount(s) | project tostring(v)",
+      "splunkflow": "A = data('traces.span.metrics.calls', filter=filter('service.name', 'rag-api') and filter('span.kind', 'SPAN_KIND_SERVER') and filter('session.id', '*')).sum(by=['session.id']).count().publish(label='v')",
+      "splunkAggregate": "max",
+      "expectation": "NOT THE SAME STATISTIC. Azure is a true distinct count over the window; Splunk's dimensional metrics can only count distinct per interval, so this is the peak. Splunk <= Azure is expected and correct, not a defect. See section 6."
+    }
+  ]
+}

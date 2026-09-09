@@ -13,6 +13,22 @@ Each section includes:
 
 ## Pre-demo preparation
 
+**0. Confirm the collector is healthy before anything else.** Match the
+tab-delimited LEVEL field. Grepping for the word "error" matches hundreds of
+metric names and attribute values from the debug exporter, not log lines
+(measured: 381 naive matches against one real line on a healthy stack).
+
+```bash
+docker compose logs otel-collector | awk -F'	' '$2 ~ /^(error|warn|fatal)$/'
+```
+
+```powershell
+docker compose logs otel-collector | Select-String -Pattern "`t(error|warn|fatal)`t"
+```
+
+One `warn` about `root_path` from `host_metrics` is expected in Docker and is
+harmless. Anything else, stop and fix it before presenting.
+
 > **Before presenting**, generate telemetry data so the service map and
 > dashboard charts have data to show. The easiest way is the automated
 > simulation script:
@@ -187,6 +203,25 @@ rate is the primary quality signal. And latency percentiles show us
 both typical experience (P50) and worst-case (P99). A widening gap
 between P50 and P99 is a red flag for inconsistent performance."
 
+> **Presenter note -- two corrections landed on this tab, worth knowing if
+> anyone has seen an older screenshot.**
+>
+> These charts used to count every request **twice**. `service.request`
+> emits two MetricSets for the same traffic, an endpoint-level one carrying
+> `sf_dimensionalized='true'` and a service-level one where that property is
+> absent, and a filter that does not mention it matches both. All eight
+> affected charts now filter on it. Measured: 132 unfiltered versus 66
+> filtered versus 58 in Azure for the same window. Note that Error Rate %
+> was always correct, because a ratio doubles top and bottom -- which is
+> exactly why the defect survived so long.
+>
+> Also, **the latency numbers on this tab are nanoseconds**, while the RAG
+> Pipeline and LLM tabs are milliseconds. `service.request` is nanoseconds;
+> the spanmetrics connector sets `unit: ms`. Splunk renders the shape
+> correctly either way, so trends are trustworthy and only the absolute
+> value needs care. Both traps are written up in `docs/splunk-setup.md`
+> section 27.
+
 **[SHOW]** Switch to the **RAG Pipeline** tab. Point to the pipeline
 breakdown charts.
 
@@ -206,6 +241,30 @@ embedding generation is the bottleneck there, because we're embedding
 multiple chunks in a single API call. This kind of per-step visibility
 is only possible because we use OpenTelemetry's manual instrumentation
 alongside the auto-instrumentation."
+
+**[CHART]** `Active Sessions` (RAG Pipeline tab)
+
+**[SAY]** "Distinct user sessions in the window, counted from a span
+attribute the application sets from an `X-Session-Id` header."
+
+> **Presenter note -- this chart has a story, and it is a good one.** It read
+> zero for a long time, and the cause was in the application rather than in
+> Splunk. The API set `session.id` from Express middleware using
+> `trace.getActiveSpan()`, which returns the *middleware* span rather than
+> the HTTP server span, so the tag never reached the request. **The same bug
+> broke the equivalent Azure Monitor chart identically**, which is the tell:
+> when one chart is empty on two independent backends, suspect the
+> instrumentation, not the vendor.
+>
+> Fixing it needed a second step here that Azure did not need. Grouping
+> `service.request` by a span tag requires indexing it as a Monitoring
+> MetricSet dimension, and Splunk has **no public API for MetricSets** --
+> it is a UI-only operation. So the chart reads the spanmetrics connector
+> instead, where a configured dimension arrives as a real metric dimension.
+> That keeps the whole dashboard deployable as code. If asked about
+> cardinality: the app sets the tag on server spans only and never invents
+> one, which bounds the cost. See `docs/splunk-vs-azure-monitor.md`
+> section 6.
 
 **[CHART]** `Top Endpoints` (Service Overview tab)
 
@@ -675,6 +734,12 @@ This is what production-ready AI observability looks like. Thank you."
 
 ## Chart name reference
 
+Chart names must match `splunk/dashboard.json` exactly. Run
+`python3 scripts/check_talk_tracks.py` after any dashboard change: it fails
+on a name that does not exist, a chart missing from these tables, and a
+per-tab count that does not match reality. This table drifted to 26 charts
+against a 31-chart dashboard before that check existed.
+
 The following chart names must match exactly between this talk track
 and the dashboard automation script (`splunk/dashboard.json`). Charts
 are organised across 4 dashboard tabs.
@@ -704,26 +769,31 @@ are organised across 4 dashboard tabs.
 | 14 | Vector Search Latency (P50/P90) | S2: RAG Pipeline |
 | 15 | Active Sessions | S2: RAG Pipeline |
 
-### LLM and AI (5 charts)
+### LLM and AI (10 charts)
 
 | # | Chart name | Talk track section |
 |---|---|---|
-| 16 | Total Input Tokens | S3: Token Economics |
-| 17 | Total Output Tokens | S3: Token Economics |
-| 18 | Token Usage Over Time | S3: Token Economics |
-| 19 | LLM Call Latency (P50/P90/P99) | S3: Token Economics |
-| 20 | Embedding API Latency | S3: Token Economics |
+| 16 | LLM Provider and Model | S3: Token Economics |
+| 17 | Embedding Model | S3: Token Economics |
+| 18 | Total Input Tokens | S3: Token Economics |
+| 19 | Total Output Tokens | S3: Token Economics |
+| 20 | Token Usage Over Time | S3: Token Economics |
+| 21 | LLM Tokens Over Time | S3: Token Economics |
+| 22 | Embedding Tokens Over Time | S3: Token Economics |
+| 23 | LLM Call Latency (P50/P90/P99) | S3: Token Economics |
+| 24 | Embedding API Latency | S3: Token Economics |
+| 25 | Response Length Over Time | S6: Quality and Eval Monitoring |
 
 ### Infrastructure (6 charts)
 
 | # | Chart name | Talk track section |
 |---|---|---|
-| 21 | Container CPU Usage | S1: Infrastructure |
-| 22 | Container Memory Usage | S1: Infrastructure |
-| 23 | Container Network I/O | S1: Infrastructure |
-| 24 | SurrealDB Process Health | S1: Infrastructure |
-| 25 | SurrealDB Transaction Rate | S1: Infrastructure |
-| 26 | SurrealDB HTTP Activity | S1: Infrastructure |
+| 26 | Container CPU Usage | S1: Infrastructure |
+| 27 | Container Memory Usage | S1: Infrastructure |
+| 28 | Container Network I/O | S1: Infrastructure |
+| 29 | SurrealDB Process Health | S1: Infrastructure |
+| 30 | SurrealDB Transaction Rate | S1: Infrastructure |
+| 31 | SurrealDB HTTP Activity | S1: Infrastructure |
 
 > **Note:** Charts 21-23 use the OTel Collector's `docker_stats`
 > receiver, which reads container metrics from the Docker daemon
@@ -732,4 +802,4 @@ are organised across 4 dashboard tabs.
 
 ---
 
-*Last updated: 2026-09-08*
+*Last updated: 2026-09-09*

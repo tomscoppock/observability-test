@@ -1,0 +1,34 @@
+=============================================================
+Out of scope -- do not attempt
+=============================================================
+
+- **Splunk APM > AI Agent Monitoring.** Documented instrumentation is
+  Python-only (`splunk-otel-util-genai`); no Node.js path exists. It also
+  expects `invoke_agent`/`invoke_workflow`/`execute_tool` span semantics.
+  **If this repo is Python and has real agent/workflow structure, say so:
+  it may be reachable, and that changes the plan.**
+- **Splunk-side LLM evals** (hallucination, toxicity, relevance). Needs a
+  platform licence AND shipping prompt/response content to Splunk. That
+  content is PII, so it is a data protection review, not a config toggle.
+  Flag it, do not enable it.
+- **Log Observer Connect.** Needs a licensed non-trial Splunk platform.
+
+Prefer a local eval harness instead: a golden question set run against
+the live agent, checking expected sources and required phrases, plus the
+drift detectors in 2.5. That covers regression and drift without sending
+a single prompt off the stack.
+
+=============================================================
+What I want from you
+=============================================================
+
+1. Audit this repo: what exists, what is missing, what conflicts.
+2. Ask me about the runtime/language, which MCP servers are in use,
+   whether SurrealDB is already emitting OTLP, and whether a Splunk
+   platform licence is available.
+3. Propose a plan covering the four priorities, stating for each numbered
+   trap how it is handled or why it does not apply.
+4. Give each priority a verification step that proves data reached
+   Splunk, not merely that code runs. "Tests pass" is not evidence for
+   telemetry: the sister project had 63 passing tests while emitting zero
+   logs for weeks.

@@ -2,7 +2,7 @@
 
 > Rebuilding this in another project? Read the
 > [Implementation Playbook](implementation-playbook.md) first. It carries
-> the transferable patterns plus 13 silent-failure traps, including one
+> the transferable patterns plus 33 traps, including one
 > that discarded 100% of logs while all tests passed.
 
 ## Overview
@@ -187,7 +187,12 @@ for filtering commands.
 After setting `SPLUNK_ACCESS_TOKEN` and `SPLUNK_REALM` in `.env`:
 
 1. Restart the collector: `docker compose up -d --force-recreate otel-collector`
-2. Check for export errors: `docker compose logs otel-collector | findstr "error"`
+2. Check for export errors by matching the tab-delimited LEVEL field, not
+   the word "error" -- the `debug` exporter prints every metric name and
+   attribute at `verbosity: detailed`, so a plain search returns hundreds of
+   false positives:
+   `docker compose logs otel-collector | Select-String -Pattern "`t(error|warn|fatal)`t"`
+   (bash: `docker compose logs otel-collector | awk -F'	' '$2 ~ /^(error|warn|fatal)$/'`)
 3. Open Splunk Observability Cloud -> APM -> look for service `rag-api`
 4. Check Infrastructure Monitoring for metrics from `rag-api`
 
@@ -197,13 +202,37 @@ not Observability Cloud), set the four `SPLUNK_HEC_*` variables and run
 connection and redeploys the collector. See
 [docs/splunk-setup.md](splunk-setup.md#log-observer-connect-splunk-cloud-platform).
 
-### Adding Azure Monitor exporter (future)
+### Azure Monitor as a parallel backend
+
+Azure Monitor is wired up as a selectable second destination. The collector
+can export to Splunk only, Azure Monitor only, or both in parallel, chosen by
+`OTEL_COLLECTOR_CONFIG` in `.env`:
+
+| Value | Backend |
+|---|---|
+| `./otel-collector-config.yaml` (default) | Splunk only |
+| `./otel-collector-config.azure.yaml` | Azure Monitor only |
+| `./otel-collector-config.dual.yaml` | Both, in parallel |
 
 ```yaml
 exporters:
-  azuremonitor:
+  # Note the UNDERSCORE. The component type is azure_monitor;
+  # "azuremonitor" is not a valid type and fails config validation,
+  # which stops the whole collector.
+  azure_monitor:
     connection_string: "${APPLICATIONINSIGHTS_CONNECTION_STRING}"
+    spaneventsenabled: true
 ```
+
+Collector pipelines fan out to every exporter listed, so in dual mode both
+backends receive byte-identical telemetry from one traffic run. The metrics
+signal is the exception and is split into `metrics/splunk` and `metrics/azure`
+pipelines, because the two backends need different inputs: `spanmetrics` and
+`hostmetrics` are Splunk-only, and `cumulative_to_delta` is Azure-only.
+
+See [docs/azure-monitor-setup.md](azure-monitor-setup.md) for setup and
+[docs/splunk-vs-azure-monitor.md](splunk-vs-azure-monitor.md) for where the
+two backends genuinely differ.
 
 ## Package versions
 

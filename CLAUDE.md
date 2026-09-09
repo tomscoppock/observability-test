@@ -101,6 +101,12 @@ python3 scripts/generate_board.py
 
 # Validate board data
 python3 scripts/validate_board.py
+
+# Verify demo talk tracks against the dashboards they describe
+python3 scripts/check_talk_tracks.py
+
+# Capture the Azure side of the backend comparison table
+python3 scripts/compare_backends.py --offset 1h --markdown
 ```
 
 ### Key conventions

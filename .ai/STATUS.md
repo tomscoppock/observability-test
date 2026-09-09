@@ -1,8 +1,40 @@
 # Project Status
 
-Last updated: 2026-09-08
+Last updated: 2026-09-09
 
 ## Active work (per person)
+
+- **Epic 042 -- Azure Monitor as a parallel observability backend (@tom)** --
+  **five of six children shipped 2026-09-09.** 043 (collector dual-export),
+  044 (setup docs), 045 (workbook + alert rules, runtime-validated), 046
+  (parity findings with real measured figures) and 048 (learnings prompts)
+  are all in `.ai/done/`. The epic stays open on **047 alone**.
+
+  Working against the live tenant: resource group, Log Analytics workspace and
+  App Insights created; workbook and three drift rules deployed; all 32
+  workbook queries run and return rows; both backends compared over one shared
+  window with counters matching exactly.
+
+  **047 -- Azure demo talk track** is written and everything mechanically
+  checkable is green (`scripts/check_talk_tracks.py` reports zero errors
+  against `azure/workbook.json`). The only outstanding gate is a human
+  clicking through the Azure portal after a simulator run, to confirm the
+  named controls exist. Same class of gate 041 still holds for the Splunk
+  track. Checklist is in the task file.
+
+  Application code was changed once under this epic, deliberately and against
+  the original scope: the `session.id` instrumentation defect. It was setting
+  the attribute on the Express middleware span rather than the HTTP server
+  span, which broke the same chart on BOTH backends and could not honestly be
+  worked around in either dashboard. Fixed in `api/src/session-attributes.js`.
+
+  Splunk-side work done under this epic, beyond the Azure deliverables:
+  eight dashboard charts fixed for double counting, the Active Sessions chart
+  rewritten onto `span_metrics`, deprecated collector aliases migrated, and
+  `docs/splunk-setup.md` section 27 plus talk-track presenter notes added.
+
+- **041 -- Talk track click paths (@tom)** -- doc edits complete, awaiting
+  live-tenant verification. Unchanged by 042.
 
 - **041 -- Talk track click paths (@tom)** -- doc edits complete, awaiting
   live-tenant verification. Rewrote every `[SHOW]` in
@@ -16,6 +48,13 @@ Last updated: 2026-09-08
   task file.
 
 ## Recently completed
+
+- Epic 042 -- Azure Monitor as a parallel backend (@tom) -- **5 of 6 done 2026-09-09**
+  - 043 -- Collector dual-export plumbing (@tom) -- done 2026-09-09
+  - 044 -- Azure Monitor configuration documentation (@tom) -- done 2026-09-09
+  - 045 -- Azure Workbook and alert rules as code (@tom) -- done 2026-09-09 (runtime-validated: 32/32 queries return rows)
+  - 046 -- Splunk vs Azure Monitor parity findings (@tom) -- done 2026-09-09 (real measured figures, counters match exactly)
+  - 048 -- Learnings prompts (@tom) -- done 2026-09-09 (playbook now 33 traps; 040 at 22, 048 prompt A at 20)
 
 - Epic 025 -- Splunk demo and dashboard automation (@tom) -- **done 2026-09-08**
 - 039 -- Populate Splunk OOTB features via standard OTel (@tom) -- done 2026-09-08
@@ -98,6 +137,37 @@ Last updated: 2026-09-08
   Knowledge Discovery repo. Re-raise those in that repo's tracker when
   the work starts; nothing further is actionable here.
 
+### azure-monitor
+
+**Epic 042 -- Azure Monitor as a parallel observability backend** (@tom).
+Fold Azure Monitor in as a second destination so the same traffic and the
+same traces can be compared against Splunk like for like, without
+disturbing the Splunk setup. Six children, all authored 2026-09-09:
+
+- **043 -- Collector dual-export plumbing** (high). Three config files
+  selected by `OTEL_COLLECTOR_CONFIG`; `azure_monitor` exporter,
+  `cumulative_to_delta`, `transform/azure_dims`; split metrics pipelines in
+  dual mode. No application code changed. Both new configs validate.
+- **044 -- Azure Monitor configuration documentation** (high).
+  `docs/azure-monitor-setup.md`, including the native-OTLP-plus-Entra
+  production track documented but not built.
+- **045 -- Azure Workbook and alert rules as code** (high). `azure/`
+  workbook JSON plus two Bicep templates, and four setup scripts
+  (provisioning and workbook deployment, bash and PowerShell). Blocked by
+  043. **Carries the six-item runtime validation checklist.**
+- **046 -- Splunk vs Azure Monitor parity findings** (high).
+  `docs/splunk-vs-azure-monitor.md`. Written up with every claim labelled
+  Verified / Reasoned / Unverified. Blocked by 043 and 045 for the
+  measured-numbers table.
+- **047 -- Azure Monitor demo talk track** (medium).
+  `docs/demo-talk-track-azure.md`, runnable off the same simulator
+  invocation as the Splunk deck. Blocked by 045 for live walkthrough.
+- **048 -- Learnings prompts** (medium). Two pasteable coding-agent
+  prompts, plus Part 3 and traps 14-22 added to
+  `docs/implementation-playbook.md`. Prompt B's leading finding is that
+  `playwright-mcp` needs no changes at all, because it already exports to
+  the shared collector and pipelines fan out.
+
 ### rag-agent (backlog)
 
 - 034 -- Web search toggle (low)
@@ -127,7 +197,7 @@ record, both established empirically and documented in
 
 ## Numbering
 
-Next free backlog/epic/task number: **042**
+Next free backlog/epic/task number: **049**
 
 <!-- Increment every time a numbered item is created in backlog/,
      in-progress/, epics/, or done/. Numbers are never reused. -->
