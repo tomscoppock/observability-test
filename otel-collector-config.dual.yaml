@@ -91,7 +91,11 @@ processors:
     error_mode: ignore
     logs:
       log_record:
-        - 'severity_number < SEVERITY_NUMBER_INFO'
+        # Drop below-INFO noise, but NEVER drop a GenAI event. Those carry
+        # event.name and the reference implementation leaves their severity
+        # UNSPECIFIED(0), so a bare severity floor silently deletes exactly
+        # the records Splunk's AI screens are built from.
+        - 'severity_number < SEVERITY_NUMBER_INFO and attributes["event.name"] == nil'
 
   # Current component name. The baseline Splunk config still uses the
   # older one-word spelling, which collector 0.160 logs as a deprecated
@@ -109,6 +113,12 @@ processors:
   resource/deployment_env:
     attributes:
       - key: deployment.environment
+        value: "${OTEL_DEPLOYMENT_ENV}"
+        action: upsert
+      # Current semantic convention spelling. Splunk's AI agent monitoring
+      # docs ask for this one; the APM environment picker has always used
+      # the older key above. Send both until the vendor finishes migrating.
+      - key: deployment.environment.name
         value: "${OTEL_DEPLOYMENT_ENV}"
         action: upsert
 

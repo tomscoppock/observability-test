@@ -650,16 +650,49 @@ SILENT: the system reports itself healthy while emitting nothing.
 Out of scope -- do not attempt
 =============================================================
 
-- **Splunk APM > AI Agent Monitoring.** Documented instrumentation is
-  Python-only (`splunk-otel-util-genai`); no Node.js path exists. It also
-  expects `invoke_agent`/`invoke_workflow`/`execute_tool` span semantics.
-  **If this repo is Python and has real agent/workflow structure, say so:
-  it may be reachable, and that changes the plan.**
-- **Splunk-side LLM evals** (hallucination, toxicity, relevance). Needs a
-  platform licence AND shipping prompt/response content to Splunk. That
-  content is PII, so it is a data protection review, not a config toggle.
-  Flag it, do not enable it.
 - **Log Observer Connect.** Needs a licensed non-trial Splunk platform.
+
+CORRECTED, 2026-09-10. Two items that used to sit in this out-of-scope
+list were wrong, and the corrections are worth more than the original
+advice:
+
+- **Splunk AI Agent Monitoring is NOT Python-only and NOT licence-gated.**
+  The documentation is Python-shaped (`splunk-otel-util-genai`), which is
+  what led to the wrong conclusion. The actual requirement is span
+  attributes, and any language can emit those. Verified working from a
+  hand-instrumented Node service.
+- **Splunk-side LLM evals do not need a platform licence.** They need
+  prompt/response content on the spans, plus the LLM Providers integration
+  under Data Management > Available integrations, which is self-service.
+  The PII point stands and is the real gate: enabling content capture ships
+  prompts and answers to your backend, so it is a data protection decision.
+  Keep it behind `OTEL_INSTRUMENTATION_GENAI_CAPTURE_MESSAGE_CONTENT`,
+  default off. See prompt 02 for the content schema, which is normative and
+  will break the vendor UI if you get it wrong.
+
+IN SCOPE, and cheap: declare your agent boundary.
+
+  Vendor AI overview pages count AGENTS, not LLM calls. Splunk's Requests
+  tile is literally `count(agents)`, so a service emitting perfect
+  `gen_ai.*` chat spans still shows an entirely zero AI overview page if no
+  span says "an agent ran here". If your service has a pipeline span that
+  orchestrates retrieval and generation, that span IS the agent boundary:
+
+      span.setAttributes({
+        'gen_ai.operation.name': 'invoke_agent',
+        'gen_ai.agent.name': 'hr-policy-assistant',
+      });
+
+  The conventions also want the span NAME to be
+  `invoke_agent {gen_ai.agent.name}`. Decide that deliberately: renaming an
+  existing pipeline span breaks every dashboard query that matches on the
+  old name. Emit the attributes first, and rename only if the backend
+  proves it needs it.
+
+  Do not fabricate `gen_ai.agent.id`. It is meant to be a provider-assigned
+  identifier for a hosted agent. If your agent is not provider-hosted there
+  is no id, and inventing one produces something that looks authoritative
+  and correlates with nothing.
 
 Prefer a local eval harness instead: a golden question set run against
 the live agent, checking expected sources and required phrases, plus the

@@ -29,6 +29,7 @@
 const { trace, SpanKind, metrics } = require('@opentelemetry/api');
 const logger = require('./logger');
 const { buildUrl, buildHeaders } = require('./api-client');
+const { recordOperationDuration, errorType, TOKEN_BUCKETS } = require('./genai-metrics');
 
 const tracer = trace.getTracer('rag-api.embeddings', '0.1.0');
 const meter = metrics.getMeter('rag-api.embeddings', '0.1.0');
@@ -38,6 +39,8 @@ const meter = metrics.getMeter('rag-api.embeddings', '0.1.0');
 const tokenUsageHistogram = meter.createHistogram('gen_ai.client.token.usage', {
   description: 'Measures number of input and output tokens used',
   unit: '{token}',
+  // Conventional boundaries -- see the note in llm.js and genai-metrics.js.
+  advice: { explicitBucketBoundaries: TOKEN_BUCKETS },
 });
 
 // Counter companion -- simpler metric type that works reliably with
@@ -62,6 +65,7 @@ async function embedTexts(texts) {
     ? parseInt(process.env.EMBEDDING_DIMENSIONS, 10)
     : undefined;
   const parsedUrl = new URL(baseUrl);
+  const startMs = Date.now();
 
   // Span name per gen_ai semconv: "{operation} {model}"
   const spanName = `embeddings ${model}`;
@@ -145,12 +149,31 @@ async function embedTexts(texts) {
         promptTokens: inputTokens,
       });
 
+      recordOperationDuration({
+        startMs,
+        operationName: 'embeddings',
+        provider,
+        requestModel: model,
+        responseModel: data.model || model,
+        serverAddress: parsedUrl.hostname,
+        serverPort: parseInt(parsedUrl.port, 10)
+          || (parsedUrl.protocol === 'https:' ? 443 : 80),
+      });
+
       return embeddings;
     } catch (err) {
       span.setStatus({ code: 2, message: err.message });
       span.setAttribute('error.type', err.name || 'Error');
       span.recordException(err);
       logger.error('Embedding API call failed', { error: err.message });
+      recordOperationDuration({
+        startMs,
+        operationName: 'embeddings',
+        provider,
+        requestModel: model,
+        serverAddress: parsedUrl.hostname,
+        errorType: errorType(err),
+      });
       throw err;
     } finally {
       span.end();

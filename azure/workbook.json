@@ -300,7 +300,7 @@
             "type": 3,
             "content": {
               "version": "KqlItem/1.0",
-              "query": "let bin_ = {TimeRange:grain};\ndependencies\n| where cloud_RoleName == 'rag-api'\n| extend genai_op = tostring(customDimensions['gen_ai.operation.name'])\n| extend Step = case(\n    name in ('chat.pipeline', 'chat.pipeline.stream'), 'Total Chat',\n    name == 'db.vectorSearch',                         'Vector Search',\n    genai_op == 'chat',                                'LLM Completion',\n    genai_op == 'embeddings',                          'Query Embedding',\n    '')\n| where Step != ''\n| summarize P50 = percentile(duration, 50) by bin(timestamp, bin_), Step\n| order by timestamp asc",
+              "query": "let bin_ = {TimeRange:grain};\ndependencies\n| where cloud_RoleName == 'rag-api'\n| extend genai_op = tostring(customDimensions['gen_ai.operation.name'])\n| extend Step = case(\n    name startswith 'invoke_agent', 'Total Chat',\n    name == 'db.vectorSearch',                         'Vector Search',\n    genai_op == 'chat',                                'LLM Completion',\n    genai_op == 'embeddings',                          'Query Embedding',\n    '')\n| where Step != ''\n| summarize P50 = percentile(duration, 50) by bin(timestamp, bin_), Step\n| order by timestamp asc",
               "size": 0,
               "title": "RAG chat pipeline latency, P50 by step (ms)",
               "timeContextFromParameter": "TimeRange",

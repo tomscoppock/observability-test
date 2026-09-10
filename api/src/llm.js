@@ -30,6 +30,9 @@
 const { trace, SpanKind, metrics } = require('@opentelemetry/api');
 const logger = require('./logger');
 const { contentAttributes } = require('./genai-content');
+const { recordOperationDuration, errorType, TOKEN_BUCKETS } = require('./genai-metrics');
+const { emitOperationDetails } = require('./genai-events');
+const { inheritedAttributes } = require('./genai-context');
 const { buildUrl, buildHeaders } = require('./api-client');
 
 const tracer = trace.getTracer('rag-api.llm', '0.1.0');
@@ -40,6 +43,10 @@ const meter = metrics.getMeter('rag-api.llm', '0.1.0');
 const tokenUsageHistogram = meter.createHistogram('gen_ai.client.token.usage', {
   description: 'Measures number of input and output tokens used',
   unit: '{token}',
+  // The conventions specify these boundaries. The OTel defaults are tuned
+  // for millisecond latencies and bucket nearly every token count
+  // together, which flattens the percentiles Splunk's AI overview charts.
+  advice: { explicitBucketBoundaries: TOKEN_BUCKETS },
 });
 
 // Counter companion -- simpler metric type that works reliably with
@@ -63,7 +70,7 @@ const responseLengthHistogram = meter.createHistogram('gen_ai.client.response.le
  * @param {{ role: string, content: string }[]} messages  Chat messages array.
  * @returns {Promise<{ content: string, promptTokens: number, completionTokens: number }>}
  */
-async function chatCompletion(messages) {
+async function chatCompletion(messages, owner) {
   const baseUrl = process.env.LLM_API_BASE_URL || 'https://api.openai.com/v1';
   const apiKey = process.env.LLM_API_KEY || '';
   const model = process.env.LLM_MODEL || 'gpt-4o-mini';
@@ -75,6 +82,7 @@ async function chatCompletion(messages) {
   // Span name per gen_ai semconv: "{operation} {model}"
   const spanName = `chat ${model}`;
 
+  const startMs = Date.now();
   return tracer.startActiveSpan(spanName, { kind: SpanKind.CLIENT }, async (span) => {
     span.setAttributes({
       'gen_ai.operation.name': 'chat',
@@ -86,6 +94,10 @@ async function chatCompletion(messages) {
       'gen_ai.request.input_count': messages.length,
       'server.address': parsedUrl.hostname,
       'server.port': parseInt(parsedUrl.port, 10) || (parsedUrl.protocol === 'https:' ? 443 : 80),
+    ...inheritedAttributes(owner),
+      // Which agent and workflow this call belongs to. Splunk aggregates
+      // its agent screens on these, not on span nesting.
+      ...inheritedAttributes(owner),
       // Prompt content, only when explicitly enabled. Off by default.
       ...contentAttributes({ messages }),
     });
@@ -189,12 +201,47 @@ async function chatCompletion(messages) {
         responseId: data.id,
       });
 
+      // The event Splunk's AI screens actually read. No-op unless content
+      // capture is set to an event mode. See genai-events.js.
+      emitOperationDetails({
+        messages,
+        output: content,
+        operationName: 'chat',
+        provider,
+        requestModel: model,
+        responseModel: data.model || model,
+        responseId: data.id,
+        inputTokens: promptTokens,
+        outputTokens: completionTokens,
+        framework: 'in-house',
+        agentName: owner && owner.agentName,
+      });
+
+      recordOperationDuration({
+        startMs,
+        operationName: 'chat',
+        provider,
+        requestModel: model,
+        responseModel: data.model || model,
+        serverAddress: parsedUrl.hostname,
+        serverPort: parseInt(parsedUrl.port, 10)
+          || (parsedUrl.protocol === 'https:' ? 443 : 80),
+      });
+
       return { content, promptTokens, completionTokens };
     } catch (err) {
       span.setStatus({ code: 2, message: err.message });
       span.setAttribute('error.type', err.name || 'Error');
       span.recordException(err);
       logger.error('LLM API call failed', { error: err.message });
+      recordOperationDuration({
+        startMs,
+        operationName: 'chat',
+        provider,
+        requestModel: model,
+        serverAddress: parsedUrl.hostname,
+        errorType: errorType(err),
+      });
       throw err;
     } finally {
       span.end();
@@ -218,7 +265,7 @@ async function chatCompletion(messages) {
  * @param {{ role: string, content: string }[]} messages
  * @returns {Promise<{ stream: ReadableStream, span: object, model: string, provider: string }>}
  */
-async function chatCompletionStream(messages) {
+async function chatCompletionStream(messages, owner) {
   const baseUrl = process.env.LLM_API_BASE_URL || 'https://api.openai.com/v1';
   const apiKey = process.env.LLM_API_KEY || '';
   const model = process.env.LLM_MODEL || 'gpt-4o-mini';
@@ -226,6 +273,9 @@ async function chatCompletionStream(messages) {
 
   const temperature = 0.3;
   const parsedUrl = new URL(baseUrl);
+  // Handed back to the caller so the duration metric can be recorded once
+  // the stream is fully consumed, which is the real end of the operation.
+  const startMs = Date.now();
 
   const spanName = `chat ${model}`;
 
@@ -274,7 +324,7 @@ async function chatCompletionStream(messages) {
     throw err;
   }
 
-  return { stream: res.body, span, model, provider };
+  return { stream: res.body, span, model, provider, startMs, serverAddress: parsedUrl.hostname };
 }
 
 /**
@@ -294,6 +344,11 @@ async function chatCompletionStream(messages) {
  *   attribute ONLY when content capture is explicitly enabled; see
  *   src/genai-content.js. Pass it unconditionally -- the capture module
  *   decides whether it is used.
+ * @param {number} [opts.startMs] - Operation start, from
+ *   chatCompletionStream. Supplied, the gen_ai.client.operation.duration
+ *   histogram is recorded here, which is the correct point: the operation
+ *   ends when the stream is drained, not when the headers arrive.
+ * @param {string} [opts.serverAddress]
  */
 function recordStreamUsage(span, opts) {
   const responseLength = opts.responseLength || 0;
@@ -341,6 +396,31 @@ function recordStreamUsage(span, opts) {
     'gen_ai.token.type': 'output',
   });
   responseLengthHistogram.record(responseLength, metricAttrs);
+
+  emitOperationDetails({
+    messages: opts.messages,
+    output: opts.content,
+    operationName: 'chat',
+    provider: opts.provider,
+    requestModel: opts.model,
+    responseModel: opts.responseModel || opts.model,
+    responseId: opts.responseId,
+    inputTokens: opts.promptTokens,
+    outputTokens: opts.completionTokens,
+    framework: 'in-house',
+    agentName: opts.agentName,
+  });
+
+  if (opts.startMs) {
+    recordOperationDuration({
+      startMs: opts.startMs,
+      operationName: 'chat',
+      provider: opts.provider,
+      requestModel: opts.model,
+      responseModel: opts.responseModel || opts.model,
+      serverAddress: opts.serverAddress,
+    });
+  }
 
   logger.info('LLM streaming completion finished', {
     model: opts.responseModel || opts.model,

@@ -1982,6 +1982,31 @@ shape, different value.
 If you enable it anywhere real, mask first. Splunk's own documentation
 recommends PII masking mechanisms when collection is on.
 
+### The metric that actually feeds AI overview
+
+`gen_ai.client.operation.duration` is the one to get right, and it is easy
+to miss because nothing tells you it is absent. Splunk's own
+`splunk-otel-util-genai` emits it; this project did not, and the entire AI
+overview page stayed at zero as a result. It backs the Requests tile, the
+Errors tile, and all three "Performance by Latencies" panels.
+
+Two traps, both of which produce plausible-looking wrong answers rather
+than obvious breakage:
+
+- **The unit is seconds, not milliseconds.** Record milliseconds and every
+  latency panel is wrong by a factor of 1000.
+- **Set the conventional explicit bucket boundaries**
+  (`[0.01, 0.02, ... 81.92]` for duration, `[1, 4, 16, ... 67108864]` for
+  tokens). The OTel defaults are tuned for millisecond HTTP latencies and
+  bucket nearly every LLM call together, which destroys the percentiles
+  the page charts. In OpenTelemetry JS this is
+  `advice: { explicitBucketBoundaries: [...] }` on the instrument, so no
+  View is needed.
+
+See `api/src/genai-metrics.js`. Also record `error.type` on failure and
+omit it on success, because the Errors tile counts on its presence
+meaning failure.
+
 ### Enabling platform-side evaluations
 
 The evaluation scores (bias, hallucination, relevance, sentiment, toxicity)
@@ -1993,9 +2018,10 @@ setup guide, three things are needed and they are all self-service:
 2. Configure the **LLM Providers** data integration under
    **Data Management > Available integrations**. Splunk calls the provider
    to score the captured content, so it needs its own credentials for that
-   provider. Without this step the AI Details panel reads
-   **Status: not evaluated**, which is not an error, just an unconfigured
-   integration.
+   provider. On this org it shows **Active** with one connection.
+   Verify it there rather than inferring it from a span: a span reading
+   **Status: not evaluated** means that span was not sampled, and says
+   nothing about whether the integration exists.
 3. Confirm trace data is arriving under **APM > AI trace data**.
 
 Step 2 is the one people miss, because nothing in the UI says it is missing.
@@ -2081,3 +2107,174 @@ The conventions call for truncating "individual message contents,
 produces JSON that no longer parses, which reintroduces exactly the crash
 above for any conversation long enough to hit the cap. Budget the text
 inside the parts and serialise afterwards.
+
+---
+
+## 28b. Why "Status: Not evaluated", and why AI overview is empty
+
+Two separate questions with two different answers. Neither is a licence.
+
+### Evaluations ARE running
+
+Splunk publishes org-level usage counters that settle this without
+guesswork. Queried over 24 hours on this stack:
+
+| Metric | Value | Meaning |
+|---|---|---|
+| `sf.org.ai.numSpans` | 9 | AI spans ingested |
+| `sf.org.ai.numSpansEvaluated` | 3 | spans actually scored |
+| `sf.org.ai.numEvalsPerformed` | 15 | 5 evaluators x 3 spans |
+| `sf.org.ai.numEvalTokens` | 53,104 | tokens Splunk spent scoring |
+| `sf.org.ai.numAgentsMonitored` | 0 | no agent registered |
+
+Five evaluators per span is the set on the AI trace data chart legend:
+toxicity, bias, sentiment, hallucination, relevance. Splunk is calling a
+model and paying tokens to do it.
+
+So **"Status: Not evaluated" on a given span does not mean evaluation is
+switched off.** Evaluation is sampled and asynchronous: 3 of 9 spans were
+scored. A span you click seconds after generating it will usually read
+"not evaluated" because its evaluation has not run, and may never run if
+it is not sampled. The AI trace data table showed exactly this: the two
+scored spans carried a "Negative" quality issue while a third, newer span
+in the trace view read "not evaluated".
+
+If you want a populated panel for a demo, generate traffic well in advance
+and click a span the table already shows a quality verdict for. Do not
+pick a fresh one on stage.
+
+Caveat on these counters: they lag badly. `numSpans` did not move for
+several minutes after three new chats. They are fine for "is this
+happening at all" and useless as a fast feedback loop.
+
+### AI overview is a different problem: it counts AGENTS
+
+Per [Monitor your overall AI application and agent environment](https://help.splunk.com/en/splunk-observability-cloud/observability-for-ai/splunk-ai-agent-monitoring/monitor-and-troubleshoot-ai-agents-and-applications/monitor-your-overall-ai-application-and-agent-environment),
+the AI overview tiles are:
+
+| Tile | Definition |
+|---|---|
+| Requests | `count(agents)` over chat-operation spans |
+| Errors | `count(agents) where sf_error=true` |
+| Tokens | `gen_ai.client.token.usage` by model and provider |
+| Estimated cost | `gen_ai.cost.input` and `gen_ai.cost.output` |
+
+The Requests tile is a count of **agents**, not of chat spans. With
+`numAgentsMonitored` at zero, every tile on the page reads zero, no matter
+how much LLM traffic is flowing. That is the whole explanation for AI
+overview being empty while AI trace data is populated: they read different
+things.
+
+An LLM call is not an agent. Per
+[gen-ai-agent-spans](https://github.com/open-telemetry/semantic-conventions-genai/blob/main/docs/gen-ai/gen-ai-agent-spans.md),
+an agent invocation is a span with `gen_ai.operation.name = invoke_agent`,
+optionally `gen_ai.agent.name` and `gen_ai.agent.id`, and a span name of
+`invoke_agent {gen_ai.agent.name}`.
+
+`api/src/agent-attributes.js` now puts those attributes on the RAG pipeline
+span, which is the honest place for them: the pipeline retrieves context,
+decides what to send, and calls a model. Verified on the wire:
+
+```
+gen_ai.operation.name: Str(invoke_agent)
+gen_ai.agent.name: Str(hr-policy-assistant)
+```
+
+**Unresolved:** `numAgentsMonitored` had not moved off zero several minutes
+later. Given how badly that counter lags, this is not evidence either way.
+Confirm in the UI at **APM > AI overview**, then **View all AI agents**.
+
+If the agent still does not appear, the next lever is the span **name**.
+The convention says it SHOULD be `invoke_agent {gen_ai.agent.name}`, and we
+deliberately kept `chat.pipeline` because both the Splunk dashboard and the
+Azure workbook match on that name. Renaming was tested here and showed no
+change within the observation window, so it was reverted rather than
+carried as an unverified cost. If you do adopt it, update the `name ==
+"chat.pipeline"` filters in `splunk/dashboard.json` and the `case`
+statement in `azure/workbook.json` in the same change.
+
+### The conventional GenAI metric names never reach the metric store
+
+Three theories were tested. Two were wrong, and the elimination is the
+useful part, so all three are recorded.
+
+**Theory 1, metric type registration conflict. DISPROVED.** Splunk
+publishes a counter for exactly this, and over three hours:
+
+```
+sf.org.numBadMetricMetricTimeSeriesCreateCalls   0
+sf.org.numDatapointsDroppedInvalid               0
+sf.org.numDatapointsDroppedThrottle              0
+sf.org.numActiveTimeSeries                       3,035  (limit 1,196,978)
+```
+
+Nothing is rejected. Do not wipe an org over this, which is the action
+that theory implies.
+
+**Theory 2, the extra `gen_ai.token.type` dimension. DISPROVED.** Two
+throwaway histograms through the same collector, identical except that
+one carried the extra dimension and recorded twice per call. Both
+registered within two minutes with data present.
+
+**Theory 3, Splunk intercepts the conventional GenAI metric names.
+SUPPORTED.** Adding `gen_ai.client.operation.duration` gave the decisive
+evidence: a brand-new name with no history in the org, visibly on the
+wire in the collector's debug output, creating zero metric time series.
+Four metrics through one collector, one exporter and one org split
+cleanly:
+
+```
+gen_ai.client.operation.duration   MTS=0    name defined in the conventions
+gen_ai.client.token.usage          MTS=0    name defined in the conventions
+gen_ai.agent.duration              MTS=1    NOT in the conventions
+gen_ai.client.response.length      MTS=13   NOT in the conventions
+```
+
+The split is not the `gen_ai.` prefix, and not the histogram type. It is
+whether the **conventions define the name**. `gen_ai.agent.duration` is
+instructive: Splunk's own library emits it, but the conventions call that
+metric `gen_ai.invoke_agent.duration`, so the name Splunk uses is not a
+conventional one and it lands in the ordinary metric store like anything
+else.
+
+The reading is that Splunk routes the conventional GenAI metrics into its
+AI Agent Monitoring subsystem rather than the general metric store. That
+explains every symptom at once: emitted, forwarded, not rejected, no MTS,
+unqueryable in SignalFlow, and yet exactly the names the AI overview tiles
+are documented to read.
+
+**Consequence: you cannot chart the conventional GenAI metrics in
+SignalFlow, and that is not a bug to fix.** Read them through the AI
+pages. If you also want them on a normal dashboard, emit a differently
+named companion, which is why this project carries
+`gen_ai.client.token.count` alongside `gen_ai.client.token.usage`.
+
+### The fossil that explains the confusing metadata
+
+Five suffixed entries appear in metric metadata for the token metric, and
+their types give away their origin:
+
+```
+gen_ai.client.token.usage_bucket   CUMULATIVE_COUNTER
+gen_ai.client.token.usage_count    CUMULATIVE_COUNTER
+gen_ai.client.token.usage_max      GAUGE
+gen_ai.client.token.usage_min      GAUGE
+gen_ai.client.token.usage_sum      CUMULATIVE_COUNTER
+```
+
+`CUMULATIVE_COUNTER` dates them to before
+`OTEL_EXPORTER_OTLP_METRICS_TEMPORALITY_PREFERENCE=delta` and
+`send_otlp_histograms: true` were set, when the exporter flattened
+histograms into five separate cumulative metrics. They have no time series
+behind them now. They are metadata husks, not the blocker, and deleting
+them achieves nothing.
+
+### `execute_tool` was already arriving, from another service
+
+Worth recording because it contradicts an earlier note in this repo. The
+`playwright-mcp` service already emits `gen_ai.operation.name=execute_tool`
+spans into this collector, named `tools/call browser_navigate`,
+`tools/call browser_evaluate` and similar. The agentic picture across the
+stack is therefore closer to complete than "we emit no agent or tool spans"
+suggested: the tool half was already there, and only the agent half was
+missing.

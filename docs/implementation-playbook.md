@@ -991,6 +991,47 @@ Four things to carry over:
 
 ---
 
+### 36. An LLM call is not an agent, and vendor AI pages count agents
+
+Splunk's "AI overview" page was completely zero -- requests, tokens, cost,
+all of it -- while its "AI trace data" page was fully populated from the
+same traffic. Both read the same spans. The difference is what they count.
+
+The overview's Requests tile is documented as `count(agents)`. Splunk
+publishes an org counter that makes this checkable:
+
+```
+sf.org.ai.numSpans             9      AI spans ingested
+sf.org.ai.numSpansEvaluated    3      spans scored by evaluators
+sf.org.ai.numEvalsPerformed    15     5 evaluators x 3 spans
+sf.org.ai.numAgentsMonitored   0      <- the whole story
+```
+
+Zero agents, so every tile is zero, regardless of LLM volume.
+
+Emitting `gen_ai.*` on your model calls does not create an agent. Per the
+GenAI agent conventions, an agent invocation is a span with
+`gen_ai.operation.name = invoke_agent`, ideally `gen_ai.agent.name`, and a
+span name of `invoke_agent {agent name}`. If your service has a pipeline
+span that orchestrates retrieval and generation, that span is your agent
+boundary and it costs two attributes to say so.
+
+Three generalisable points:
+
+- **Find the vendor's own usage counters before theorising.** These
+  `sf.org.*` metrics answered "are evaluations even running" definitively
+  in one query, after a lot of speculation about licences. Most vendors
+  publish something equivalent for billing purposes.
+- **They lag.** `numSpans` did not move for several minutes after new
+  traffic. Fine for "is this happening", useless as a feedback loop. Do
+  not conclude a change failed because a lagging counter has not moved.
+- **Sampled evaluation looks like broken evaluation.** A span detail
+  reading "Status: not evaluated" usually means it was not sampled, not
+  that the feature is off. 3 of 9 spans were scored here. Click a span the
+  summary table already shows a verdict for, especially on stage.
+
+---
+
 ## Part 1: OpenTelemetry implementation
 
 ### 1.1 Dependencies

@@ -82,11 +82,43 @@ Last updated: 2026-09-09
     serialised document, or long conversations emit invalid JSON. Both
     fixed, verified on the wire; now playbook trap 35 and
     `docs/splunk-setup.md` section 28a. Suite 89 -> 96.
-  - **Evaluations are self-service, not an entitlement.** The remaining open
-    question from the item above is closed: per Splunk's setup guide the
-    scores need the LLM Providers integration under Data Management >
-    Available integrations, which is why the AI Details panel reads
-    "Status: not evaluated". Not yet configured here.
+  - **Evaluations are self-service, not an entitlement.** The scores need
+    the LLM Providers integration under Data Management > Available
+    integrations, which on this org is **Active with one connection**. Not
+    a licence, and already configured.
+  - **Evaluations are in fact already running**, which supersedes the line
+    above. Splunk's org counters settle it: `sf.org.ai.numSpansEvaluated`=3,
+    `numEvalsPerformed`=15 (5 evaluators x 3 spans), `numEvalTokens`=53,104.
+    "Status: not evaluated" on a given span means it was not sampled, not
+    that the feature is off -- 3 of 9 spans were scored. Those counters lag
+    by minutes, so they are useless as a feedback loop.
+  - **AI overview counts AGENTS, not chat spans.** Its Requests tile is
+    documented as `count(agents)`, and `sf.org.ai.numAgentsMonitored` was 0,
+    which is the entire reason the page was zero while AI trace data was
+    populated. New `api/src/agent-attributes.js` puts
+    `gen_ai.operation.name=invoke_agent` and `gen_ai.agent.name` on the RAG
+    pipeline span; verified on the wire. Whether Splunk then registers the
+    agent is UNVERIFIED -- needs a look at APM > AI overview > View all AI
+    agents. Renaming the span to the conventional `invoke_agent {name}` was
+    tested and reverted: no observed change, and it breaks the
+    `chat.pipeline` filters in both dashboards. Now playbook trap 36 and
+    `docs/splunk-setup.md` section 28b.
+  - **`execute_tool` spans were already arriving** from `playwright-mcp`
+    (`tools/call browser_navigate` and friends). Corrects the claim in
+    comparison section 6a that this stack emits no agent or tool spans.
+  - **`gen_ai.client.token.usage` does not register as a custom metric** in
+    Splunk, though `gen_ai.client.response.length` (same type, same file)
+    does, and the collector reports no error. Theory, not verified: Splunk
+    reserves `gen_ai.client.*` for its AI subsystem. The dashboard already
+    uses the `gen_ai.client.token.count` counter companion, so nothing is
+    broken by it.
+  - **Azure evals and cost, researched and written up** in comparison
+    section 6b. Evals exist but live in Microsoft Foundry, not App
+    Insights, and reaching them from a non-Foundry app means registering a
+    custom agent and is in preview. App Insights alone has no GenAI eval or
+    cost feature; Azure Cost Management has actual billed spend, which
+    Splunk cannot see, while Splunk has per-span estimated cost, which
+    Azure does not. Suite 96 -> 105.
 
   Splunk-side work done under this epic, beyond the Azure deliverables:
   eight dashboard charts fixed for double counting, the Active Sessions chart

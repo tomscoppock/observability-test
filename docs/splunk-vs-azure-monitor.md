@@ -530,13 +530,35 @@ Verified against live telemetry 2026-09-09:
 | `gen_ai.client.token.usage` | Yes |
 | `gen_ai.operation.name`, `provider.name`, `request.model`, `usage.*_tokens` | Yes, all |
 | `gen_ai.client.operation.duration` | **No** |
-| `invoke_agent <agent>` span | **No** -- we emit `chat.pipeline` |
-| `execute_tool <func>` span | **No** -- we emit `mcp.tool.*` |
-| `gen_ai.agent.name`, `gen_ai.agent.id`, `gen_ai.conversation.id` | **No** -- we have `session.id` |
+| `invoke_agent <agent>` span | **Partly, since 2026-09-10** -- see below |
+| `execute_tool <func>` span | **Yes, but from another service** -- see below |
+| `gen_ai.agent.name` | **Yes, since 2026-09-10** -- `hr-policy-assistant` |
+| `gen_ai.agent.id`, `gen_ai.conversation.id` | **No** -- we have `session.id` |
 
-The shared root cause is not a backend defect: **this is a RAG pipeline
-making direct LLM calls, not an agent framework**, so the agent spans do not
-exist to be reported.
+Two corrections to the original version of this table, both found while
+chasing Splunk's empty AI overview page.
+
+**`execute_tool` was already arriving.** Not from `rag-api`, but from
+`playwright-mcp`, which exports into the same collector and emits
+`gen_ai.operation.name=execute_tool` on spans named `tools/call
+browser_navigate`, `tools/call browser_evaluate` and similar. The tool half
+of the agentic picture was there all along.
+
+**The agent half is now emitted too.** `api/src/agent-attributes.js` puts
+`gen_ai.operation.name=invoke_agent` and `gen_ai.agent.name` on the RAG
+pipeline span. The pipeline retrieves context, decides what to send and
+calls a model, so it is a defensible agent boundary rather than a label
+applied for the dashboard's benefit. What is deliberately NOT done is
+renaming the span to `invoke_agent {name}` as the convention prefers,
+because both dashboards match on `chat.pipeline`; see `splunk-setup.md`
+section 28b.
+
+So the framing has shifted. The original claim was that this is a RAG
+pipeline and therefore has no agent spans to report. The truer statement
+is that **the agent spans did not exist because nobody had declared the
+boundary**, and declaring it costs a handful of attributes. Whether either
+vendor's prebuilt dashboard then lights up is a separate question, still
+open on the Splunk side at the time of writing.
 
 ### Azure: a naming gap
 
@@ -581,6 +603,69 @@ and coherent, and cost nothing to reach. Azure's prebuilt content is plainer
 but more open. The pattern repeats the one in section 7: Splunk has the
 better product and charges for the best of it, Azure has the more accessible
 surface.
+
+## 6b. Evaluations and cost: what each vendor actually gives you
+
+Added after testing both, because this is the question a stakeholder asks
+first and it has a genuinely asymmetric answer.
+
+### Evaluations
+
+| | Splunk Observability Cloud | Azure |
+|---|---|---|
+| Where it lives | APM > AI trace data, in the product you already have | Microsoft Foundry (formerly Azure AI Foundry), a separate product |
+| Evaluators | toxicity, bias, sentiment, hallucination, relevance | coherence, fluency, groundedness, relevance, safety, agent-specific (tool call accuracy, task completion), plus custom |
+| How it runs | sampled and asynchronous on ingested spans | continuous (samples live traffic), scheduled, or on a golden dataset |
+| Setup | LLM Providers integration under Data Management, self-service | Foundry project, App Insights connected to it, agent registered, evaluation rule created via SDK or portal |
+| Works for a hand-instrumented non-Foundry app? | Yes, on span content alone | Yes, but only via "custom agents": register the agent in the Foundry control plane, emit OTel GenAI semconv, and point it at the Foundry project's App Insights |
+| Maturity | GA | preview |
+| Results land in | Splunk, alongside the trace | App Insights, surfaced in the Foundry Monitor tab |
+
+**Splunk is meaningfully easier here.** Content capture plus one
+integration and it scores your spans. Azure's evaluators are richer, more
+configurable and better suited to a golden-dataset workflow, but reaching
+them means adopting a second product and registering the agent, and the
+production-monitoring path is in preview.
+
+Application Insights **on its own has no GenAI evaluation capability at
+all**. If you are comparing "Splunk vs App Insights" rather than "Splunk vs
+Azure", this is a straight Splunk win.
+
+### Cost
+
+| | Splunk | Azure |
+|---|---|---|
+| Per-span estimated cost | Yes, shown in AI trace data | No, not in App Insights |
+| Cost metrics | `gen_ai.cost.input` / `gen_ai.cost.output` feed the AI overview | none |
+| Actual billed spend | No. It cannot see your Azure invoice | Yes, Azure Cost Management shows real Azure OpenAI spend |
+| DIY option | n/a | compute in KQL from tokens, or emit a cost metric from the app |
+
+Two different things are being called "cost". Splunk gives an **estimated**
+cost per LLM call, derived from token counts and model pricing, which is
+the number you want when debugging one expensive conversation. Azure gives
+the **actual billed** figure in Cost Management, which is the number
+Finance wants, but it is not in App Insights and does not break down per
+trace.
+
+Since this stack calls Azure OpenAI (`ai-core-llms.cognitiveservices.azure.com`),
+both are available in principle. Nothing stops you computing estimated cost
+in KQL:
+
+```kql
+let price_in  = 0.00000125;   // per input token, check current pricing
+let price_out = 0.00001;      // per output token
+dependencies
+| where customDimensions["gen_ai.operation.name"] == "chat"
+| extend inTok  = tolong(tostring(customDimensions["gen_ai.usage.input_tokens"])),
+         outTok = tolong(tostring(customDimensions["gen_ai.usage.output_tokens"]))
+| summarize ["Estimated cost USD"] = round(sum(inTok * price_in + outTok * price_out), 4)
+    by bin(timestamp, 5m)
+```
+
+Hardcoded prices go stale, which is exactly the maintenance burden Splunk
+absorbs for you. That is the honest trade: Splunk's number is convenient
+and approximate, Azure's is authoritative and coarse.
+
 
 ## 7. Where Azure wins
 

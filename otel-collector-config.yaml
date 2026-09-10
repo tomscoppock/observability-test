@@ -86,7 +86,11 @@ processors:
     error_mode: ignore
     logs:
       log_record:
-        - 'severity_number < SEVERITY_NUMBER_INFO'
+        # Drop below-INFO noise, but NEVER drop a GenAI event. Those carry
+        # event.name and the reference implementation leaves their severity
+        # UNSPECIFIED(0), so a bare severity floor silently deletes exactly
+        # the records Splunk's AI screens are built from.
+        - 'severity_number < SEVERITY_NUMBER_INFO and attributes["event.name"] == nil'
 
   # Detect host.name and os.type from the environment.
   # Required for Splunk Related Content (APM <-> Infrastructure correlation).
@@ -96,10 +100,22 @@ processors:
       hostname_sources: [os]
     override: false
 
-  # Add resource attributes for Splunk correlation
+  # Add resource attributes for Splunk correlation.
+  #
+  # BOTH spellings are set deliberately. `deployment.environment` is the
+  # older attribute and is what Splunk APM's environment picker has always
+  # used. `deployment.environment.name` is the current semantic convention
+  # name, and Splunk's own AI agent monitoring documentation asks for that
+  # spelling when describing environment identity. Emitting only the old
+  # one risks a newer surface not seeing an environment at all; emitting
+  # only the new one would break the existing dashboards. They cost a few
+  # bytes each, so send both until the vendor has finished migrating.
   resource/splunk:
     attributes:
       - key: deployment.environment
+        value: "${OTEL_DEPLOYMENT_ENV}"
+        action: upsert
+      - key: deployment.environment.name
         value: "${OTEL_DEPLOYMENT_ENV}"
         action: upsert
 

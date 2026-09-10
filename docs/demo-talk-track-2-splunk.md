@@ -582,9 +582,15 @@ nothing useful. You can create a detector for this."
 > toxicity, bias, relevance) additionally need the LLM Providers integration
 > under **Data Management > Available integrations**. That is self-service,
 > not an entitlement -- Splunk calls the provider with your credentials to
-> score the captured content. It has not been configured here, which is
-> exactly why the panel reads "not evaluated". Full detail in
-> `docs/splunk-setup.md` section 28.
+> score the captured content. On this org it is **Active**, and evaluations
+> are running: `sf.org.ai.numEvalsPerformed` shows five evaluators scoring
+> each sampled span.
+>
+> So "not evaluated" on a given span means **that span was not sampled**,
+> not that the feature is off. Evaluation is sampled and asynchronous. For
+> the demo, generate traffic several minutes ahead and click a span the AI
+> trace data table already shows a quality verdict for. Do not pick a fresh
+> one on stage. Full detail in `docs/splunk-setup.md` section 28b.
 >
 > **If you enable capture, click into one chat span before you present.**
 > Splunk parses these attributes as JSON in the browser, so malformed

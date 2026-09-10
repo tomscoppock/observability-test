@@ -16,6 +16,10 @@ const { trace } = require('@opentelemetry/api');
 const { embedTexts } = require('../embeddings');
 const { chatCompletion, chatCompletionStream, recordStreamUsage } = require('../llm');
 const db = require('../db');
+const { agentAttributes, agentSpanName, agentName } = require('../agent-attributes');
+const { recordAgentDuration, recordWorkflowDuration } = require('../genai-metrics');
+const { workflowAttributes, workflowName, workflowSpanName } = require('../workflow-attributes');
+const { agentIdFromSpan } = require('../genai-context');
 const logger = require('../logger');
 
 const router = Router();
@@ -134,18 +138,66 @@ function chatErrorStatus(msg) {
 // ---------------------------------------------------------------------------
 
 router.post('/api/chat', async (req, res) => {
-  return tracer.startActiveSpan('chat.pipeline', async (span) => {
+  // Workflow: one per external request, the top of the agentic hierarchy
+  // Splunk models. Wraps the agent so nested calls inherit both.
+  const workflowStartMs = Date.now();
+  return tracer.startActiveSpan(workflowSpanName(), async (workflowSpan) => {
+    workflowSpan.setAttributes(
+      workflowAttributes({ workflowType: 'rag', framework: 'in-house' }),
+    );
+    let workflowFinished = false;
+    const finishWorkflow = (err) => {
+      if (workflowFinished) return;
+      workflowFinished = true;
+      recordWorkflowDuration({
+        startMs: workflowStartMs,
+        workflowName: workflowName(),
+        workflowType: 'rag',
+        framework: 'in-house',
+        errorType: err ? (err.name || 'Error') : undefined,
+      });
+      workflowSpan.end();
+    };
+    try {
+      return await (
+        tracer.startActiveSpan(agentSpanName(), async (span) => {
+    // Declares this span as one agent invocation. Splunk's AI overview
+    // counts agents, not chat spans -- see agent-attributes.js.
+    span.setAttributes(agentAttributes({ provider: process.env.LLM_PROVIDER || 'openai' }));
+    // The agent id is the agent span's own id, matching the reference
+    // implementation, which copies it onto every nested LLM call. That
+    // linkage is how the agent screens aggregate. See genai-context.js.
+    const agentId = agentIdFromSpan(span);
+    span.setAttribute('gen_ai.agent.id', agentId);
+    span.setAttribute('gen_ai.workflow.name', workflowName());
+    const owner = { agentName: agentName(), agentId, workflowName: workflowName() };
+    // One agent invocation. `finishAgent` ends the span and records
+    // gen_ai.agent.duration exactly once, whichever way the handler exits.
+    const agentStartMs = Date.now();
+    let agentFinished = false;
+    const finishAgent = (err) => {
+      if (agentFinished) return;
+      agentFinished = true;
+      recordAgentDuration({
+        startMs: agentStartMs,
+        agentName: agentName(),
+        agentType: 'rag',
+        framework: 'in-house',
+        errorType: err ? (err.name || 'Error') : undefined,
+      });
+      span.end();
+    };
     try {
       const result = await ragPipeline(req, res, span);
       if (!result) return; // response already sent (validation error)
 
       if (result.noDocuments) {
         span.setStatus({ code: 1 });
-        span.end();
+        finishAgent();
         return res.json({ reply: NO_DOCS_REPLY, sources: [] });
       }
 
-      const completion = await chatCompletion(result.messages);
+      const completion = await chatCompletion(result.messages, owner);
 
       span.setAttributes({
         'chat.prompt_tokens': completion.promptTokens,
@@ -153,7 +205,7 @@ router.post('/api/chat', async (req, res) => {
         'chat.source_count': result.sources.length,
       });
       span.setStatus({ code: 1 });
-      span.end();
+      finishAgent();
 
       return res.json({
         reply: completion.content,
@@ -162,7 +214,7 @@ router.post('/api/chat', async (req, res) => {
     } catch (err) {
       span.setStatus({ code: 2, message: err.message });
       span.recordException(err);
-      span.end();
+      finishAgent(err);
 
       logger.error('Chat failed', { error: err.message, stack: err.stack });
 
@@ -170,6 +222,11 @@ router.post('/api/chat', async (req, res) => {
       const status = chatErrorStatus(msg);
       const label = status === 503 ? msg.split(' ')[0] + ' service unavailable: ' : 'Chat failed: ';
       return res.status(status).json({ error: label + msg });
+    }
+        })
+      );
+    } finally {
+      finishWorkflow();
     }
   });
 });
@@ -179,13 +236,61 @@ router.post('/api/chat', async (req, res) => {
 // ---------------------------------------------------------------------------
 
 router.post('/api/chat/stream', async (req, res) => {
-  return tracer.startActiveSpan('chat.pipeline.stream', async (pipelineSpan) => {
+  // Workflow: one per external request, the top of the agentic hierarchy
+  // Splunk models. Wraps the agent so nested calls inherit both.
+  const workflowStartMs = Date.now();
+  return tracer.startActiveSpan(workflowSpanName(), async (workflowSpan) => {
+    workflowSpan.setAttributes(
+      workflowAttributes({ workflowType: 'rag-stream', framework: 'in-house' }),
+    );
+    let workflowFinished = false;
+    const finishWorkflow = (err) => {
+      if (workflowFinished) return;
+      workflowFinished = true;
+      recordWorkflowDuration({
+        startMs: workflowStartMs,
+        workflowName: workflowName(),
+        workflowType: 'rag-stream',
+        framework: 'in-house',
+        errorType: err ? (err.name || 'Error') : undefined,
+      });
+      workflowSpan.end();
+    };
+    try {
+      return await (
+        tracer.startActiveSpan(agentSpanName(), async (pipelineSpan) => {
+    pipelineSpan.setAttributes(
+      agentAttributes({ provider: process.env.LLM_PROVIDER || 'openai' }),
+    );
+    // The agent id is the agent span's own id, matching the reference
+    // implementation, which copies it onto every nested LLM call. That
+    // linkage is how the agent screens aggregate. See genai-context.js.
+    const agentId = agentIdFromSpan(pipelineSpan);
+    pipelineSpan.setAttribute('gen_ai.agent.id', agentId);
+    pipelineSpan.setAttribute('gen_ai.workflow.name', workflowName());
+    const owner = { agentName: agentName(), agentId, workflowName: workflowName() };
+    // One agent invocation. `finishAgent` ends the span and records
+    // gen_ai.agent.duration exactly once, whichever way the handler exits.
+    const agentStartMs = Date.now();
+    let agentFinished = false;
+    const finishAgent = (err) => {
+      if (agentFinished) return;
+      agentFinished = true;
+      recordAgentDuration({
+        startMs: agentStartMs,
+        agentName: agentName(),
+        agentType: 'rag',
+        framework: 'in-house',
+        errorType: err ? (err.name || 'Error') : undefined,
+      });
+      pipelineSpan.end();
+    };
     // Validate input BEFORE setting SSE headers so we can still send
     // a normal JSON 400 response for bad requests.
     const { message } = req.body;
     if (!message || typeof message !== 'string') {
       pipelineSpan.setStatus({ code: 2, message: 'Invalid input' });
-      pipelineSpan.end();
+      finishAgent();
       logger.warn('Invalid chat request', { reason: 'missing or non-string message' });
       return res.status(400).json({ error: 'message is required and must be a string' });
     }
@@ -213,12 +318,13 @@ router.post('/api/chat/stream', async (req, res) => {
         sendEvent('sources', []);
         sendEvent('done', {});
         pipelineSpan.setStatus({ code: 1 });
-        pipelineSpan.end();
+        finishAgent();
         return res.end();
       }
 
       // Start streaming LLM call
-      const { stream, span: lSpan, model, provider } = await chatCompletionStream(result.messages);
+      const { stream, span: lSpan, model, provider, startMs, serverAddress } =
+        await chatCompletionStream(result.messages, owner);
       llmSpan = lSpan;
 
       pipelineSpan.setAttribute('chat.source_count', result.sources.length);
@@ -317,6 +423,10 @@ router.post('/api/chat/stream', async (req, res) => {
         responseLength: fullContent.length,
         // Used only when content capture is enabled; ignored otherwise.
         content: fullContent,
+        messages: result.messages,
+        agentName: owner.agentName,
+        startMs,
+        serverAddress,
       });
       llmSpan.end();
       llmSpan = null;
@@ -328,7 +438,7 @@ router.post('/api/chat/stream', async (req, res) => {
         'chat.stream': true,
       });
       pipelineSpan.setStatus({ code: 1 });
-      pipelineSpan.end();
+      finishAgent();
 
       return res.end();
     } catch (err) {
@@ -339,7 +449,7 @@ router.post('/api/chat/stream', async (req, res) => {
       }
       pipelineSpan.setStatus({ code: 2, message: err.message });
       pipelineSpan.recordException(err);
-      pipelineSpan.end();
+      finishAgent();
 
       logger.error('Chat stream failed', { error: err.message, stack: err.stack });
 
@@ -352,6 +462,11 @@ router.post('/api/chat/stream', async (req, res) => {
       const msg = err.message || '';
       const status = chatErrorStatus(msg);
       return res.status(status).json({ error: 'Chat failed: ' + msg });
+    }
+        })
+      );
+    } finally {
+      finishWorkflow();
     }
   });
 });

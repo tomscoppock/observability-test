@@ -66,7 +66,7 @@
           "name": "RAG Chat Pipeline Latency",
           "description": "Duration breakdown of the chat pipeline by step.",
           "chartType": "Line",
-          "programText": "filter_ = filter('service.name', 'rag-api') and filter('deployment.environment', 'dev')\nA = histogram('traces.span.metrics.duration', filter=filter_ and filter('span.name', 'chat.pipeline', 'chat.pipeline.stream')).percentile(pct=50).publish(label='Total Chat')\nB = histogram('traces.span.metrics.duration', filter=filter_ and filter('span.name', 'db.vectorSearch')).percentile(pct=50).publish(label='Vector Search')\nC = histogram('traces.span.metrics.duration', filter=filter_ and filter('gen_ai.operation.name', 'chat')).percentile(pct=50).publish(label='LLM Completion')\nD = histogram('traces.span.metrics.duration', filter=filter_ and filter('gen_ai.operation.name', 'embeddings')).percentile(pct=50).publish(label='Query Embedding')"
+          "programText": "filter_ = filter('service.name', 'rag-api') and filter('deployment.environment', 'dev')\nA = histogram('traces.span.metrics.duration', filter=filter_ and filter('span.name', 'invoke_agent*')).percentile(pct=50).publish(label='Total Chat')\nB = histogram('traces.span.metrics.duration', filter=filter_ and filter('span.name', 'db.vectorSearch')).percentile(pct=50).publish(label='Vector Search')\nC = histogram('traces.span.metrics.duration', filter=filter_ and filter('gen_ai.operation.name', 'chat')).percentile(pct=50).publish(label='LLM Completion')\nD = histogram('traces.span.metrics.duration', filter=filter_ and filter('gen_ai.operation.name', 'embeddings')).percentile(pct=50).publish(label='Query Embedding')"
         },
         {
           "name": "RAG Upload Pipeline Latency",
