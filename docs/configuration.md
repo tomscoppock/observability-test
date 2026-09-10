@@ -53,6 +53,67 @@ are needed -- just set the correct base URL format (see
 | `OTEL_EXPORTER_OTLP_ENDPOINT` | `http://otel-collector:4318` | Collector OTLP HTTP endpoint |
 | `OTEL_SERVICE_NAME` | `rag-api` | Service name in telemetry |
 | `OTEL_RESOURCE_ATTRIBUTES` | `deployment.environment=dev` | Extra resource attributes (key=value,key=value) |
+| `OTEL_INSTRUMENTATION_GENAI_CAPTURE_MESSAGE_CONTENT` | `false` | Capture LLM prompt and response text as span attributes. **Off by default. Sends PII if enabled** -- see below |
+
+### Capturing prompt and response content
+
+Splunk's AI Agent Monitoring (**APM > AI trace data**, AI Interactions) and
+its platform-side evaluations have nothing to show without the actual prompt
+and response text on the spans. OpenTelemetry keeps that content off by
+default, deliberately: prompts routinely contain names, account numbers and
+proprietary business logic.
+
+This variable is the switch. Add it to `.env`:
+
+```bash
+# ---------- LLM content capture ----------
+# Captures prompt and response text as span attributes, which is what
+# Splunk's AI trace data and evaluation screens read.
+#
+# OFF BY DEFAULT and it must stay off outside a test system: enabling it
+# sends every prompt and every answer to your observability backend.
+#
+#   false      (default) no content leaves the application
+#   SPAN_ONLY  content on the span -- the value Splunk's setup guide uses
+#   true / 1   accepted as equivalent to SPAN_ONLY
+#   EVENT_ONLY deliberately NOT honoured (see docs/splunk-setup.md s28)
+OTEL_INSTRUMENTATION_GENAI_CAPTURE_MESSAGE_CONTENT=false
+```
+
+Then rebuild the API for the change to take effect:
+
+```bash
+docker compose up -d --build api
+```
+
+Or enable it for one run without editing `.env` at all:
+
+```bash
+OTEL_INSTRUMENTATION_GENAI_CAPTURE_MESSAGE_CONTENT=SPAN_ONLY \
+  docker compose up -d --build api
+```
+
+```powershell
+$env:OTEL_INSTRUMENTATION_GENAI_CAPTURE_MESSAGE_CONTENT = 'SPAN_ONLY'
+docker compose up -d --build api
+```
+
+Confirm which mode a running container is in:
+
+```bash
+docker inspect observability-test-api-1 \
+  --format '{{range .Config.Env}}{{println .}}{{end}}' | grep GENAI_CAPTURE
+```
+
+When enabled the LLM spans gain `gen_ai.input.messages` and
+`gen_ai.output.messages`, as JSON strings capped at 8192 characters, with
+`gen_ai.capture.truncated=true` when clipping occurred.
+
+> **The point of the flag is that the same image is safe in production and
+> useful on a test system.** Identical configuration shape, different value.
+> If you ever enable it against real traffic, mask PII first -- Splunk's own
+> documentation recommends exactly that. Full reasoning, and what it does
+> and does not unlock, in [splunk-setup.md](splunk-setup.md) section 28.
 
 ### Splunk Observability Cloud (traces + metrics)
 

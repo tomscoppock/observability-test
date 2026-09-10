@@ -256,9 +256,15 @@ schema. Everything in the workbook depends on this:
    numeric read needs `tolong(tostring(customDimensions[...]))`.
 3. **`success` is a string in the classic view and a bool in the workspace
    view.** `tobool(success) == false` is correct in both.
-4. **Array attributes serialise as JSON text.**
-   `gen_ai.response.finish_reasons` reads back as `["stop"]`, so it needs
-   `parse_json(...)[0]`.
+4. **Array attributes are DROPPED, not serialised.** The exporter maps an
+   attribute to `customDimensions` only when it is a string or boolean, and
+   to `customMeasurements` when it is a number. An **array is neither, so it
+   never arrives at all**. Measured: 254 chat spans reached Application
+   Insights carrying zero `gen_ai.response.finish_reasons`, while the
+   collector's own debug output showed
+   `gen_ai.response.finish_reasons: Slice(["stop"])` arriving fine. The fix
+   is in the application: emit a scalar companion alongside the
+   spec-mandated array.
 
 ### Delta temporality is required, not optional
 

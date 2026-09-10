@@ -315,6 +315,8 @@ router.post('/api/chat/stream', async (req, res) => {
         completionTokens,
         finishReason,
         responseLength: fullContent.length,
+        // Used only when content capture is enabled; ignored otherwise.
+        content: fullContent,
       });
       llmSpan.end();
       llmSpan = null;

@@ -1889,3 +1889,101 @@ indexing, which keeps the whole dashboard deployable as code. See
 and note that this only became correct after an application fix: the app was
 setting `session.id` on the Express middleware span rather than the HTTP
 server span, so no backend could see it.
+
+---
+
+## 28. AI Agent Monitoring: what it actually needs
+
+**This section corrects an earlier claim in this project.** Task 037 recorded
+Splunk's AI screens as unreachable and later notes described the evals as
+licence-blocked. Checking the vendor documentation properly, **neither is
+what the docs say**, and the real gate turned out to be something we could
+close ourselves.
+
+### What Splunk documents
+
+Per [Set up AI Agent Monitoring](https://help.splunk.com/en/splunk-observability-cloud/observability-for-ai/splunk-ai-agent-monitoring/set-up-ai-agent-monitoring)
+and [Monitor LLM services with Splunk APM](https://help.splunk.com/en/splunk-observability-cloud/observability-for-ai/splunk-ai-agent-monitoring/monitor-and-troubleshoot-ai-agents-and-applications/monitor-llm-services-with-splunk-apm):
+
+| Requirement | Status here |
+|---|---|
+| Spans filtered by `gen_ai.operation.name` | **Already emitted** (`chat`, `embeddings`) |
+| `OTEL_EXPORTER_OTLP_METRICS_TEMPORALITY_PREFERENCE=delta` | **Already set** in compose |
+| `send_otlp_histograms: true` on the signalfx exporter | **Already set** |
+| `OTEL_INSTRUMENTATION_GENAI_EMITTERS=span_metric` | N/A -- read by auto-instrumentation |
+| `OTEL_INSTRUMENTATION_GENAI_CAPTURE_MESSAGE_CONTENT=SPAN_ONLY` | **Implemented manually**, see below |
+| LLM Providers data integration | **Optional.** Only needed for platform-side evaluation *scores* |
+
+**No licence requirement is stated anywhere in those pages.** The earlier
+"licence-blocked" description was an assumption, not something the vendor
+documents. Log Observer Connect genuinely does need a licensed platform, and
+that constraint is real, but it was wrongly generalised to the AI screens.
+
+### Why the environment variables alone do nothing here
+
+`OTEL_INSTRUMENTATION_GENAI_*` are read by OpenTelemetry's GenAI
+**auto-instrumentation** libraries. Those exist for Python; this is a Node
+service whose LLM spans are instrumented by hand in `api/src/llm.js`. Setting
+the variable changes nothing on its own, which is very likely the root of the
+"Python-only" conclusion: the *documentation* is Python-shaped, but the
+*requirement* is span attributes, and any language can emit those.
+
+### What we implemented
+
+`api/src/genai-content.js` honours the standard variable name and emits the
+content attributes manually:
+
+```bash
+# Off by default. Set only on a test system.
+OTEL_INSTRUMENTATION_GENAI_CAPTURE_MESSAGE_CONTENT=SPAN_ONLY
+```
+
+```bash
+OTEL_INSTRUMENTATION_GENAI_CAPTURE_MESSAGE_CONTENT=SPAN_ONLY \
+  docker compose up -d --build api
+```
+
+Verified in the collector's debug output:
+
+```
+-> gen_ai.input.messages: Str([{"role":"system","content":"You are an HR Policy Assistant...
+-> gen_ai.output.messages: Str(The leave policy says employees get 10 days...
+```
+
+Design decisions worth keeping if you copy this:
+
+- **Off by default**, and the test suite asserts that first. An unset,
+  empty, `false` or unrecognised value all disable it.
+- **`SPAN_ONLY` is honoured, `EVENT_ONLY` is deliberately not.** The latter
+  asks for content as separate log events, which this service does not emit;
+  treating it as a span attribute would put content somewhere the operator
+  did not ask for it.
+- **Content is a JSON string, never a structured value.** Array and object
+  attributes are dropped by some exporters -- see trap 34.
+- **Truncated at 8192 characters** with a `gen_ai.capture.truncated` flag.
+  Splunk warns about oversized values, and an unbounded attribute is a
+  billing risk on any ingest-priced backend.
+
+### The PII decision, which does not go away
+
+Enabling this sends prompts and responses to your observability backend.
+For a RAG agent over internal documents that is a data protection decision,
+not a configuration one. The switch exists so a test system can evaluate the
+feature **without** committing production to it: same image, same config
+shape, different value.
+
+If you enable it anywhere real, mask first. Splunk's own documentation
+recommends PII masking mechanisms when collection is on.
+
+### What is still unverified
+
+- Whether **AI trace data** and the **AI Interactions** tab actually populate
+  now. The prerequisites are met and the content is flowing; confirm in the
+  UI under **APM > AI trace data**, filtering to data after the change.
+- Whether **platform-side evaluations** (hallucination, toxicity, bias,
+  relevance, sentiment) need an entitlement. They additionally need the LLM
+  Providers integration configured under Data Management, which is a
+  separate step we have not done.
+
+Do not repeat the earlier mistake of recording an untested assumption as a
+finding. Either test it and write down what happened, or label it unverified.

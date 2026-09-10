@@ -48,6 +48,16 @@ services:
       # Splunk Observability requires delta temporality for histogram metrics;
       # without this the OTel SDK emits cumulative histograms which Splunk drops.
       - OTEL_EXPORTER_OTLP_METRICS_TEMPORALITY_PREFERENCE=delta
+      # Capture LLM prompt and response content as span attributes.
+      # OFF BY DEFAULT and it must stay that way outside a test system:
+      # prompts and responses routinely contain PII and proprietary data.
+      #
+      # Splunk's AI Agent Monitoring (APM > AI trace data, AI Interactions)
+      # and its platform-side evaluations need this content to have anything
+      # to show. SPAN_ONLY is the value Splunk's setup guide specifies, and
+      # puts content on the span rather than emitting separate log events.
+      # See docs/splunk-setup.md section 28 before enabling it anywhere real.
+      - OTEL_INSTRUMENTATION_GENAI_CAPTURE_MESSAGE_CONTENT=${OTEL_INSTRUMENTATION_GENAI_CAPTURE_MESSAGE_CONTENT:-false}
       - MCP_PLAYWRIGHT_URL=${MCP_PLAYWRIGHT_URL:-}
       - MCP_PLAYWRIGHT_API_KEY=${MCP_PLAYWRIGHT_API_KEY:-}
       - ADMIN_PASSWORD=${ADMIN_PASSWORD:-}

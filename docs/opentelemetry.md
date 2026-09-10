@@ -2,7 +2,7 @@
 
 > Rebuilding this in another project? Read the
 > [Implementation Playbook](implementation-playbook.md) first. It carries
-> the transferable patterns plus 33 traps, including one
+> the transferable patterns plus 34 traps, including one
 > that discarded 100% of logs while all tests passed.
 
 ## Overview

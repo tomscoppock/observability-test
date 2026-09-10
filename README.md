@@ -133,7 +133,7 @@ Full documentation is in the [`docs/`](docs/) folder:
 | [Configuration](docs/configuration.md) | Environment variables and how to swap providers |
 | [Architecture](docs/architecture.md) | System design, service topology, data flow |
 | [OpenTelemetry](docs/opentelemetry.md) | OTel SDK setup, collector config, instrumentation |
-| [Implementation Playbook](docs/implementation-playbook.md) | Transferable OTel-to-Splunk and OTel-to-Azure know-how, and the 33 traps |
+| [Implementation Playbook](docs/implementation-playbook.md) | Transferable OTel-to-Splunk and OTel-to-Azure know-how, and the 34 traps |
 | [Splunk Setup](docs/splunk-setup.md) | Dashboards, alerts, and what free/trial accounts cannot do |
 | [Azure Monitor Setup](docs/azure-monitor-setup.md) | Azure Monitor as an endpoint: provisioning, config selection, workbook deployment |
 | [Splunk vs Azure Monitor](docs/splunk-vs-azure-monitor.md) | Where the two backends genuinely differ, in both directions |

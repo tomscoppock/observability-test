@@ -447,8 +447,22 @@ NON-OBVIOUS TRAPS -- handle ALL of these explicitly
    tolong(tostring(customDimensions['...'])). Also: `success` is a
    string in the classic requests view and a bool in the workspace
    AppRequests table, so use tobool(success) == false, which is correct
-   in both. And array attributes serialise as JSON text, so
-   finish_reasons reads back as ["stop"] and needs parse_json(...)[0].
+   in both.
+
+   ARRAY ATTRIBUTES ARE DROPPED ENTIRELY, NOT SERIALISED. The exporter
+   maps an attribute to customDimensions only when it is a string or
+   boolean, and to customMeasurements when it is a number. An array is
+   neither, so it never arrives. Measured in the source project: 254
+   chat spans in Application Insights carrying ZERO
+   gen_ai.response.finish_reasons, while the collector's own debug
+   output showed gen_ai.response.finish_reasons: Slice(["stop"])
+   arriving correctly. No KQL recovers it. Fix it in the APPLICATION by
+   emitting a scalar companion next to the spec-mandated array:
+
+       span.setAttribute('gen_ai.response.finish_reasons', reasons);
+       span.setAttribute('gen_ai.response.finish_reason', reasons.join(','));
+
+   Audit every array-valued attribute you set for this.
 
 5. CUMULATIVE COUNTERS CHART AS DIAGONAL RAMPS. customMetrics has no
    counter concept, so a running total is charted literally. The

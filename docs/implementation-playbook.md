@@ -11,7 +11,7 @@ Every snippet here is copied from working, verified code in this
 repository. Versions are those in `api/package.json`, proven against a
 live Splunk org on 2026-09-08.
 
-The Azure Monitor material in Part 3 and traps 14 to 33 is verified against
+The Azure Monitor material in Part 3 and traps 14 to 34 is verified against
 vendor documentation and against `otelcol validate` and `az bicep build`, but
 **not yet against a live Application Insights resource**. Items awaiting that
 are marked. The Splunk material is fully runtime-verified.
@@ -41,7 +41,7 @@ Almost every item here is a **silent failure**: the system reports itself
 healthy while emitting nothing. Two of them cost most of a day each.
 This section is the reason this document exists.
 
-Traps 23 to 33 are the exceptions. It fails loudly, but it fails on the one run that
+Traps 23 to 34 are the exceptions. It fails loudly, but it fails on the one run that
 was supposed to work, and the error names the wrong culprit.
 
 ### 1. `BatchLogRecordProcessor` takes an options object
@@ -240,8 +240,14 @@ returns zero or errors depending on context. Always
 and a bool in the workspace `AppRequests` table. `tobool(success) == false`
 is correct in both; `success == false` works in only one.
 
-Array attributes serialise as JSON text, so `gen_ai.response.finish_reasons`
-reads back as `["stop"]` and needs `parse_json(...)[0]`.
+**Array attributes are dropped entirely, not serialised.** The exporter
+maps an attribute to `customDimensions` only when it is a string or boolean,
+and to `customMeasurements` when it is a number; an array is neither.
+Measured: 254 chat spans in Application Insights carrying zero
+`gen_ai.response.finish_reasons`, while the collector debug output showed
+`gen_ai.response.finish_reasons: Slice(["stop"])` arriving correctly. No KQL
+can recover it -- the fix belongs in the application, emitting a scalar
+companion alongside the spec-mandated array.
 
 ### 18. Cumulative counters chart as diagonal ramps
 
@@ -884,6 +890,47 @@ sampling. The discrepancy was entirely in the comparison harness.
 That check takes two minutes and is worth doing before any claim about data
 loss, because "the other vendor is losing spans" is an easy and expensive
 conclusion to reach by accident.
+
+### 34. Array span attributes are silently dropped by some exporters
+
+Found during a live demo, which is the worst way to find it: the talk track
+told the presenter to point at an attribute that was not there.
+
+`gen_ai.response.finish_reasons` is defined by the OpenTelemetry GenAI spec
+as an **array**. The application set it correctly and the collector received
+it correctly:
+
+```
+-> gen_ai.response.finish_reasons: Slice(["stop"])
+```
+
+But the `azure_monitor` exporter maps a span attribute to `customDimensions`
+only when it is a string or boolean, and to `customMeasurements` when it is
+a number. **An array is neither, so it is dropped in transit.** Measured: 254
+chat spans in Application Insights, **zero** carrying the attribute.
+
+No query recovers it, because the data never arrives. The fix is in the
+application: keep the spec-mandated array and emit a scalar companion.
+
+```js
+const reasons = data.choices.map((c) => c.finish_reason || 'unknown');
+span.setAttribute('gen_ai.response.finish_reasons', reasons);          // spec
+span.setAttribute('gen_ai.response.finish_reason', reasons.join(',')); // portable
+```
+
+Three things worth generalising:
+
+- **Audit every array-valued attribute you set.** This one was noticed only
+  because a demo script pointed at it. Anything else array-shaped is
+  presumed missing until you have seen it in the backend.
+- **Verify at the destination, not the collector.** The debug exporter
+  showed the attribute perfectly. Everything upstream of the vendor was
+  fine, which is exactly what makes this class of bug survive review.
+- **Emitting the standard is not the same as the standard being usable.**
+  Spec compliance and backend compatibility are two different goals, and
+  where they conflict the honest answer is to satisfy both rather than pick.
+  The same reasoning already justifies the `gen_ai.usage.prompt_tokens`
+  aliases in this codebase.
 
 ---
 

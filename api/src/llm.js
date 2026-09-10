@@ -11,7 +11,9 @@
  * Span kind: CLIENT
  * Attributes: gen_ai.operation.name, gen_ai.provider.name,
  *   gen_ai.request.model, gen_ai.response.model, gen_ai.response.id,
- *   gen_ai.response.finish_reasons, gen_ai.usage.input_tokens,
+ *   gen_ai.response.finish_reasons (array, per spec),
+ *   gen_ai.response.finish_reason (scalar companion -- arrays are
+ *     dropped by the azure_monitor exporter), gen_ai.usage.input_tokens,
  *   gen_ai.usage.output_tokens, server.address, server.port
  *
  * Token usage is also recorded as OTel histogram metrics:
@@ -27,6 +29,7 @@
 
 const { trace, SpanKind, metrics } = require('@opentelemetry/api');
 const logger = require('./logger');
+const { contentAttributes } = require('./genai-content');
 const { buildUrl, buildHeaders } = require('./api-client');
 
 const tracer = trace.getTracer('rag-api.llm', '0.1.0');
@@ -83,6 +86,8 @@ async function chatCompletion(messages) {
       'gen_ai.request.input_count': messages.length,
       'server.address': parsedUrl.hostname,
       'server.port': parseInt(parsedUrl.port, 10) || (parsedUrl.protocol === 'https:' ? 443 : 80),
+      // Prompt content, only when explicitly enabled. Off by default.
+      ...contentAttributes({ messages }),
     });
 
     try {
@@ -128,11 +133,26 @@ async function chatCompletion(messages) {
         'gen_ai.response.length': responseLength,
       });
 
-      // gen_ai.response.finish_reasons is an array per the spec
+      // gen_ai.response.finish_reasons is an ARRAY per the spec, and the
+      // spec-compliant array is kept. But array-valued span attributes do
+      // not survive every backend: the azure_monitor exporter maps
+      // attributes to customDimensions only when they are strings or
+      // booleans, so an array is DROPPED SILENTLY. Measured: 254 chat spans
+      // reached Application Insights, zero carrying finish_reasons, while
+      // the collector's own debug output showed
+      // `gen_ai.response.finish_reasons: Slice(["stop"])` arriving fine.
+      //
+      // So we also emit a scalar companion. Same belt-and-braces reasoning
+      // as the gen_ai.usage.prompt_tokens aliases above: keep the standard
+      // attribute, add the shape backends can actually store.
       const finishReasons = data.choices
         ? data.choices.map((c) => c.finish_reason || 'unknown')
         : ['unknown'];
       span.setAttribute('gen_ai.response.finish_reasons', finishReasons);
+      span.setAttribute('gen_ai.response.finish_reason', finishReasons.join(','));
+
+      // Response content, only when explicitly enabled. Off by default.
+      span.setAttributes(contentAttributes({ output: content }));
 
       span.setStatus({ code: 1 });
 
@@ -219,6 +239,8 @@ async function chatCompletionStream(messages) {
     'gen_ai.request.temperature': temperature,
     'gen_ai.request.message_count': messages.length,
     'gen_ai.request.input_count': messages.length,
+    // Prompt content, only when explicitly enabled. Off by default.
+    ...contentAttributes({ messages }),
     'gen_ai.request.stream': true,
     'server.address': parsedUrl.hostname,
     'server.port': parseInt(parsedUrl.port, 10) || (parsedUrl.protocol === 'https:' ? 443 : 80),
@@ -268,6 +290,10 @@ async function chatCompletionStream(messages) {
  * @param {number} opts.completionTokens
  * @param {string} [opts.finishReason]
  * @param {number} [opts.responseLength] - Character length of the full response
+ * @param {string} [opts.content] - Full response text. Recorded as a span
+ *   attribute ONLY when content capture is explicitly enabled; see
+ *   src/genai-content.js. Pass it unconditionally -- the capture module
+ *   decides whether it is used.
  */
 function recordStreamUsage(span, opts) {
   const responseLength = opts.responseLength || 0;
@@ -280,8 +306,15 @@ function recordStreamUsage(span, opts) {
     // OpenAI-style aliases for Splunk MetricSet compatibility
     'gen_ai.usage.prompt_tokens': opts.promptTokens,
     'gen_ai.usage.completion_tokens': opts.completionTokens,
+    // Array per spec, plus a scalar companion because array attributes are
+    // dropped by some exporters. See the long note on the non-streaming
+    // path above.
     'gen_ai.response.finish_reasons': [opts.finishReason || 'stop'],
+    'gen_ai.response.finish_reason': opts.finishReason || 'stop',
     'gen_ai.response.length': responseLength,
+    // Response content, only when explicitly enabled. The prompt was
+    // captured at span creation, where `messages` was in scope.
+    ...contentAttributes({ output: opts.content }),
   });
   span.setStatus({ code: 1 });
 

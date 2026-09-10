@@ -44,6 +44,34 @@ Last updated: 2026-09-09
   Python-only (a wall), Azure's because of span naming (a to-do). Both
   vendors' agent dashboards are empty here, for asymmetric reasons.
 
+  **Two corrections and one new capability, 2026-09-10, found while walking
+  the Splunk demo:**
+
+  - **`gen_ai.response.finish_reasons` never reached Azure.** It is an array
+    per the OTel spec, and the `azure_monitor` exporter drops array
+    attributes outright (254 chat spans, zero carrying it, while the
+    collector debug output showed `Slice(["stop"])` arriving fine). The app
+    now emits a scalar `gen_ai.response.finish_reason` companion. This also
+    invalidated a rule I had documented in five places claiming arrays
+    "serialise as JSON text" -- they do not, they vanish. Now playbook trap
+    34.
+  - **Splunk AI Agent Monitoring is NOT licence-blocked.** That claim was an
+    assumption, not something the vendor documents, and it was wrong. The
+    real gate is prompt/response content capture, which is off by default.
+    The "Python-only" framing was also too broad: the documentation is
+    Python-shaped, but the requirement is span attributes, which any language
+    can emit. What genuinely remains unreachable is the *agent-level* view,
+    because this is a RAG pipeline with no `invoke_agent` spans -- the same
+    reason Azure's equivalent dashboard is empty. Written up as
+    `docs/splunk-setup.md` section 28.
+  - **New: opt-in content capture.** `api/src/genai-content.js` honours the
+    standard `OTEL_INSTRUMENTATION_GENAI_CAPTURE_MESSAGE_CONTENT`, off by
+    default, emitting `gen_ai.input.messages` / `gen_ai.output.messages` as
+    JSON strings with an 8k cap. Verified end to end. The env vars alone do
+    nothing for a hand-instrumented service, since they are read by GenAI
+    auto-instrumentation, so the capture is implemented manually. 15 new
+    tests, suite now 89.
+
   Splunk-side work done under this epic, beyond the Azure deliverables:
   eight dashboard charts fixed for double counting, the Active Sessions chart
   rewritten onto `span_metrics`, deprecated collector aliases migrated, and

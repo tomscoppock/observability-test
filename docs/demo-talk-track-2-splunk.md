@@ -510,8 +510,22 @@ chat traffic:
 **[SHOW]** Select a **Trace ID** to open the waterfall, then select the
 `chat gpt-4o-mini` span. Open the **Tags** section of the span
 properties panel on the right and point at
-`gen_ai.response.finish_reasons`, `gen_ai.usage.input_tokens` and
+`gen_ai.response.finish_reason`, `gen_ai.usage.input_tokens` and
 `gen_ai.usage.output_tokens`.
+
+> **Presenter note -- singular, not plural, and here is why.** The
+> OpenTelemetry spec defines `gen_ai.response.finish_reasons` as an **array**,
+> and the application still emits it. But array-valued span attributes do not
+> survive every backend: the `azure_monitor` exporter drops them outright,
+> because it only maps strings, booleans and numbers. Measured: 254 chat
+> spans reached Application Insights with zero finish reasons, while the
+> collector debug output showed the array arriving perfectly.
+>
+> So the application now also emits a scalar `gen_ai.response.finish_reason`
+> (singular), the same belt-and-braces approach as the
+> `gen_ai.usage.prompt_tokens` aliases. **Point at the singular one** -- it
+> is the one guaranteed to be present on both backends. If you only see the
+> plural, or neither, the API has not been rebuilt since that change.
 
 > **Presenter note -- the span name tracks the model:** spans follow the
 > OpenTelemetry GenAI convention `{operation} {model}`, so the name is
@@ -521,7 +535,7 @@ properties panel on the right and point at
 > reading this one off the page.
 
 > **Presenter note -- showing the failure modes live:** to demonstrate
-> truncation, add a filter on tag `gen_ai.response.finish_reasons` with
+> truncation, add a filter on tag `gen_ai.response.finish_reason` with
 > value `length`. To follow one user's whole conversation across
 > separate traces, filter on the `session.id` tag, which the API sets on
 > every request from the `X-Session-Id` header.
@@ -543,6 +557,45 @@ information."
 **[HIGHLIGHT]** "Empty or near-empty responses are another signal. If
 `gen_ai.usage.output_tokens` is zero or very low, the model returned
 nothing useful. You can create a detector for this."
+
+> **Presenter note -- the "AI Details / Status: not evaluated" panel.** A
+> presenter poking around this section will find it. It is not a
+> misconfiguration, and it is **not licence-blocked** either -- an earlier
+> version of this document said it was, and the vendor documentation does
+> not say that.
+>
+> Splunk's AI screens need prompt and response **content** on the spans, and
+> content capture is off by default for good reason. This stack can now turn
+> it on:
+>
+> ```bash
+> OTEL_INSTRUMENTATION_GENAI_CAPTURE_MESSAGE_CONTENT=SPAN_ONLY >   docker compose up -d --build api
+> ```
+>
+> If you want the AI screens populated for a demo, set that **before** the
+> traffic run and give ingestion a couple of minutes. Leave it off and the
+> panel reads "not evaluated", which is also a perfectly good thing to
+> demonstrate -- see the framing below.
+>
+> Separately, the **platform-side evaluation scores** (hallucination,
+> toxicity, bias, relevance) additionally need the LLM Providers integration
+> configured under Data Management. That step has not been done here, and
+> whether it carries an entitlement is genuinely unverified. Do not assert
+> either way. Full detail in `docs/splunk-setup.md` section 28.
+
+**[SAY]** -- if content capture is OFF and you want to use that:
+"Notice this says 'not evaluated'. That is a deliberate choice, not a gap.
+Turning Splunk's evaluations on means sending every prompt and every answer
+to the observability backend. For an agent answering questions over internal
+HR documents, that is a decision for legal, not for me. So the switch exists,
+it is off, and what we do instead is evaluate locally."
+
+> **Presenter note -- what we run instead.** `scripts/run-eval.sh` runs a
+> golden question set against the live agent and asserts on expected sources
+> and key phrases, plus three drift detectors on response length, output
+> tokens and latency. None of it sends a prompt off the stack. If you want
+> something live here, run it before the demo and leave the output on
+> screen.
 
 **[SAY]** "For more sophisticated quality monitoring, the OpenTelemetry
 GenAI semantic conventions (v1.38+) include a
@@ -688,12 +741,34 @@ working."
 
 **[SAY]** "**Second, AI Agent Monitoring.** Splunk has a dedicated set
 of AI agent screens, and Cisco is extending them further through the
-Galileo acquisition announced in April. They stay empty for us for two
-honest reasons: the documented instrumentation is Python-only, and this
-is a Node.js application. And those screens key off agent and workflow
-span semantics, `invoke_agent` and `invoke_workflow`, where we emit
-`chat` and `embeddings`. That is a data model difference, not a
-misconfiguration."
+Galileo acquisition announced in April. Our position here is more nuanced
+than it first looked, and it is worth being accurate."
+
+> **Presenter note -- this was revised after checking the vendor docs, and
+> the earlier version of this deck was wrong.** We previously said the AI
+> screens were unreachable because the instrumentation is Python-only. The
+> documentation is Python-shaped, but the actual requirement is span
+> attributes, and any language can emit those. What was really missing was
+> prompt and response **content**, which is off by default. This stack can
+> now emit it behind
+> `OTEL_INSTRUMENTATION_GENAI_CAPTURE_MESSAGE_CONTENT=SPAN_ONLY`.
+>
+> What remains genuinely unavailable is the **agent-level** view, and that
+> one is a data model difference rather than a vendor limitation: those
+> screens key off `invoke_agent` and `invoke_workflow` semantics, and this
+> is a RAG pipeline making direct LLM calls, so those spans do not exist.
+> Azure's equivalent dashboard is empty for exactly the same reason.
+>
+> Say "LLM-level yes, agent-level no", not "Python-only". See
+> `docs/splunk-setup.md` section 28.
+
+**[SAY]** "The LLM-level screens are reachable: they key off the standard
+`gen_ai` conventions we already emit, plus prompt and response content,
+which is a switch we control. The agent-level screens are a different
+matter, and not because of Splunk. They expect `invoke_agent` and
+`invoke_workflow` spans, and this is a RAG pipeline making direct LLM calls,
+so there are no agent invocations to report. Azure's equivalent dashboard is
+empty for the same reason."
 
 **[SAY]** "**Third, Splunk-side quality evals.** Splunk can score
 responses for hallucination, relevance, toxicity and bias. That needs a

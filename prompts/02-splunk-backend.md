@@ -364,6 +364,70 @@ its own separate trap list; you need both.
         MEDIAN of per-interval percentiles, never the mean (see trap 15's
         reasoning about collapsing statistics).
 
+
+23. **CAPTURE PROMPT/RESPONSE CONTENT BEHIND AN EXPLICIT FLAG, OFF BY
+    DEFAULT.** Splunk's AI Agent Monitoring (APM > AI trace data, AI
+    Interactions) and its platform-side evaluations have nothing to show
+    without prompt and response CONTENT on the spans. Content capture is
+    off by default in OpenTelemetry, deliberately: prompts routinely carry
+    names, account numbers and proprietary business logic.
+
+    Do NOT conclude the AI screens are licence-blocked. The vendor docs
+    state no licence requirement for AI trace data -- that was an
+    assumption in the source project and it was wrong. What they DO
+    require:
+
+      - spans filtered by gen_ai.operation.name (you already emit this)
+      - OTEL_EXPORTER_OTLP_METRICS_TEMPORALITY_PREFERENCE=delta
+      - send_otlp_histograms: true on the signalfx exporter
+      - OTEL_INSTRUMENTATION_GENAI_CAPTURE_MESSAGE_CONTENT=SPAN_ONLY
+      - the LLM Providers integration, but ONLY for platform-side
+        evaluation scores, not for AI trace data
+
+    THE TRAP: OTEL_INSTRUMENTATION_GENAI_* is read by GenAI
+    AUTO-instrumentation libraries, which exist for Python. If you
+    instrument LLM calls by hand, as most non-Python services do, setting
+    the variable does NOTHING. You must emit the attributes yourself. This
+    is very likely why the source project first concluded "Python-only":
+    the documentation is Python-shaped, but the requirement is span
+    attributes, and any language can emit those.
+
+    Honour the standard variable name anyway, so the config still works if
+    the service is ever re-platformed onto a runtime with
+    auto-instrumentation:
+
+        const CAPTURE = 'OTEL_INSTRUMENTATION_GENAI_CAPTURE_MESSAGE_CONTENT';
+        const ON = new Set(['span_only', 'true', '1', 'span_and_event']);
+        function enabled(env) {
+          const v = (env || process.env)[CAPTURE];
+          return typeof v === 'string' && ON.has(v.trim().toLowerCase());
+        }
+        // when enabled:
+        span.setAttribute('gen_ai.input.messages', JSON.stringify(messages));
+        span.setAttribute('gen_ai.output.messages', responseText);
+
+    Five design points, each of which cost something to learn:
+
+      - OFF BY DEFAULT, and make the test suite assert that FIRST. Unset,
+        empty, "false" and unrecognised values must all disable it.
+      - Honour SPAN_ONLY. Do NOT honour EVENT_ONLY as a span attribute:
+        it asks for content as separate log events, so writing it to a
+        span puts content somewhere the operator did not ask for it.
+      - Serialise to a JSON STRING, never a structured value. Array and
+        object attributes are dropped outright by some exporters (see the
+        array-attribute trap).
+      - CAP THE LENGTH and flag truncation. Splunk warns about oversized
+        values, and an unbounded attribute is a billing risk on any
+        ingest-priced backend. Truncate content, unlike identifiers, where
+        truncation would merge distinct values.
+      - Keep it in its own pure module so it is unit testable. The
+        instrumentation bootstrap usually cannot be imported by tests.
+
+    The flag is what makes the same image safe in production and useful on
+    a test system: identical config shape, different value. If you enable
+    it anywhere real, mask PII first -- the vendor documentation recommends
+    exactly that.
+
 =============================================================
 What I want from you
 =============================================================

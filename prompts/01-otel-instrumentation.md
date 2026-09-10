@@ -613,6 +613,39 @@ SILENT: the system reports itself healthy while emitting nothing.
     Note grep -P is unavailable in some locales, so prefer awk -F'	' over
     a Perl-regex tab.
 
+
+12. **ARRAY SPAN ATTRIBUTES ARE SILENTLY DROPPED BY SOME EXPORTERS.**
+    The OpenTelemetry GenAI spec defines gen_ai.response.finish_reasons as
+    an ARRAY. Emit it -- and also emit a scalar companion, because array
+    attributes do not survive every backend.
+
+    Measured in the source project: the collector received the attribute
+    perfectly...
+
+        -> gen_ai.response.finish_reasons: Slice(["stop"])
+
+    ...and 254 chat spans reached the backend carrying ZERO of them. The
+    azure_monitor exporter maps an attribute to customDimensions only when
+    it is a string or boolean, and to customMeasurements when it is a
+    number. An array is neither, so it is dropped in transit. No query
+    recovers it, because the data never arrives.
+
+        const reasons = choices.map((c) => c.finish_reason || 'unknown');
+        span.setAttribute('gen_ai.response.finish_reasons', reasons);
+        span.setAttribute('gen_ai.response.finish_reason', reasons.join(','));
+
+    Three things to generalise:
+
+      - AUDIT EVERY ARRAY-VALUED ATTRIBUTE YOU SET. This one surfaced only
+        because a demo script told a presenter to point at it, live.
+        Anything array-shaped is presumed missing until seen in the backend.
+      - VERIFY AT THE DESTINATION, NOT THE COLLECTOR. The debug exporter
+        showed it correctly. Everything upstream of the vendor was fine,
+        which is exactly what lets this class of bug survive review.
+      - EMITTING THE STANDARD IS NOT THE SAME AS THE STANDARD BEING USABLE.
+        Where spec compliance and backend compatibility conflict, satisfy
+        both rather than picking one.
+
 =============================================================
 Out of scope -- do not attempt
 =============================================================

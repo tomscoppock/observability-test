@@ -126,8 +126,10 @@ must obey:
    every numeric read is `tolong(tostring(customDimensions[...]))`.
 3. `success` is a string in the classic view and a bool in the workspace view.
    Always `tobool(success) == false`.
-4. Array attributes serialise as JSON text, so
-   `gen_ai.response.finish_reasons` needs `parse_json(...)[0]`.
+4. Array attributes are DROPPED, not serialised. Only strings, booleans and
+   numbers reach `customDimensions` / `customMeasurements`. Verified: 254
+   chat spans, zero carrying `gen_ai.response.finish_reasons`, despite the
+   collector receiving it. Fixed in the app with a scalar companion.
 
 ### Where parity breaks, in summary
 
