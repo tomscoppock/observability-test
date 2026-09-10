@@ -2153,13 +2153,14 @@ happening at all" and useless as a fast feedback loop.
 
 ### AI overview is a different problem: it counts AGENTS
 
-> **UPDATE (2026-09-10): NOT RESOLVED -- free/trial account limitation.**
+> **UPDATE (2026-09-10): NOT RESOLVED -- root cause unknown.**
 > The Python smoke test using Splunk's `splunk-otel-util-genai` SDK sends
 > correct telemetry (traces render perfectly in AI trace data with
-> Workflow > Agent > LLM hierarchy, tokens, cost, and Risk badges), but
-> AI Overview and AI Agents screens remain empty on a free/trial account.
-> See Section 28c for the full investigation and Section 26 for the
-> account-level limitation.
+> Workflow > Agent > LLM hierarchy, tokens, cost, and Risk badges).
+> Platform-side evaluations are running (some traces have quality scores).
+> But AI Overview and AI Agents screens remain empty.
+> Splunk claims the free edition is fully featured with no feature gates.
+> See Section 28c for the full investigation.
 
 Per [Monitor your overall AI application and agent environment](https://help.splunk.com/en/splunk-observability-cloud/observability-for-ai/splunk-ai-agent-monitoring/monitor-and-troubleshoot-ai-agents-and-applications/monitor-your-overall-ai-application-and-agent-environment),
 the AI overview tiles are:
@@ -2192,15 +2193,15 @@ gen_ai.operation.name: Str(invoke_agent)
 gen_ai.agent.name: Str(hr-policy-assistant)
 ```
 
-**Previously unresolved, now partially explained:** `numAgentsMonitored`
+**Previously unresolved, root cause still unknown:** `numAgentsMonitored`
 stays at zero even with the Python SDK smoke test sending correct
 `Workflow > AgentInvocation > LLMInvocation` telemetry. The smoke test
 traces render perfectly in AI trace data (with agent flow diagrams,
 tokens, cost, and Risk badges), proving the telemetry shape is correct.
-The remaining blocker is the **free/trial account entitlement**: the AI
-Overview and AI Agents aggregate screens likely require a paid licence.
-See Section 28c for the full investigation and Section 26 for the
-account-level limitation.
+Platform-side evaluations are running (some traces receive quality
+scores via sampling). Splunk claims the free edition includes all
+features with no gates, so entitlement is unlikely to be the blocker.
+See Section 28c for the full investigation.
 
 ### The conventional GenAI metric names never reach the metric store
 
@@ -2319,6 +2320,9 @@ using Splunk's own `splunk-otel-util-genai` SDK sends correct telemetry:
 - Token counts (input/output) display correctly
 - Estimated cost displays correctly
 - Risk badges and evaluation status display correctly
+- Platform-side evaluations are running -- some traces receive quality
+  scores (toxicity, bias, sentiment, hallucination, relevance) via
+  sampling; others show "Not evaluated" which is expected behaviour
 - The trace waterfall shows all three span levels
 
 **What remains empty:**
@@ -2332,7 +2336,7 @@ using Splunk's own `splunk-otel-util-genai` SDK sends correct telemetry:
 | Hypothesis | Result |
 |---|---|
 | Missing `correlation:` in signalfx exporter | Works on both upstream contrib and Splunk Distribution; does NOT fix AI screens |
-| Need Splunk Distribution collector | Tested; no difference from upstream contrib |
+| Need Splunk Distribution collector | Tested with v0.159.0 using `api_url`/`ingest_url` (matching setup guide exactly); no difference from upstream contrib |
 | Need gateway mode | Not relevant -- gateway mode is deployment topology, not a feature enabler |
 | Missing `send_otlp_histograms: true` | Already set |
 | Missing `sync_host_metadata: true` | Already set |
@@ -2341,6 +2345,7 @@ using Splunk's own `splunk-otel-util-genai` SDK sends correct telemetry:
 | Missing role/permissions | Admin role with `read_apm_ai_conversation` capability |
 | Processing delay | Tested over 12+ hours with multiple smoke test runs |
 | Node.js vs Python telemetry format | Python SDK produces identical empty result |
+| Platform-side evaluations not running | Evaluations ARE running -- some traces receive quality scores via sampling |
 
 ### The `correlation:` investigation
 
@@ -2438,6 +2443,7 @@ removed in `opentelemetry-api` >= 1.44.0. The smoke test pins to the
 | Screen | Status | Notes |
 |---|---|---|
 | APM > AI trace data | **Works** | Full trace rendering with agent hierarchy |
+| Platform-side evaluations | **Works** | Quality scores (toxicity, bias, etc.) via sampling |
 | APM > AI overview | **Empty** | All tiles read zero |
 | APM > AI agents | **Empty** | "No agents found" |
 | APM > AI Agent Tokens & Cost | **Empty** | Page loads but shows no data |
