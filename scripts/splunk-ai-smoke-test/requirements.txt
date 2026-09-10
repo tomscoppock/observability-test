@@ -1,0 +1,21 @@
+# Splunk AI Agent Monitoring -- Python smoke test
+# Installs Splunk's own GenAI utility plus the OTel SDK and OTLP exporters.
+# No real LLM provider SDK needed -- the test simulates a response.
+#
+# Versions are pinned to the 1.38.x / 0.59b0 series because
+# splunk-otel-util-genai 0.1.15 imports opentelemetry._events, which
+# was removed in opentelemetry-api >= 1.44.0.
+
+splunk-otel-util-genai==0.1.15
+
+# OTel core -- all must be from the same release train
+opentelemetry-api==1.38.0
+opentelemetry-sdk==1.38.0
+opentelemetry-semantic-conventions==0.59b0
+opentelemetry-instrumentation==0.59b0
+
+# OTLP exporters -- same release train
+opentelemetry-exporter-otlp-proto-http==1.38.0
+opentelemetry-exporter-otlp-proto-grpc==1.38.0
+opentelemetry-exporter-otlp-proto-common==1.38.0
+opentelemetry-proto==1.38.0

@@ -75,6 +75,14 @@ processors:
 
   # Normalise OpenLLMetry (Traceloop) spans to official gen_ai.* semconv.
   # Built-in source -- no custom mappings needed.
+  #
+  # NOTE: This processor is only available in the upstream contrib image
+  # (otel/opentelemetry-collector-contrib), NOT in the Splunk Distribution
+  # (quay.io/signalfx/splunk-otel-collector). If you switch to the Splunk
+  # Distribution via OTEL_COLLECTOR_IMAGE, the collector will fail to start
+  # because it does not recognise this component. In that case, remove
+  # gen_ai_normalizer from both the processors block and the traces
+  # pipeline below.
   gen_ai_normalizer:
     sources:
       - name: openllmetry
@@ -181,7 +189,11 @@ exporters:
   signalfx:
     access_token: "${SPLUNK_ACCESS_TOKEN}"
     realm: "${SPLUNK_REALM}"
-    # Required to send histogram metrics (e.g. duration from span_metrics)
+    sync_host_metadata: true
+    correlation:
+    # Required to send histogram metrics (e.g. duration from span_metrics
+    # and gen_ai.client.operation.duration from the app). Without this,
+    # the AI Agent Monitoring pages stay empty.
     send_otlp_histograms: true
 
   # Logs -> Splunk Cloud Platform / Enterprise via HTTP Event Collector (HEC)

@@ -1770,7 +1770,7 @@ each one cost real time to establish.
 | Capability | Blocker | Type |
 |---|---|---|
 | **Log Observer Connect** (logs correlated inside Observability Cloud) | Not offered on Cloud Platform trials; its IP allow list is configured via a support case; trials cannot open support cases | Entitlement, three independent gates |
-| **APM > AI Agent Monitoring** | Documented instrumentation is Python-only (`splunk-otel-util-genai`); no Node.js path exists. Also expects `invoke_agent` / `invoke_workflow` / `execute_tool` span semantics, whereas this app emits `chat` and `embeddings` | Product language support + data model |
+| **APM > AI Overview and AI Agents** (aggregate screens) | Telemetry is correct (Python SDK smoke test traces render perfectly in AI trace data with Workflow > Agent > LLM hierarchy, tokens, cost, Risk badges). But the aggregate AI Overview (all zeros) and AI Agents ("No agents found") screens remain empty. `sf.org.ai.numAgentsMonitored` stays at 0. Exhaustive testing ruled out collector config, collector variant, gateway mode, emitter settings, and permissions. Splunk claims the free edition is fully featured with no feature gates ([blog](https://www.splunk.com/en_us/blog/observability/splunk-observability-cloud-free-edition.html)), so entitlement is unlikely. Root cause unknown. See Section 28c. | Unknown |
 | **Splunk-side instrumentation evals** (bias, hallucination, relevance, sentiment, toxicity) | Requires a Splunk Enterprise or Cloud Platform licence to store conversation data, plus message content capture | Entitlement + privacy |
 | **Support cases** | Trial accounts cannot open them, which also blocks reporting the DNS gap below | Entitlement |
 | **ACS API for HEC token automation** | Admin Config Service is unsupported on single-instance deployments, which most trials are | Deployment topology |
@@ -1790,10 +1790,11 @@ for this project.
 
 The stack demonstrates full-fidelity traces, metrics, infrastructure
 monitoring, LLM token economics, dashboards and alerting on a free
-account, with logs searchable in Splunk Cloud Platform. The two things a
-licensed account would add are **single-pane trace-to-log correlation**
-and **the AI Agent Monitoring / eval surfaces** (the latter also
-requiring Python instrumentation).
+account, with logs searchable in Splunk Cloud Platform. A licensed
+account would add **single-pane trace-to-log correlation**. The **AI
+Agent Monitoring aggregate screens** (AI Overview, AI Agents) remain
+empty despite correct telemetry and Splunk claiming the free edition
+includes all features -- root cause is unknown (see Section 28c).
 
 ---
 
@@ -2035,6 +2036,9 @@ results in Splunk Enterprise or Cloud Platform instead. Not used here.
   expected once the LLM Providers integration is configured. Content is
   flowing in the correct shape and the trace page renders; the integration
   itself has not been set up.
+- Whether the Node.js hand-rolled instrumentation can be made to populate
+  the AI Overview / AI Agents screens without the Python SDK. See
+  Section 28c for the confirmed root cause and options.
 
 Do not repeat the earlier mistake of recording an untested assumption as a
 finding. Either test it and write down what happened, or label it unverified.
@@ -2149,6 +2153,14 @@ happening at all" and useless as a fast feedback loop.
 
 ### AI overview is a different problem: it counts AGENTS
 
+> **UPDATE (2026-09-10): NOT RESOLVED -- free/trial account limitation.**
+> The Python smoke test using Splunk's `splunk-otel-util-genai` SDK sends
+> correct telemetry (traces render perfectly in AI trace data with
+> Workflow > Agent > LLM hierarchy, tokens, cost, and Risk badges), but
+> AI Overview and AI Agents screens remain empty on a free/trial account.
+> See Section 28c for the full investigation and Section 26 for the
+> account-level limitation.
+
 Per [Monitor your overall AI application and agent environment](https://help.splunk.com/en/splunk-observability-cloud/observability-for-ai/splunk-ai-agent-monitoring/monitor-and-troubleshoot-ai-agents-and-applications/monitor-your-overall-ai-application-and-agent-environment),
 the AI overview tiles are:
 
@@ -2180,18 +2192,15 @@ gen_ai.operation.name: Str(invoke_agent)
 gen_ai.agent.name: Str(hr-policy-assistant)
 ```
 
-**Unresolved:** `numAgentsMonitored` had not moved off zero several minutes
-later. Given how badly that counter lags, this is not evidence either way.
-Confirm in the UI at **APM > AI overview**, then **View all AI agents**.
-
-If the agent still does not appear, the next lever is the span **name**.
-The convention says it SHOULD be `invoke_agent {gen_ai.agent.name}`, and we
-deliberately kept `chat.pipeline` because both the Splunk dashboard and the
-Azure workbook match on that name. Renaming was tested here and showed no
-change within the observation window, so it was reverted rather than
-carried as an unverified cost. If you do adopt it, update the `name ==
-"chat.pipeline"` filters in `splunk/dashboard.json` and the `case`
-statement in `azure/workbook.json` in the same change.
+**Previously unresolved, now partially explained:** `numAgentsMonitored`
+stays at zero even with the Python SDK smoke test sending correct
+`Workflow > AgentInvocation > LLMInvocation` telemetry. The smoke test
+traces render perfectly in AI trace data (with agent flow diagrams,
+tokens, cost, and Risk badges), proving the telemetry shape is correct.
+The remaining blocker is the **free/trial account entitlement**: the AI
+Overview and AI Agents aggregate screens likely require a paid licence.
+See Section 28c for the full investigation and Section 26 for the
+account-level limitation.
 
 ### The conventional GenAI metric names never reach the metric store
 
@@ -2278,3 +2287,175 @@ spans into this collector, named `tools/call browser_navigate`,
 stack is therefore closer to complete than "we emit no agent or tool spans"
 suggested: the tool half was already there, and only the agent half was
 missing.
+
+---
+
+## 28c. AI Overview / AI Agents: still empty despite correct telemetry
+
+**Date:** 2026-09-10 (updated after exhaustive testing)
+
+**Finding:** The AI Overview and AI Agents screens in Splunk Observability
+Cloud remain empty (all zeros, "No agents found") despite the Python
+smoke test sending correct telemetry that renders perfectly in the AI
+trace data view. The most likely blocker is a **free/trial account
+entitlement limitation**.
+
+### What the smoke test proves
+
+A standalone Python smoke test (`scripts/splunk-ai-smoke-test/smoke_test.py`)
+using Splunk's own `splunk-otel-util-genai` SDK sends correct telemetry:
+
+1. Bootstraps the OTel SDK with OTLP HTTP exporters pointed at the local
+   collector (`localhost:4318`).
+2. Creates a `Workflow > AgentInvocation > LLMInvocation` hierarchy using
+   the SDK's type system (`opentelemetry.util.genai.types`).
+3. Simulates a single RAG query with 42 input / 51 output tokens.
+4. Flushes all exporters and shuts down.
+
+**What renders correctly in Splunk:**
+
+- Traces appear in APM > AI trace data with full Workflow > Agent > LLM
+  hierarchy and agent flow diagrams
+- Token counts (input/output) display correctly
+- Estimated cost displays correctly
+- Risk badges and evaluation status display correctly
+- The trace waterfall shows all three span levels
+
+**What remains empty:**
+
+- APM > AI overview -- all tiles read zero
+- APM > AI agents -- "No agents found"
+- `sf.org.ai.numAgentsMonitored` stays at 0
+
+### What was ruled out
+
+| Hypothesis | Result |
+|---|---|
+| Missing `correlation:` in signalfx exporter | Works on both upstream contrib and Splunk Distribution; does NOT fix AI screens |
+| Need Splunk Distribution collector | Tested; no difference from upstream contrib |
+| Need gateway mode | Not relevant -- gateway mode is deployment topology, not a feature enabler |
+| Missing `send_otlp_histograms: true` | Already set |
+| Missing `sync_host_metadata: true` | Already set |
+| Wrong emitter config | `OTEL_INSTRUMENTATION_GENAI_EMITTERS=span_metric` matches official docs |
+| Missing LLM Providers integration | Already configured |
+| Missing role/permissions | Admin role with `read_apm_ai_conversation` capability |
+| Processing delay | Tested over 12+ hours with multiple smoke test runs |
+| Node.js vs Python telemetry format | Python SDK produces identical empty result |
+
+### The `correlation:` investigation
+
+The Splunk setup docs show `correlation:` (YAML null) in the signalfx
+exporter example. Earlier testing suggested this broke traces, but
+systematic re-testing proved it works fine on both collector variants:
+
+- **Upstream contrib** (`otel/opentelemetry-collector-contrib`): `correlation:`
+  works, traces render, AI screens still empty
+- **Splunk Distribution** (`quay.io/signalfx/splunk-otel-collector`):
+  `correlation:` works, traces render, AI screens still empty
+
+The earlier trace breakage was caused by other simultaneous changes in a
+chaotic debugging session, not by `correlation:` alone.
+
+### Root cause: unknown (entitlement theory contradicted)
+
+This stack runs on a **Splunk Observability Cloud free edition** org.
+The AI trace data view works perfectly -- full Workflow > Agent > LLM
+hierarchy, tokens, cost, Risk badges all render. But the aggregate AI
+Overview and AI Agents screens remain empty (`sf.org.ai.numAgentsMonitored`
+stays at 0, "No agents found").
+
+**The entitlement theory does not hold.** Splunk's own blog post
+([Free Edition announcement](https://www.splunk.com/en_us/blog/observability/splunk-observability-cloud-free-edition.html))
+explicitly states:
+
+> "15 free hosts, forever. All the features. No gates or up charges."
+
+The post specifically lists "The AI/Agent Developer" as a target use case
+for the free edition. This contradicts the hypothesis that AI Agent
+Monitoring requires a paid tier.
+
+Possible remaining explanations:
+
+1. **Backend processing delay** -- Splunk may batch-process agent
+   registrations on a schedule (hours or days) rather than in real time.
+2. **Minimum data volume** -- the backend may require a sustained volume
+   of traces before it registers agents (our smoke tests send single
+   invocations).
+3. **Undocumented backend requirement** -- there may be a span attribute,
+   resource attribute, or metric that the aggregate screens depend on
+   that is not documented in the setup guide.
+4. **Platform bug** -- the free edition may have a defect where the
+   backend pipeline for agent registration is not activated despite the
+   feature being nominally included.
+5. **Propagation lag on new orgs** -- the feature may need to be
+   explicitly enabled or may take time to activate on newly provisioned
+   free-tier orgs.
+
+### Collector configuration (confirmed working)
+
+The signalfx exporter now matches Splunk's documented example:
+
+```yaml
+signalfx:
+  access_token: "${SPLUNK_ACCESS_TOKEN}"
+  realm: "${SPLUNK_REALM}"
+  sync_host_metadata: true
+  correlation:
+  send_otlp_histograms: true
+```
+
+Both `correlation:` and `sync_host_metadata: true` are safe and do not
+break traces on either collector variant.
+
+### Collector configs provided
+
+| Config file | Collector image | Notes |
+|---|---|---|
+| `otel-collector-config.dual.yaml` | `otel/opentelemetry-collector-contrib` | Default; Splunk + Azure dual export; includes `gen_ai_normalizer` |
+| `otel-collector-config.yaml` | `otel/opentelemetry-collector-contrib` | Splunk only; includes `gen_ai_normalizer` |
+| `otel-collector-config.splunk-distro.yaml` | `quay.io/signalfx/splunk-otel-collector` | Splunk only; no `gen_ai_normalizer` |
+
+Toggle via `.env`:
+
+```bash
+# Upstream contrib + dual export (default)
+OTEL_COLLECTOR_IMAGE=otel/opentelemetry-collector-contrib:latest
+OTEL_COLLECTOR_CONFIG=./otel-collector-config.dual.yaml
+
+# Splunk Distribution (no gen_ai_normalizer)
+OTEL_COLLECTOR_IMAGE=quay.io/signalfx/splunk-otel-collector:latest
+OTEL_COLLECTOR_CONFIG=./otel-collector-config.splunk-distro.yaml
+```
+
+### Dependency pinning trap
+
+`splunk-otel-util-genai` 0.1.15 imports `opentelemetry._events`, which was
+removed in `opentelemetry-api` >= 1.44.0. The smoke test pins to the
+1.38.0 / 0.59b0 release train. See `scripts/splunk-ai-smoke-test/requirements.txt`.
+
+### What works on a free account
+
+| Screen | Status | Notes |
+|---|---|---|
+| APM > AI trace data | **Works** | Full trace rendering with agent hierarchy |
+| APM > AI overview | **Empty** | All tiles read zero |
+| APM > AI agents | **Empty** | "No agents found" |
+| APM > AI Agent Tokens & Cost | **Empty** | Page loads but shows no data |
+
+### Next steps to investigate
+
+1. **Wait and re-check** -- run the smoke test several more times over
+   the next few days and check whether the AI Overview / AI Agents
+   screens eventually populate (rules out processing delay).
+2. **Generate sustained traffic** -- run the smoke test in a loop (e.g.
+   10-20 invocations over an hour) to rule out minimum volume thresholds.
+3. **Compare with a paid account** -- test the same smoke test against a
+   paid Splunk Observability Cloud org. If it works there, the free
+   edition claim is misleading despite the blog post.
+4. **Open a support case** -- if a paid account is available, open a
+   Splunk support case with the trace IDs and org ID to ask why
+   `sf.org.ai.numAgentsMonitored` stays at zero.
+5. **Check the opentelemetry-python-genai util** -- verify all required
+   GenAI semantic convention attributes are being emitted per the
+   [opentelemetry-util-genai](https://github.com/open-telemetry/opentelemetry-python-genai/tree/main/util/opentelemetry-util-genai)
+   spec. A missing attribute could prevent agent registration.

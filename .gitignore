@@ -46,6 +46,7 @@ Desktop.ini
 # --- Python (scripts/generate_board.py is stdlib-only, but keep this clean) ---
 __pycache__/
 *.pyc
+.venv/
 
 # --- Node.js ---
 node_modules/

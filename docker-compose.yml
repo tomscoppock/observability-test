@@ -117,7 +117,13 @@ services:
   #   ./otel-collector-config.dual.yaml   both in parallel
   # See docs/azure-monitor-setup.md.
   otel-collector:
-    image: otel/opentelemetry-collector-contrib:latest
+    # Toggle between the upstream community collector and the Splunk
+    # Distribution via OTEL_COLLECTOR_IMAGE in .env. The Splunk
+    # Distribution includes Splunk-specific enhancements to the signalfx
+    # exporter (confirmed histogram support, correlation, host metadata
+    # sync) that the AI Agent Monitoring pages may depend on. The
+    # upstream contrib collector is the default for platform neutrality.
+    image: ${OTEL_COLLECTOR_IMAGE:-otel/opentelemetry-collector-contrib:latest}
     # Run as root so the docker_stats receiver can read /var/run/docker.sock.
     user: "0:0"
     command: ["--config", "/etc/otelcol/config.yaml"]
