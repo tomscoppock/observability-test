@@ -58,15 +58,60 @@ describe('contentAttributes', () => {
     );
   });
 
-  it('captures prompt and response when enabled', () => {
-    const attrs = contentAttributes({ messages: MESSAGES, output: 'an answer', env: on });
-    assert.equal(attrs[ATTR_INPUT_MESSAGES], JSON.stringify(MESSAGES));
-    assert.equal(attrs[ATTR_OUTPUT_MESSAGES], 'an answer');
+  // THE REGRESSION THAT MATTERS. Splunk's AI Interactions view calls
+  // JSON.parse on these attributes. Sending the bare answer text threw
+  // on the first character ("According ...") and its React error boundary
+  // blanked the whole trace page.
+  it('emits valid JSON on both sides', () => {
+    const attrs = contentAttributes({ messages: MESSAGES, output: 'According to policy', env: on });
+    assert.doesNotThrow(() => JSON.parse(attrs[ATTR_INPUT_MESSAGES]));
+    assert.doesNotThrow(() => JSON.parse(attrs[ATTR_OUTPUT_MESSAGES]));
   });
 
-  // Structured values are dropped outright by some exporters, so everything
-  // goes over the wire as a string. See playbook trap 34.
-  it('serialises structured input to a JSON string, not an array', () => {
+  // Shape is normative: the conventions say instrumentations MUST follow
+  // the published JSON schema. Array of messages, each { role, parts },
+  // each part { type: 'text', content }.
+  it('shapes input to the semantic-convention schema', () => {
+    const parsed = JSON.parse(contentAttributes({ messages: MESSAGES, env: on })[ATTR_INPUT_MESSAGES]);
+    assert.deepEqual(parsed, [
+      { role: 'user', parts: [{ type: 'text', content: 'what is the leave policy?' }] },
+    ]);
+  });
+
+  it('shapes a plain output string into an assistant message', () => {
+    const parsed = JSON.parse(contentAttributes({ output: 'an answer', env: on })[ATTR_OUTPUT_MESSAGES]);
+    assert.deepEqual(parsed, [
+      { role: 'assistant', parts: [{ type: 'text', content: 'an answer' }] },
+    ]);
+  });
+
+  it('keeps the system prompt and conversation order', () => {
+    const history = [
+      { role: 'system', content: 'You are helpful.' },
+      { role: 'user', content: 'first' },
+      { role: 'assistant', content: 'reply' },
+      { role: 'user', content: 'second' },
+    ];
+    const parsed = JSON.parse(contentAttributes({ messages: history, env: on })[ATTR_INPUT_MESSAGES]);
+    assert.deepEqual(parsed.map((m) => m.role), ['system', 'user', 'assistant', 'user']);
+    assert.equal(parsed[3].parts[0].content, 'second');
+  });
+
+  it('passes through a message already carrying parts', () => {
+    const already = [{ role: 'user', parts: [{ type: 'text', content: 'shaped' }] }];
+    const parsed = JSON.parse(contentAttributes({ messages: already, env: on })[ATTR_INPUT_MESSAGES]);
+    assert.deepEqual(parsed, already);
+  });
+
+  it('flattens OpenAI multimodal content blocks', () => {
+    const multimodal = [{ role: 'user', content: [{ type: 'text', text: 'block one' }] }];
+    const parsed = JSON.parse(contentAttributes({ messages: multimodal, env: on })[ATTR_INPUT_MESSAGES]);
+    assert.deepEqual(parsed[0].parts, [{ type: 'text', content: 'block one' }]);
+  });
+
+  // Structured values are dropped outright by some exporters, so the whole
+  // document goes over the wire as one string. See playbook trap 34.
+  it('serialises to a string, not a structured value', () => {
     const attrs = contentAttributes({ messages: MESSAGES, env: on });
     assert.equal(typeof attrs[ATTR_INPUT_MESSAGES], 'string');
   });
@@ -88,7 +133,29 @@ describe('contentAttributes', () => {
   it('truncates oversized content and flags it', () => {
     const huge = 'x'.repeat(MAX_CONTENT_CHARS + 500);
     const attrs = contentAttributes({ output: huge, env: on });
-    assert.equal(attrs[ATTR_OUTPUT_MESSAGES].length, MAX_CONTENT_CHARS);
+    const parsed = JSON.parse(attrs[ATTR_OUTPUT_MESSAGES]);
+    assert.equal(parsed[0].parts[0].content.length, MAX_CONTENT_CHARS);
+    assert.equal(attrs[ATTR_TRUNCATED], true);
+  });
+
+  // Clipping the serialised string instead of the content inside it was the
+  // second half of the same bug: the result no longer parses.
+  it('still emits parseable JSON after truncating', () => {
+    const huge = 'x'.repeat(MAX_CONTENT_CHARS * 2);
+    const attrs = contentAttributes({ messages: [{ role: 'user', content: huge }], output: huge, env: on });
+    assert.doesNotThrow(() => JSON.parse(attrs[ATTR_INPUT_MESSAGES]));
+    assert.doesNotThrow(() => JSON.parse(attrs[ATTR_OUTPUT_MESSAGES]));
+  });
+
+  it('spends the truncation budget in message order', () => {
+    const big = 'a'.repeat(MAX_CONTENT_CHARS - 5);
+    const attrs = contentAttributes({
+      messages: [{ role: 'user', content: big }, { role: 'user', content: 'bbbbbbbbbb' }],
+      env: on,
+    });
+    const parsed = JSON.parse(attrs[ATTR_INPUT_MESSAGES]);
+    assert.equal(parsed[0].parts[0].content.length, MAX_CONTENT_CHARS - 5);
+    assert.equal(parsed[1].parts[0].content, 'bbbbb');
     assert.equal(attrs[ATTR_TRUNCATED], true);
   });
 

@@ -1946,8 +1946,8 @@ OTEL_INSTRUMENTATION_GENAI_CAPTURE_MESSAGE_CONTENT=SPAN_ONLY \
 Verified in the collector's debug output:
 
 ```
--> gen_ai.input.messages: Str([{"role":"system","content":"You are an HR Policy Assistant...
--> gen_ai.output.messages: Str(The leave policy says employees get 10 days...
+-> gen_ai.input.messages: Str([{"role":"system","parts":[{"type":"text","content":"You are an HR Policy Assistant...
+-> gen_ai.output.messages: Str([{"role":"assistant","parts":[{"type":"text","content":"From the leave policy document...
 ```
 
 Design decisions worth keeping if you copy this:
@@ -1958,11 +1958,18 @@ Design decisions worth keeping if you copy this:
   asks for content as separate log events, which this service does not emit;
   treating it as a span attribute would put content somewhere the operator
   did not ask for it.
-- **Content is a JSON string, never a structured value.** Array and object
-  attributes are dropped by some exporters -- see trap 34.
-- **Truncated at 8192 characters** with a `gen_ai.capture.truncated` flag.
-  Splunk warns about oversized values, and an unbounded attribute is a
-  billing risk on any ingest-priced backend.
+- **The content must be JSON in the schema shape.** Not a JSON string
+  containing free text -- an actual document matching the convention's
+  published schema. See section 28a; getting this wrong takes down the
+  Splunk trace page.
+- **Serialised as a string, never a structured value.** Array and object
+  attributes are dropped by some exporters -- see trap 34 -- and the
+  conventions explicitly permit a JSON string on spans.
+- **Truncated at 8192 characters of text**, with a
+  `gen_ai.capture.truncated` flag. Splunk warns about oversized values, and
+  an unbounded attribute is a billing risk on any ingest-priced backend.
+  Clip the content strings inside the structure, never the serialised
+  document.
 
 ### The PII decision, which does not go away
 
@@ -1975,15 +1982,102 @@ shape, different value.
 If you enable it anywhere real, mask first. Splunk's own documentation
 recommends PII masking mechanisms when collection is on.
 
+### Enabling platform-side evaluations
+
+The evaluation scores (bias, hallucination, relevance, sentiment, toxicity)
+are **not** an entitlement question, which was the other open worry. Per the
+setup guide, three things are needed and they are all self-service:
+
+1. Store AI agent conversation data in Splunk Observability Cloud, which is
+   what content capture above does.
+2. Configure the **LLM Providers** data integration under
+   **Data Management > Available integrations**. Splunk calls the provider
+   to score the captured content, so it needs its own credentials for that
+   provider. Without this step the AI Details panel reads
+   **Status: not evaluated**, which is not an error, just an unconfigured
+   integration.
+3. Confirm trace data is arriving under **APM > AI trace data**.
+
+Step 2 is the one people miss, because nothing in the UI says it is missing.
+
+There is a separate **instrumentation-side evaluations** path that stores
+results in Splunk Enterprise or Cloud Platform instead. Not used here.
+
 ### What is still unverified
 
-- Whether **AI trace data** and the **AI Interactions** tab actually populate
-  now. The prerequisites are met and the content is flowing; confirm in the
-  UI under **APM > AI trace data**, filtering to data after the change.
-- Whether **platform-side evaluations** (hallucination, toxicity, bias,
-  relevance, sentiment) need an entitlement. They additionally need the LLM
-  Providers integration configured under Data Management, which is a
-  separate step we have not done.
+- Whether the **AI Interactions** tab and the evaluation scores render as
+  expected once the LLM Providers integration is configured. Content is
+  flowing in the correct shape and the trace page renders; the integration
+  itself has not been set up.
 
 Do not repeat the earlier mistake of recording an untested assumption as a
 finding. Either test it and write down what happened, or label it unverified.
+
+---
+
+## 28a. The content schema is normative, and Splunk enforces it
+
+Getting the *shape* wrong is worse than not capturing at all: it does not
+degrade, it breaks the page.
+
+### The symptom
+
+Clicking into a trace, then the chat span, produced **"error occurred
+rendering the page"**. The browser console showed:
+
+```
+SyntaxError: Unexpected token 'A', "According "... is not valid JSON
+    at JSON.parse (<anonymous>)
+    at Array.map (<anonymous>)
+```
+
+`"According "` is the first word of the LLM's own answer. Splunk's AI
+Interactions view calls `JSON.parse` on the captured content attributes and
+maps over the parsed array. We were sending the bare answer text, so parsing
+threw on the first character and the React error boundary blanked the whole
+page. Note the failure is entirely client-side: ingest succeeded, the span
+was fine, and nothing in the collector or the backend flagged a problem.
+
+### What the conventions actually require
+
+Splunk's own documentation defers to OpenTelemetry for attribute
+definitions, and the
+[GenAI span conventions](https://github.com/open-telemetry/semantic-conventions-genai/blob/main/docs/gen-ai/gen-ai-spans.md)
+are unambiguous: "Instrumentations **MUST** follow [JSON schema]". The
+[output schema](https://github.com/open-telemetry/semantic-conventions-genai/blob/main/model/gen-ai/gen-ai-output-messages.json)
+is an array of messages, each requiring `role` and `parts`, each text part
+requiring `type` and `content`:
+
+```json
+[
+  {
+    "role": "assistant",
+    "parts": [
+      { "type": "text", "content": "According to the leave policy ..." }
+    ]
+  }
+]
+```
+
+Input is the same shape, one entry per message in conversation order,
+including the system prompt. Three details that are easy to get wrong:
+
+- **`parts`, not `content`, on the message.** `[{"role":"user","content":"..."}]`
+  is valid JSON and still wrong. It parses, so the page renders, and the
+  content silently fails to appear.
+- **Serialise to a JSON string on spans.** The conventions say structured
+  form is preferred but "MAY be recorded as a JSON string if structured
+  format is not supported", and OpenTelemetry JS does not support complex
+  attribute values yet. A JSON string is correct here, and is also what
+  survives the `azure_monitor` exporter (trap 34).
+- **`finish_reason` on the output message is deprecated** in the schema, in
+  favour of the separate `gen_ai.response.finish_reasons` attribute. Set the
+  attribute, not the message field.
+
+### Truncation must preserve the structure
+
+The conventions call for truncating "individual message contents,
+**preserving JSON structure**". Clipping the serialised document instead
+produces JSON that no longer parses, which reintroduces exactly the crash
+above for any conversation long enough to hit the cap. Budget the text
+inside the parts and serialise afterwards.

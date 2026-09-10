@@ -382,7 +382,12 @@ its own separate trap list; you need both.
       - send_otlp_histograms: true on the signalfx exporter
       - OTEL_INSTRUMENTATION_GENAI_CAPTURE_MESSAGE_CONTENT=SPAN_ONLY
       - the LLM Providers integration, but ONLY for platform-side
-        evaluation scores, not for AI trace data
+        evaluation scores, not for AI trace data. It is configured under
+        Data Management > Available integrations, it is self-service
+        rather than an entitlement, and Splunk calls the provider with
+        your credentials to score the captured content. Until it is
+        configured the AI Details panel reads "Status: not evaluated",
+        which is an unconfigured integration and not an error.
 
     THE TRAP: OTEL_INSTRUMENTATION_GENAI_* is read by GenAI
     AUTO-instrumentation libraries, which exist for Python. If you
@@ -402,11 +407,39 @@ its own separate trap list; you need both.
           const v = (env || process.env)[CAPTURE];
           return typeof v === 'string' && ON.has(v.trim().toLowerCase());
         }
-        // when enabled:
-        span.setAttribute('gen_ai.input.messages', JSON.stringify(messages));
-        span.setAttribute('gen_ai.output.messages', responseText);
+    THE SECOND TRAP, and this one takes the vendor's UI down. The content
+    attributes have a NORMATIVE JSON schema. The conventions say
+    instrumentations MUST follow it, and Splunk's AI Interactions view
+    calls JSON.parse on the attribute and maps over the result. Putting the
+    raw answer text on the span gives you this, in the browser console, on
+    a page that will not render:
 
-    Five design points, each of which cost something to learn:
+        SyntaxError: Unexpected token 'A', "According "... is not valid JSON
+            at JSON.parse (<anonymous>)
+            at Array.map (<anonymous>)
+
+    "According " is the first word of the model's own answer. Ingest
+    succeeded, the collector was clean, the span was stored, the tests
+    passed. Only opening the trace in a browser found it.
+
+    The schema is an ARRAY of messages, each { role, parts }, each text
+    part { type, content }:
+
+        function textMessage(role, content) {
+          return { role, parts: [{ type: 'text', content }] };
+        }
+        // when enabled:
+        span.setAttribute('gen_ai.input.messages', JSON.stringify(
+          messages.map((m) => textMessage(m.role, m.content))));
+        span.setAttribute('gen_ai.output.messages', JSON.stringify(
+          [textMessage('assistant', responseText)]));
+
+    Note "parts", NOT "content", on the message object. The OpenAI wire
+    format [{role, content}] is valid JSON and still wrong: it parses, so
+    nothing crashes and nothing displays. That is the harder failure of the
+    two, because there is no error to search for.
+
+    Six design points, each of which cost something to learn:
 
       - OFF BY DEFAULT, and make the test suite assert that FIRST. Unset,
         empty, "false" and unrecognised values must all disable it.
@@ -420,6 +453,14 @@ its own separate trap list; you need both.
         values, and an unbounded attribute is a billing risk on any
         ingest-priced backend. Truncate content, unlike identifiers, where
         truncation would merge distinct values.
+      - TRUNCATE INSIDE THE STRUCTURE. The conventions require preserving
+        JSON structure when clipping. Budget the text within the parts and
+        serialise afterwards. Slicing the serialised document yields
+        invalid JSON and reintroduces the crash above, but only for long
+        conversations, which is the worst possible time to find out.
+      - Set gen_ai.response.finish_reasons as its own attribute. The
+        schema has a finish_reason field on the output message, but it is
+        marked deprecated in favour of the attribute.
       - Keep it in its own pure module so it is unit testable. The
         instrumentation bootstrap usually cannot be imported by tests.
 

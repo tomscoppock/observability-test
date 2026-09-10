@@ -27,7 +27,25 @@
  * WHY JSON STRINGS RATHER THAN STRUCTURED VALUES: array and object span
  * attributes are silently dropped by some exporters. The `azure_monitor`
  * exporter maps only strings, booleans and numbers, so a structured value
- * never arrives. See docs/implementation-playbook.md trap 34.
+ * never arrives. See docs/implementation-playbook.md trap 34. The semantic
+ * conventions expect exactly this: "When recorded on spans, it MAY be
+ * recorded as a JSON string if structured format is not supported", and
+ * OpenTelemetry JS does not yet support complex attribute values.
+ *
+ * WHY THE SHAPE IS NOT NEGOTIABLE: the conventions say instrumentations
+ * MUST follow the published JSON schema, and Splunk's AI Interactions view
+ * calls JSON.parse on these attributes and reads the parsed structure. A
+ * bare answer string is not JSON, so parsing throws on the first character
+ * and Splunk's React error boundary blanks the whole trace page with
+ * "error occurred rendering the page". The schema is an ARRAY of messages,
+ * each { role, parts }, each part { type: 'text', content }:
+ *
+ *   [{ "role": "assistant",
+ *      "parts": [{ "type": "text", "content": "According to ..." }] }]
+ *
+ * `finish_reason` exists on the output message in the schema but is marked
+ * deprecated there, in favour of the separate `gen_ai.response.finish_reasons`
+ * attribute, so it is not set here.
  */
 
 /** The OpenTelemetry-standard variable name, honoured verbatim. */
@@ -38,7 +56,10 @@ const ATTR_OUTPUT_MESSAGES = 'gen_ai.output.messages';
 const ATTR_TRUNCATED = 'gen_ai.capture.truncated';
 
 /**
- * Upper bound per attribute, in characters.
+ * Upper bound on captured text per attribute, in characters.
+ *
+ * This budgets the text CONTENT, not the serialised document, so the JSON
+ * envelope is never counted and never clipped.
  *
  * Splunk warns that oversized values can cause problems when they exceed
  * platform limits, and an unbounded attribute is a denial-of-wallet risk on
@@ -73,17 +94,118 @@ function isContentCaptureEnabled(env) {
   return SPAN_CAPTURE_VALUES.has(raw.trim().toLowerCase());
 }
 
-/** Serialise to JSON and clip, reporting whether clipping happened. */
-function serialise(value) {
-  let text;
+/** Roles the conventions enumerate. Anything else passes through as-is. */
+const ROLES = new Set(['system', 'user', 'assistant', 'tool']);
+
+/**
+ * Coerce one part's content to the string the schema requires.
+ * Returns null when it cannot be represented, so the part is dropped
+ * rather than emitted in a shape that fails validation.
+ */
+function partContent(value) {
+  if (typeof value === 'string') return value;
   try {
-    text = typeof value === 'string' ? value : JSON.stringify(value);
+    const text = JSON.stringify(value);
+    return typeof text === 'string' ? text : null;
+  } catch {
+    return null;
+  }
+}
+
+/**
+ * Turn one message into schema shape.
+ *
+ * Accepts what this codebase actually passes -- the OpenAI wire format,
+ * `{ role, content }` -- and passes through anything already carrying
+ * `parts`, so a future caller that builds messages properly is not
+ * rewritten into a worse shape.
+ */
+function toSchemaMessage(message, defaultRole) {
+  if (!message || typeof message !== 'object') return null;
+
+  const role = ROLES.has(message.role) ? message.role : (message.role || defaultRole);
+  if (typeof role !== 'string') return null;
+
+  if (Array.isArray(message.parts)) return { role, parts: message.parts };
+
+  // OpenAI multimodal content is an array of {type, text} blocks.
+  if (Array.isArray(message.content)) {
+    const parts = [];
+    for (const block of message.content) {
+      const content = partContent(block && block.type === 'text' ? block.text : block);
+      if (content !== null) parts.push({ type: 'text', content });
+    }
+    return parts.length > 0 ? { role, parts } : null;
+  }
+
+  const content = partContent(message.content);
+  if (content === null) return null;
+  return { role, parts: [{ type: 'text', content }] };
+}
+
+/**
+ * Normalise a caller's value into the array of messages the schema wants.
+ *
+ * Returns null when there is nothing representable, which is how a
+ * circular or otherwise unserialisable value ends up contributing no
+ * attribute at all rather than a broken one.
+ */
+function toMessages(value, defaultRole) {
+  if (typeof value === 'string') {
+    return [{ role: defaultRole, parts: [{ type: 'text', content: value }] }];
+  }
+  const list = Array.isArray(value) ? value : [value];
+  const messages = [];
+  for (const message of list) {
+    const shaped = toSchemaMessage(message, defaultRole);
+    if (shaped) messages.push(shaped);
+  }
+  return messages.length > 0 ? messages : null;
+}
+
+/**
+ * Clip text content to a total budget, IN PLACE ACROSS THE STRUCTURE.
+ *
+ * The conventions call for truncating "individual message contents,
+ * preserving JSON structure". Slicing the serialised JSON string instead --
+ * which is what this module used to do -- produces a truncated document
+ * that no longer parses, reintroducing the exact rendering failure this
+ * shape is meant to avoid.
+ *
+ * Budget is spent in message order, so the earliest content survives intact
+ * and later content is clipped or emptied.
+ */
+function clipMessages(messages, budget) {
+  let remaining = budget;
+  let truncated = false;
+
+  for (const message of messages) {
+    if (!Array.isArray(message.parts)) continue;
+    for (const part of message.parts) {
+      if (typeof part.content !== 'string') continue;
+      if (part.content.length <= remaining) {
+        remaining -= part.content.length;
+        continue;
+      }
+      part.content = part.content.slice(0, Math.max(remaining, 0));
+      remaining = 0;
+      truncated = true;
+    }
+  }
+  return truncated;
+}
+
+/** Shape, clip, and serialise one side of the exchange. */
+function serialise(value, defaultRole) {
+  const messages = toMessages(value, defaultRole);
+  if (messages === null) return { text: null, truncated: false };
+
+  const truncated = clipMessages(messages, MAX_CONTENT_CHARS);
+  try {
+    return { text: JSON.stringify(messages), truncated };
   } catch {
     return { text: null, truncated: false };
   }
-  if (typeof text !== 'string') return { text: null, truncated: false };
-  if (text.length <= MAX_CONTENT_CHARS) return { text, truncated: false };
-  return { text: text.slice(0, MAX_CONTENT_CHARS), truncated: true };
 }
 
 /**
@@ -102,7 +224,7 @@ function contentAttributes({ messages, output, env } = {}) {
   let truncated = false;
 
   if (messages !== undefined && messages !== null) {
-    const { text, truncated: clipped } = serialise(messages);
+    const { text, truncated: clipped } = serialise(messages, 'user');
     if (text !== null) {
       attrs[ATTR_INPUT_MESSAGES] = text;
       truncated = truncated || clipped;
@@ -110,7 +232,7 @@ function contentAttributes({ messages, output, env } = {}) {
   }
 
   if (output !== undefined && output !== null) {
-    const { text, truncated: clipped } = serialise(output);
+    const { text, truncated: clipped } = serialise(output, 'assistant');
     if (text !== null) {
       attrs[ATTR_OUTPUT_MESSAGES] = text;
       truncated = truncated || clipped;

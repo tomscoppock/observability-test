@@ -106,8 +106,19 @@ docker inspect observability-test-api-1 \
 ```
 
 When enabled the LLM spans gain `gen_ai.input.messages` and
-`gen_ai.output.messages`, as JSON strings capped at 8192 characters, with
+`gen_ai.output.messages`, capped at 8192 characters of text, with
 `gen_ai.capture.truncated=true` when clipping occurred.
+
+Both are JSON strings in the shape the OpenTelemetry GenAI conventions
+require, which Splunk's AI Interactions view parses:
+
+```json
+[{"role":"assistant","parts":[{"type":"text","content":"According to ..."}]}]
+```
+
+The shape is not cosmetic. Free text there throws inside Splunk's
+`JSON.parse` and blanks the trace page. See
+[splunk-setup.md](splunk-setup.md) section 28a.
 
 > **The point of the flag is that the same image is safe in production and
 > useful on a test system.** Identical configuration shape, different value.

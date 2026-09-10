@@ -71,6 +71,22 @@ Last updated: 2026-09-09
     nothing for a hand-instrumented service, since they are read by GenAI
     auto-instrumentation, so the capture is implemented manually. 15 new
     tests, suite now 89.
+  - **Correction to that capture, same day.** The first implementation put
+    the raw prompt and answer text on those attributes. Splunk's AI
+    Interactions view calls `JSON.parse` on them, so clicking a chat span
+    threw `Unexpected token 'A', "According "... is not valid JSON` and its
+    error boundary blanked the trace page. The GenAI conventions define a
+    normative schema that instrumentations MUST follow: an array of
+    messages, each `{ role, parts }`, each text part `{ type, content }`.
+    Truncation also has to clip the text inside the structure, not the
+    serialised document, or long conversations emit invalid JSON. Both
+    fixed, verified on the wire; now playbook trap 35 and
+    `docs/splunk-setup.md` section 28a. Suite 89 -> 96.
+  - **Evaluations are self-service, not an entitlement.** The remaining open
+    question from the item above is closed: per Splunk's setup guide the
+    scores need the LLM Providers integration under Data Management >
+    Available integrations, which is why the AI Details panel reads
+    "Status: not evaluated". Not yet configured here.
 
   Splunk-side work done under this epic, beyond the Azure deliverables:
   eight dashboard charts fixed for double counting, the Active Sessions chart

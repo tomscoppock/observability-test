@@ -569,7 +569,8 @@ nothing useful. You can create a detector for this."
 > it on:
 >
 > ```bash
-> OTEL_INSTRUMENTATION_GENAI_CAPTURE_MESSAGE_CONTENT=SPAN_ONLY >   docker compose up -d --build api
+> OTEL_INSTRUMENTATION_GENAI_CAPTURE_MESSAGE_CONTENT=SPAN_ONLY \
+>   docker compose up -d --build api
 > ```
 >
 > If you want the AI screens populated for a demo, set that **before** the
@@ -579,9 +580,16 @@ nothing useful. You can create a detector for this."
 >
 > Separately, the **platform-side evaluation scores** (hallucination,
 > toxicity, bias, relevance) additionally need the LLM Providers integration
-> configured under Data Management. That step has not been done here, and
-> whether it carries an entitlement is genuinely unverified. Do not assert
-> either way. Full detail in `docs/splunk-setup.md` section 28.
+> under **Data Management > Available integrations**. That is self-service,
+> not an entitlement -- Splunk calls the provider with your credentials to
+> score the captured content. It has not been configured here, which is
+> exactly why the panel reads "not evaluated". Full detail in
+> `docs/splunk-setup.md` section 28.
+>
+> **If you enable capture, click into one chat span before you present.**
+> Splunk parses these attributes as JSON in the browser, so malformed
+> content blanks the trace page with "error occurred rendering the page"
+> while every server-side check stays green. Section 28a has the shape.
 
 **[SAY]** -- if content capture is OFF and you want to use that:
 "Notice this says 'not evaluated'. That is a deliberate choice, not a gap.

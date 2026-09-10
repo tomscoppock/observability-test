@@ -934,6 +934,63 @@ Three things worth generalising:
 
 ---
 
+### 35. GenAI message content has a normative schema, and a UI will enforce it
+
+Sibling of trap 34: same attributes, opposite failure. Trap 34 is data
+vanishing quietly. This one takes the vendor's page down.
+
+Capturing prompt and response content via
+`OTEL_INSTRUMENTATION_GENAI_CAPTURE_MESSAGE_CONTENT`, the obvious
+implementation is to put the text on the span:
+
+```js
+span.setAttribute('gen_ai.output.messages', answerText);   // WRONG
+```
+
+In Splunk APM, clicking the chat span then produced **"error occurred
+rendering the page"**, with this in the browser console:
+
+```
+SyntaxError: Unexpected token 'A', "According "... is not valid JSON
+    at JSON.parse (<anonymous>)
+    at Array.map (<anonymous>)
+```
+
+`"According "` is the first word of the model's own answer. The UI calls
+`JSON.parse` on the attribute and maps over the result. Free text throws on
+character one, and the React error boundary blanks the page.
+
+The conventions say instrumentations **MUST** follow a published JSON
+schema. It is an array of messages, each `{ role, parts }`, each text part
+`{ type: 'text', content }`:
+
+```js
+span.setAttribute('gen_ai.output.messages', JSON.stringify([
+  { role: 'assistant', parts: [{ type: 'text', content: answerText }] },
+]));
+```
+
+Four things to carry over:
+
+- **`parts`, not `content`, on the message.** `[{"role":"user","content":"..."}]`
+  is the OpenAI wire format, is valid JSON, and is still wrong. It parses,
+  so nothing crashes and nothing displays. That is the harder bug of the
+  two, because there is no error to search for.
+- **Truncate inside the structure.** The conventions require preserving
+  JSON structure when clipping. Slicing the serialised document gives you
+  invalid JSON and reintroduces the crash for long conversations only,
+  which is a delightful thing to discover in production.
+- **A JSON string is correct on spans.** The conventions prefer structured
+  form but permit a JSON string where complex attribute values are not
+  supported, which is the case in OpenTelemetry JS. It also survives
+  `azure_monitor`, where a structured value would not (trap 34).
+- **Client-side failures are invisible to every check you have.** Ingest
+  succeeded, the collector was clean, the backend stored the span, the
+  tests passed. Only opening the page in a browser found it. Add
+  "click into one trace in the vendor UI" to your definition of done.
+
+---
+
 ## Part 1: OpenTelemetry implementation
 
 ### 1.1 Dependencies
