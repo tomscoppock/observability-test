@@ -631,6 +631,88 @@ Application Insights **on its own has no GenAI evaluation capability at
 all**. If you are comparing "Splunk vs App Insights" rather than "Splunk vs
 Azure", this is a straight Splunk win.
 
+### Risk / security evaluations
+
+The quality evaluations above (toxicity, bias, hallucination, relevance,
+sentiment) score *what the model said*. Risk evaluations score *whether
+someone is attacking the model* or *whether the model is leaking data it
+should not*. The two platforms take fundamentally different approaches.
+
+#### Splunk: Cisco AI Defense integration
+
+Splunk AI Security Monitoring integrates Splunk Observability for AI with
+Cisco AI Defense. It is a separate product with its own licence.
+
+- **Prompt injection detection** -- direct jailbreaks and indirect injection
+  via grounding documents, scored by Cisco's purpose-built Luna models
+- **Code detection** -- identifies code in prompts or responses that may
+  indicate exfiltration or injection
+- **PII / PHI / PCI leakage detection** -- DLP-style scanning adapted for
+  AI prompt and response content
+- **Toxicity and safety guardrails** -- harmful, unsafe, or policy-violating
+  content across hundreds of categories
+- **Runtime enforcement** -- can block (not just detect) at the proxy layer
+  via AI Defense Gateway or Inspection API
+- **Risk badges on traces** -- detected risks appear as badges in AI trace
+  data alongside performance metrics
+- **OWASP LLM Top 10 coverage** -- maps to LLM01 (Prompt Injection), LLM02
+  (Sensitive Information Disclosure), LLM06 (Excessive Agency), LLM07
+  (System Prompt Leakage), and others
+- **Splunk Enterprise Security integration** -- AI Defense alerts flow into
+  ES via the Cisco Security Cloud app with CIM-mapped detections
+- **Instrumentation** -- Python-only (`opentelemetry-instrumentation-aidefense`),
+  attaches security telemetry to OTel traces
+- **Licence** -- requires both Cisco AI Defense and Splunk AI Agent Monitoring
+  licences
+
+#### Azure: Content Safety + Defender for Cloud
+
+Azure distributes the equivalent across multiple services, none of which
+require a separate product licence beyond the per-call API cost.
+
+- **Prompt Shields** (Azure AI Content Safety) -- detects direct jailbreak
+  attacks in user prompts and indirect prompt injection in grounding
+  documents; GA since August 2024
+- **PII detection and redaction** -- built into Content Safety; can strip PII
+  before content enters the AI pipeline
+- **Content classification** -- four harm categories (hate, violence, sexual,
+  self-harm) with adjustable severity thresholds, plus custom categories
+- **Groundedness detection** -- flags hallucinated or ungrounded claims in
+  model output (the "is the model making things up" check)
+- **Protected material detection** -- identifies copyrighted or owned content
+  in model output
+- **Task Adherence** (preview) -- checks whether an agent's tool calls align
+  with the user's stated intent, catching scope creep
+- **Runtime enforcement** -- can block at the Azure OpenAI content filter
+  layer or at the API Management gateway via policy fragments (~50ms added
+  latency)
+- **Defender for Cloud AI threat protection** -- SOC-facing alerts for
+  jailbreak attempts (blocked and detected), ASCII smuggling, LLM
+  reconnaissance, credential theft, and wallet abuse; maps to MITRE ATT&CK
+- **No vendor-specific instrumentation** -- works on any Azure OpenAI or
+  Foundry deployment; Prompt Shields is a REST API callable from any language
+- **Licence** -- pay-per-call on Content Safety; Defender for Cloud requires
+  the Defender plan on the AI resource
+
+#### The structural difference
+
+Splunk (via Cisco AI Defense) provides a **unified security product** that
+discovers, validates (red-teams), and protects AI applications across their
+lifecycle, with results landing in the same trace view as performance data.
+It is comprehensive but requires two additional licences and Python
+instrumentation.
+
+Azure distributes the same capabilities across **Content Safety** (input/output
+filtering), **Defender for Cloud** (SOC alerts), and **Foundry evaluations**
+(quality scoring). No single product covers the full lifecycle, but each
+piece is individually addressable, language-agnostic, and does not require
+a separate product purchase beyond usage-based pricing.
+
+Application Insights **on its own has no risk evaluation capability**. The
+protection comes from Content Safety (called inline or at the gateway) and
+Defender for Cloud (monitoring the Azure OpenAI resource). Neither requires
+App Insights, but both can feed alerts into it.
+
 ### Cost
 
 | | Splunk | Azure |
